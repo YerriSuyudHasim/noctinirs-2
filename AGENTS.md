@@ -77,3 +77,18 @@ Preserve reviewed lock manifests and meaningful SDK defaults. Do not commit buil
 ## Stop conditions
 
 Stop the affected work and ask the human owner when scope or authority is unclear; authoritative sources conflict; a secret or license concern appears; hardware or safety evidence is unavailable; or progress would require bypassing a check, approval, branch protection, or security control.
+
+## Cursor Cloud specific instructions
+
+ESP-IDF v6.1 is installed at `/opt/esp/idf` (tag `v6.1`, commit `fff9895c82d744c7237be8847347bdd1b07c6643`, the commit checked by `.github/workflows/firmware-build.yml`). Login shells source `/etc/profile.d/esp-idf.sh`. `/usr/local/bin/idf.py` activates that tree when `IDF_PATH` is unset. After activation the ESP32-S3 compiler is `xtensa-esp-elf-gcc` (the ESP-IDF 6.1 unified Xtensa toolchain). PowerShell is installed for the reference manifest check.
+
+From the repository root:
+
+```bash
+idf.py set-target esp32s3
+idf.py build
+bash tools/class-s-gate-selftest.sh
+pwsh -File tools/verify-reference.ps1
+```
+
+`tools/class-s-gate.sh` exits 3 while `components/nn2_core`, `components/nn2_ports`, and `components/nn2_app` are absent. That result means the gate is not applicable. `build/` and the generated `sdkconfig` are gitignored. A host build is Class B evidence only: it does not validate hardware, timing, power, or safety. This repository has no dev server to start.
