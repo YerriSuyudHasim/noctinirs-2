@@ -1,0 +1,140 @@
+name: Firmware build
+
+# M0.2 (Refs #2). Evidence classes:
+#   static-dependency-gate -> Class S (static) only
+#   esp-idf-build          -> Class B (build) only
+# A successful build is NOT hardware validation, NOT unit/integration evidence,
+# and says nothing about timing, electrical behaviour, safety, or clinical validity.
+# No Class U job exists yet: no tests are present in the repository.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static-dependency-gate:
+    name: class-s-dependency-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Forbidden-include gate for layered components
+        shell: bash
+        run: |
+          set -euo pipefail
+          dirs=()
+          for d in components/core components/application components/ports; do
+            [ -d "$d" ] && dirs+=("$d")
+          done
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "NOT APPLICABLE: no layered components yet"
+            echo "### Class S dependency gate: NOT APPLICABLE: no layered components yet" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "Scanning: ${dirs[*]}"
+          pattern='^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"](esp_[^>"]*|freertos/[^>"]*|driver/[^>"]*|lwip/[^>"]*|hal/[^>"]*|soc/[^>"]*|sdkconfig\.h)[>"]'
+          if grep -rnE --include='*.c' --include='*.h' --include='*.cpp' --include='*.hpp' "$pattern" "${dirs[@]}" > violations.txt; then
+            echo "FAIL: forbidden platform includes found"
+            cat violations.txt
+            { echo "### Class S dependency gate: FAIL"; echo '```'; cat violations.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "PASS: no forbidden includes in ${dirs[*]}"
+          echo "### Class S dependency gate: PASS (${dirs[*]})" >> "$GITHUB_STEP_SUMMARY"
+
+  esp-idf-build:
+    name: class-b-esp-idf-build
+    runs-on: ubuntu-latest
+    container:
+      # espressif/idf:v6.1, pinned by digest (Docker Hub tag v6.1, verified 2026-10-16).
+      image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
+    env:
+      EXPECTED_IDF_COMMIT: fff9895c82d744c7237be8847347bdd1b07c6643  # espressif/esp-idf tag v6.1
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Record toolchain
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory '*'
+          . "$IDF_PATH/export.sh" > /dev/null
+          mkdir -p evidence
+          {
+            echo "GITHUB_SHA=$GITHUB_SHA"
+            echo "GITHUB_RUN_ID=$GITHUB_RUN_ID attempt=$GITHUB_RUN_ATTEMPT"
+            echo "UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "IDF_PATH=$IDF_PATH"
+            echo "idf.py --version: $(idf.py --version)"
+            echo "IDF commit: $(git -C "$IDF_PATH" rev-parse HEAD)"
+            echo "Compiler: $(xtensa-esp32s3-elf-gcc --version | head -n1)"
+            echo "CMake: $(cmake --version | head -n1)"
+            echo "Ninja: $(ninja --version)"
+            echo "Python: $(python --version 2>&1)"
+          } | tee evidence/toolchain.txt
+          actual="$(git -C "$IDF_PATH" rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_IDF_COMMIT" ]; then
+            echo "FAIL: IDF commit $actual != expected v6.1 commit $EXPECTED_IDF_COMMIT" | tee -a evidence/toolchain.txt
+            exit 1
+          fi
+
+      - name: Set target and build
+        run: |
+          set -euo pipefail
+          . "$IDF_PATH/export.sh" > /dev/null
+          idf.py set-target esp32s3 2>&1 | tee evidence/set-target.log
+          idf.py build 2>&1 | tee evidence/build.log
+          idf.py size 2>&1 | tee evidence/size.txt
+
+      - name: Verify generated target
+        run: |
+          set -euo pipefail
+          line="$(grep -E '^CONFIG_IDF_TARGET=' sdkconfig || true)"
+          echo "$line" | tee evidence/target.txt
+          if [ "$line" != 'CONFIG_IDF_TARGET="esp32s3"' ]; then
+            echo "FAIL: CONFIG_IDF_TARGET is not \"esp32s3\""
+            exit 1
+          fi
+
+      - name: Hash outputs
+        run: |
+          set -euo pipefail
+          cp sdkconfig evidence/sdkconfig
+          sha256sum build/*.bin build/bootloader/bootloader.bin build/partition_table/partition-table.bin sdkconfig | tee evidence/SHA256SUMS
+          grep -ciE 'warning:' evidence/build.log > evidence/warning-count.txt || true
+          echo "Compiler warning lines: $(cat evidence/warning-count.txt)"
+
+      - name: Write step summary
+        if: always()
+        run: |
+          {
+            echo "## Class B build evidence (build only, not hardware validation)"
+            for f in toolchain.txt target.txt SHA256SUMS size.txt warning-count.txt; do
+              [ -f "evidence/$f" ] && { echo "### $f"; echo '```'; cat "evidence/$f"; echo '```'; }
+            done
+            if [ -f evidence/build.log ]; then
+              echo "### build.log (last 60 lines)"; echo '```'; tail -n 60 evidence/build.log; echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: class-b-build-${{ github.sha }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            evidence/
+            build/*.bin
+            build/*.elf
+            build/*.map
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
