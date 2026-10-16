@@ -187,7 +187,7 @@ G1 unanimous, Owner-confirmed (Accepted baseline; not implemented):
 |---|---|
 | FreeRTOS `pcName` | `nn2_<role>`, snake_case, ASCII, no spaces |
 | Length | At most **15** characters plus NUL, inside the default `configMAX_TASK_NAME_LEN` of 16 |
-| Examples | `nn2_led`, `nn2_sched`, `nn2_ads131`, `nn2_ads1299`, `nn2_frame`, `nn2_net`. `nn2_health` only if a health task is scoped. `nn2_ads131` is 11 characters and `nn2_ads1299` is 12; both fit 15 plus NUL. The placeholder `nn2_ads` is superseded and is not an extra task. |
+| Examples | `nn2_led`, `nn2_sched`, `nn2_ads131`, `nn2_ads1299`, `nn2_frame`, `nn2_net`. `nn2_health` only if a health task is scoped. `nn2_ads131` is 10 characters and `nn2_ads1299` is 11; both fit 15 plus NUL. The placeholder `nn2_ads` is superseded and is not an extra task. |
 | Macros | Priority, stack, and affinity macros in **one** adapter header only (illustrative name `nn2_rtos_config.h` or equivalent). Not in `nn2_core`, port headers, or scattered driver files. |
 | Inner layers | `nn2_core` and `nn2_ports` never call `xTaskCreate*` |
 
