@@ -84,28 +84,32 @@ jobs:
 
       - name: Forbidden-include gate for layered components
         shell: bash
-        env:
-          SCAN_DIRS: ${{ needs.layer-detect.outputs.dirs }}
+        # Logic lives in tools/class-s-gate.sh (Refs #10): exit 0 PASS; 1 FAIL (violation,
+        # empty/missing layer folder, or grep rc>=2 scanner error). Only grep rc=1 (no match) passes.
         run: |
           set -uo pipefail
-          read -r -a dirs <<< "$SCAN_DIRS"
-          echo "Scanning: ${dirs[*]}"
-          pattern='^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"](esp_[^>"]*|freertos/[^>"]*|driver/[^>"]*|lwip/[^>"]*|hal/[^>"]*|soc/[^>"]*|sdkconfig\.h)[>"]'
-          grep -rnE --include='*.c' --include='*.h' --include='*.cpp' --include='*.hpp' "$pattern" "${dirs[@]}" > violations.txt
-          rc=$?
+          rc=0
+          VIOLATIONS_FILE=violations.txt bash tools/class-s-gate.sh . || rc=$?
           if [ "$rc" -eq 0 ]; then
-            echo "FAIL: forbidden platform includes found"
-            cat violations.txt
-            { echo "### Class S dependency gate: FAIL"; echo '```'; cat violations.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          elif [ "$rc" -eq 1 ]; then
-            echo "PASS: no forbidden includes in ${dirs[*]}"
-            echo "### Class S dependency gate: PASS (${dirs[*]})" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Class S dependency gate: PASS" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::error title=Class S dependency gate::grep error (exit $rc); gate result invalid"
-            echo "### Class S dependency gate: FAIL (grep exit $rc, scan error)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Class S dependency gate::FAIL (gate exit $rc)"
+            { echo "### Class S dependency gate: FAIL (gate exit $rc)"; echo '```'; cat violations.txt 2>/dev/null || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
+
+  class-s-gate-selftest:
+    # Fixture self-test of the Class S gate script (Refs #10). Verifies the gate, not the code.
+    name: class-s-gate-selftest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Run gate fixtures
+        shell: bash
+        run: bash tools/class-s-gate-selftest.sh
 
   esp-idf-build:
     name: class-b-esp-idf-build
