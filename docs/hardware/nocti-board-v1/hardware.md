@@ -154,7 +154,8 @@ V4 column = `reference/` V4 `board.h` (read-only; per the 2026-10-16 hardware st
 - **R50 label (open):** in the EasyEDA source R50's net label is `fNIRS_Reset`, while the ADS131M04 SYNC#/RESET# and FPC2.12 use `fNIRS_RESET`.
   - [O, 2026-10-16] The Owner states the two nets are in separate EasyEDA projects (main board and PD board) joined physically by a jumper/cable, so the case mismatch is not a missing connection.
   - Note: in the committed source both labels appear in `SCH_PD_board_2026-10-16.json`. Agent 04 / Owner to reconcile.
-  - **Stays open** until an EasyEDA netlist export or an Owner continuity check confirms it. Physical continuity: NOT RUN.
+  - [O, 2026-10-16] Owner statement: the schematic is wrong but the PCB routing connects both nets correctly; recorded as a schematic erratum to fix in Nocti board v2. Not verified.
+  - **Stays open** ([U]) until PCB layout evidence, an EasyEDA netlist export or an Owner continuity check confirms it. Physical continuity: NOT RUN.
   - Firmware should drive GPIO6 (fNIRS_RESET) to a defined level early in boot rather than rely on the R50 pull-up.
 - On the optode side, ADS131M04 DOUT reaches fNIRS_MISO through optode:R47 33 Ω [derived from EasyEDA source, proposed].
 
@@ -211,7 +212,7 @@ Folder `Schematic_and_hardwareInfo/` on `main` at `6e801fbec582893a50dd92c6037a4
 | `Schematic_PD-board_2026-10-16.png` | 265617 | `41a891955eeb095500f722224c7a3e6a6b6783af` | `c97d90343d1df663d2930876b4d668b732f1e3a6267904e83d5aef7d7afb0db8` |
 | `Schematic_Thesis-main_2026-10-16.png` | 763976 | `9477efa1c1c79dff9befd76cc293bbb331eb982f` | `92160e8915179146ed04b0c5abb856770a9b4522cfac8bcb2e839a99ff6e2664` |
 
-Method: wires, pin endpoints, net labels and net flags in the EasyEDA JSON were joined by coordinate; same-named labels were treated as one net. This is a script reading, not an EasyEDA netlist export. **Everything below is derived from EasyEDA source, proposed, pending Agent 04 review.**
+Method: wires, pin endpoints, net labels and net flags in the EasyEDA JSON were joined by coordinate; same-named labels were treated as one net. This is a script reading, not an EasyEDA netlist export. **EasyEDA-derived content: reviewed by Agent 04 at `365c7e9` (issuecomment-6209025022); status remains [proposed] until confirmed by an EasyEDA netlist/ERC export or Owner continuity check.**
 
 - **PCA9956B (main:U8, PCA9956BTWY):** OE# (pin 5) and AD0–AD2 → GND. REXT (pin 1) → main:R4 1 kΩ → GND. RESET# (pin 35) → RESET_LED → GPIO18 and R46 10 kΩ → Rail_3.3V. Agrees with §5.
 - **PCA channel map:** LED0/1 → L1_735/L1_850, LED2/3 → L2, LED4/5 → L3, LED6/7 → L4, LED8/9 → L5, LED14/15 → L6, LED16/17 → L7, LED18/19 → L8, LED20/21 → L9, LED22/23 → L10. LED10–LED13 are unconnected. Agrees with the V4 firmware channel use (0–9, 14–23) and resolves the [U] in §5.
@@ -220,4 +221,4 @@ Method: wires, pin endpoints, net labels and net flags in the EasyEDA JSON were 
 - **SW5 (SS-12D02):** common → ESP32 module 3V3; one throw → Rail_3.3V; other throw → J_PSource (J3 "Prog_Src_In", J3.2 = GND). Agrees with the Owner's answer.
 - **3.3 V digital:** main:U3 TPS7A2133 IN/EN = SYS_Out, OUT = Rail_3.3V. Agrees with P20-H7.
 - **ESP32 GPIOs:** IO6 fNIRS_RESET; IO7 → main:R47 33 Ω → fNIRS_CS; IO8 CE_BQ; IO15 net_SDA; IO16 net_SCL; IO18 RESET_LED; IO35 fNIRS_DRDY; IO36 → R48 33 Ω → fNIRS_SCLK; IO37 fNIRS_MISO; IO38 → R49 33 Ω → fNIRS_MOSI; IO10–14/21/47/48 ADS1299 as in §3. **IO33/IO34 have no connection.** Agrees with §3 (including the GPIO7/15/16 rows that were [I]) and with the GPIO35–37 usage in §4.
-- **Flags, not resolved:** (a) R50 label case `fNIRS_Reset` vs `fNIRS_RESET`: Owner statement recorded, still open (§6). (b) TPS7A2050 output: resolved by Owner decision; canonical `Rail_Clean5V`, alias `Rail_5V_Analog` (§2). No conflict found with R46, R30 or GPIO35–37.
+- **Flags, not resolved:** (a) R50 label case `fNIRS_Reset` vs `fNIRS_RESET`: Owner statements recorded (2026-10-16: schematic erratum, PCB routing stated correct, to fix in board v2), still [U]/open until PCB layout evidence or a continuity check (§6). (b) TPS7A2050 output: resolved by Owner decision; canonical `Rail_Clean5V`, alias `Rail_5V_Analog` (§2). No conflict found with R46, R30 or GPIO35–37.
