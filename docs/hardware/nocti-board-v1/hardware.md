@@ -178,8 +178,8 @@ ADS1299 (SPI2 on GPIO10–14/21/47/48), BQ24295 and MAX17048 are all populated, 
 |---|---|---|
 | P20-H1 | R46 is a 10 kΩ pull-up on RESET_LED; PCA9956B active with GPIO18 undriven | Fixed (§5, §9 Q3) |
 | P20-H2 | No hardware emitter disable (OE# = GND) | Known deviation, fix in Nocti board v2; **not a waiver**, #19 open |
-| P20-H3 | Agent 04 finding as recorded in the PR #20 review | See PR #20 review |
-| P20-H4 | Agent 04 finding as recorded in the PR #20 review | See PR #20 review |
+| P20-H3 | GPIO35–37 shared with octal PSRAM; `CONFIG_SPIRAM=n` must be enforced | Open (§4; H-3 build check; PSRAM high-Z question §9 Q12) |
+| P20-H4 | SMT735D ratings vs the Owner-approved 50 mA cap | Open (§5; §9 Q6) |
 | P20-H5 | PD→AIN channel map from low-res PNG | Open; re-check against EasyEDA sources |
 | P20-H6 | R30 pulls CE_BQ up | Fixed (§2) |
 | P20-H7 | 3.3 V digital block is TPS7A2133 LDO, not a buck | Fixed (§2) |
