@@ -38,8 +38,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Normative inner-layer paths, ADR-0001 section 3.5 @ 880903832c8d8c6527ad2c42ec095f9e5a0d1560
+          # (docs/adr/0001-clean-architecture-boundaries.md). Change only together with an ADR revision.
+          normative=(components/nn2_core components/nn2_app components/nn2_ports)
+          unknown=()
+          if [ -d components ]; then
+            while IFS= read -r d; do
+              known=false
+              for n in "${normative[@]}"; do [ "$d" = "$n" ] && known=true; done
+              [ "$known" = true ] || unknown+=("$d")
+            done < <(find components -mindepth 1 -maxdepth 1 -type d -name 'nn2_*' | sort)
+          fi
+          if [ "${#unknown[@]}" -gt 0 ]; then
+            echo "::error title=Layer map violation::components/nn2_* not in ADR-0001 normative map: ${unknown[*]}"
+            echo "### Layer map violation (FAIL): ${unknown[*]} not in ADR-0001 section 3.5 map" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           dirs=()
-          for d in components/nn2_core components/nn2_app components/nn2_ports; do
+          for d in "${normative[@]}"; do
             [ -d "$d" ] && dirs+=("$d")
           done
           if [ "${#dirs[@]}" -eq 0 ]; then
@@ -188,3 +204,40 @@ jobs:
             build/*.map
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
+
+  class-s-gate-invariant:
+    # Self-check: a present layer must be gated; detection must succeed. Not conformance evidence by itself.
+    name: class-s-gate-invariant
+    needs: [layer-detect, static-dependency-gate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Class S gate invariant
+        shell: bash
+        env:
+          DETECT_RESULT: ${{ needs.layer-detect.result }}
+          PRESENT: ${{ needs.layer-detect.outputs.present }}
+          GATE_RESULT: ${{ needs.static-dependency-gate.result }}
+        run: |
+          set -euo pipefail
+          echo "layer-detect=$DETECT_RESULT present=$PRESENT gate=$GATE_RESULT"
+          if [ "$DETECT_RESULT" != "success" ]; then
+            echo "::error title=Class S invariant::layer-detect did not succeed ($DETECT_RESULT)"
+            echo "### Class S invariant: FAIL (layer-detect=$DETECT_RESULT)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$PRESENT" = "true" ]; then
+            if [ "$GATE_RESULT" != "success" ]; then
+              echo "::error title=Class S invariant::layers present but gate result is $GATE_RESULT"
+              echo "### Class S invariant: FAIL (layers present, gate=$GATE_RESULT)" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            echo "### Class S invariant: OK (layers present, gate=success)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$PRESENT" = "false" ] && [ "$GATE_RESULT" = "skipped" ]; then
+            echo "### Class S: NOT APPLICABLE (not evidence)" >> "$GITHUB_STEP_SUMMARY"
+            echo "Invariant holds: no normative layer paths, gate skipped."
+          else
+            echo "::error title=Class S invariant::unexpected state present=$PRESENT gate=$GATE_RESULT"
+            echo "### Class S invariant: FAIL (present=$PRESENT, gate=$GATE_RESULT)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
