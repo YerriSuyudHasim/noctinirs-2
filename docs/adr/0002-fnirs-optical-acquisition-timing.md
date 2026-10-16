@@ -4,16 +4,16 @@
 |---|---|
 | ID | ADR-0002 |
 | Title | fNIRS optical acquisition timing (configurable frame rate, slot geometry, LED ON/OFF, ADC sampling) |
-| Status | **Proposed** (not approved; not implemented) |
-| Date | 2026-10-16 (rev 6) |
+| Status | **Accepted** (Owner-approved 2026-10-16 after Agent 07 IR on PR #22 @ `526a7ee`; squash-merged to `main` as `d84450a`; firmware implementation NOT started; Class H NOT RUN) |
+| Date | 2026-10-16 (rev 6; Status → Accepted) |
 | Issue | [#21](https://github.com/YerriSuyudHasim/noctinirs-2/issues/21) |
 | Author role | Architect / Orchestrator (draft) |
-| Independent reviewer | TBD (must not be the author) |
+| Independent reviewer | Agent 07 — APPROVE on PR #22 @ `526a7ee` (2026-10-16) |
 | Approver / merge | Project Owner `YerriSuyudHasim` only |
 | Input commit | `noctinirs-2` `main` @ `96e68e1e052a5fce1ed006805132269cf34f1c1e` |
 | Evidence class of this document | Static (design review only; Class H / hardware timing NOT RUN) |
 
-> This ADR describes a *target* acquisition contract for later firmware bring-up. Nothing in it is implemented on the active 0.1.x path at the input commit. Historical V2/V3/V4 constants and call patterns are **evidence only**, not automatic NN2 requirements or ESP-IDF API templates. The project targets **ESP-IDF 6.1**. Proposed parameters are marked **[Proposed]** until the Project Owner accepts them after independent review. This ADR does **not** authorize flashing, hardware tests, merges, releases, or tags.
+> This ADR describes a *target* acquisition contract for later firmware bring-up. Nothing in it is implemented on the active 0.1.x path at the input commit. Historical V2/V3/V4 constants and call patterns are **evidence only**, not automatic NN2 requirements or ESP-IDF API templates. The project targets **ESP-IDF 6.1**. Parameters below are **Accepted** by the Project Owner after independent review (PR #22). They remain unimplemented on the active 0.1.x path until bring-up work lands. This ADR does **not** authorize flashing, hardware tests, merges, releases, or tags.
 
 ## 1. Context
 
