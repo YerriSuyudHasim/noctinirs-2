@@ -8,6 +8,7 @@ project:
   product_type: esp32-s3-firmware
   development_version: "0.1.0"
   architecture: clean-architecture
+  language: C11
   target: esp32s3
   framework:
     name: ESP-IDF
@@ -65,8 +66,14 @@ workflow:
   merge_approval: human-required
   direct_agent_merge: forbidden
 
-unresolved_governance:
-  human_owner: null
+governance:
+  human_owner: YerriSuyudHasim
   backup_owner: null
-  risk_class: pending-human-classification
-  evidence_retention: pending-human-decision
+  risk_class: non-clinical-research-prototype
+  evidence_retention: >-
+    github-primary; retain ADRs/reviews/decisions/PR discussions/test summaries;
+    evidence records must include commit SHA, build environment, toolchain versions,
+    commands, evidence class, and outcomes; CI artifacts retain >=90 days where supported
+    (propose documented alternative before weakening); never expose secrets in logs/artifacts
+  decision_ref: OWNER-M0-A1-001
+  notes: backup_owner remains unassigned pending Owner designation
