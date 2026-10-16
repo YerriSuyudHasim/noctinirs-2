@@ -1,0 +1,243 @@
+name: Firmware build
+
+# M0.2 (Refs #2). Evidence classes:
+#   layer-detect           -> informational only (not evidence)
+#   static-dependency-gate -> Class S (static) only; skipped when layers are absent
+#   esp-idf-build          -> Class B (build) only
+# A successful build is NOT hardware validation, NOT unit/integration evidence,
+# and says nothing about timing, electrical behaviour, safety, or clinical validity.
+# No Class U job exists yet: no tests are present in the repository.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # Source commit under test: PR head for pull_request events (not the merge commit), else the pushed SHA.
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  layer-detect:
+    # Detection only. Not conformance evidence.
+    name: Layer detect (informational, not a conformance check)
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.detect.outputs.present }}
+      dirs: ${{ steps.detect.outputs.dirs }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Detect layered components (ADR-0001 section 3.5)
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Normative inner-layer paths, ADR-0001 section 3.5 @ 880903832c8d8c6527ad2c42ec095f9e5a0d1560
+          # (docs/adr/0001-clean-architecture-boundaries.md). Change only together with an ADR revision.
+          normative=(components/nn2_core components/nn2_app components/nn2_ports)
+          unknown=()
+          if [ -d components ]; then
+            while IFS= read -r d; do
+              known=false
+              for n in "${normative[@]}"; do [ "$d" = "$n" ] && known=true; done
+              [ "$known" = true ] || unknown+=("$d")
+            done < <(find components -mindepth 1 -maxdepth 1 -type d -name 'nn2_*' | sort)
+          fi
+          if [ "${#unknown[@]}" -gt 0 ]; then
+            echo "::error title=Layer map violation::components/nn2_* not in ADR-0001 normative map: ${unknown[*]}"
+            echo "### Layer map violation (FAIL): ${unknown[*]} not in ADR-0001 section 3.5 map" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          dirs=()
+          for d in "${normative[@]}"; do
+            [ -d "$d" ] && dirs+=("$d")
+          done
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "dirs=" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Class S dependency gate::NOT APPLICABLE (not evidence): components/nn2_core, nn2_app, nn2_ports absent; gate job skipped"
+            echo "### Class S: NOT APPLICABLE (not evidence)" >> "$GITHUB_STEP_SUMMARY"
+            echo "No layered components (components/nn2_core, components/nn2_app, components/nn2_ports). The gate job is skipped; no conformance is claimed." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "dirs=${dirs[*]}" >> "$GITHUB_OUTPUT"
+            echo "Layered components found: ${dirs[*]}"
+          fi
+
+  static-dependency-gate:
+    name: class-s-dependency-gate
+    needs: layer-detect
+    # Skipped (not green) when no layered components exist.
+    if: needs.layer-detect.outputs.present == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Forbidden-include gate for layered components
+        shell: bash
+        env:
+          SCAN_DIRS: ${{ needs.layer-detect.outputs.dirs }}
+        run: |
+          set -uo pipefail
+          read -r -a dirs <<< "$SCAN_DIRS"
+          echo "Scanning: ${dirs[*]}"
+          pattern='^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"](esp_[^>"]*|freertos/[^>"]*|driver/[^>"]*|lwip/[^>"]*|hal/[^>"]*|soc/[^>"]*|sdkconfig\.h)[>"]'
+          grep -rnE --include='*.c' --include='*.h' --include='*.cpp' --include='*.hpp' "$pattern" "${dirs[@]}" > violations.txt
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "FAIL: forbidden platform includes found"
+            cat violations.txt
+            { echo "### Class S dependency gate: FAIL"; echo '```'; cat violations.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          elif [ "$rc" -eq 1 ]; then
+            echo "PASS: no forbidden includes in ${dirs[*]}"
+            echo "### Class S dependency gate: PASS (${dirs[*]})" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error title=Class S dependency gate::grep error (exit $rc); gate result invalid"
+            echo "### Class S dependency gate: FAIL (grep exit $rc, scan error)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+  esp-idf-build:
+    name: class-b-esp-idf-build
+    runs-on: ubuntu-latest
+    container:
+      # espressif/idf:v6.1, pinned by digest (Docker Hub tag v6.1, verified 2026-10-16).
+      image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
+    env:
+      EXPECTED_IDF_COMMIT: fff9895c82d744c7237be8847347bdd1b07c6643  # espressif/esp-idf tag v6.1
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Record toolchain
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory '*'
+          . "$IDF_PATH/export.sh" > /dev/null
+          mkdir -p evidence
+          {
+            echo "SOURCE_SHA=$SOURCE_SHA"
+            echo "EVENT=$GITHUB_EVENT_NAME"
+            echo "GITHUB_SHA (event ref)=$GITHUB_SHA"
+            echo "GITHUB_RUN_ID=$GITHUB_RUN_ID attempt=$GITHUB_RUN_ATTEMPT"
+            echo "UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "IDF_PATH=$IDF_PATH"
+            echo "idf.py --version: $(idf.py --version)"
+            echo "IDF commit: $(git -C "$IDF_PATH" rev-parse HEAD)"
+            echo "Compiler: $(xtensa-esp32s3-elf-gcc --version | head -n1)"
+            echo "CMake: $(cmake --version | head -n1)"
+            echo "Ninja: $(ninja --version)"
+            echo "Python: $(python --version 2>&1)"
+          } | tee evidence/toolchain.txt
+          actual="$(git -C "$IDF_PATH" rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_IDF_COMMIT" ]; then
+            echo "FAIL: IDF commit $actual != expected v6.1 commit $EXPECTED_IDF_COMMIT" | tee -a evidence/toolchain.txt
+            exit 1
+          fi
+
+      - name: Set target and build
+        run: |
+          set -euo pipefail
+          . "$IDF_PATH/export.sh" > /dev/null
+          idf.py set-target esp32s3 2>&1 | tee evidence/set-target.log
+          idf.py build 2>&1 | tee evidence/build.log
+          idf.py size 2>&1 | tee evidence/size.txt
+
+      - name: Verify generated target
+        run: |
+          set -euo pipefail
+          line="$(grep -E '^CONFIG_IDF_TARGET=' sdkconfig || true)"
+          echo "$line" | tee evidence/target.txt
+          if [ "$line" != 'CONFIG_IDF_TARGET="esp32s3"' ]; then
+            echo "FAIL: CONFIG_IDF_TARGET is not \"esp32s3\""
+            exit 1
+          fi
+
+      - name: Hash outputs
+        run: |
+          set -euo pipefail
+          cp sdkconfig evidence/sdkconfig
+          sha256sum build/*.bin build/bootloader/bootloader.bin build/partition_table/partition-table.bin sdkconfig | tee evidence/SHA256SUMS
+          grep -ciE 'warning:' evidence/build.log > evidence/warning-count.txt || true
+          echo "Compiler warning lines: $(cat evidence/warning-count.txt)"
+
+      - name: Write step summary
+        if: always()
+        run: |
+          {
+            echo "## Class B build evidence (build only, not hardware validation)"
+            echo "Source SHA: $SOURCE_SHA (event: $GITHUB_EVENT_NAME)"
+            for f in toolchain.txt target.txt SHA256SUMS size.txt warning-count.txt; do
+              [ -f "evidence/$f" ] && { echo "### $f"; echo '```'; cat "evidence/$f"; echo '```'; }
+            done
+            if [ -f evidence/build.log ]; then
+              echo "### build.log (last 60 lines)"; echo '```'; tail -n 60 evidence/build.log; echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: class-b-build-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            evidence/
+            build/*.bin
+            build/*.elf
+            build/*.map
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+
+  class-s-gate-invariant:
+    # Self-check: a present layer must be gated; detection must succeed. Not conformance evidence by itself.
+    name: class-s-gate-invariant
+    needs: [layer-detect, static-dependency-gate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Class S gate invariant
+        shell: bash
+        env:
+          DETECT_RESULT: ${{ needs.layer-detect.result }}
+          PRESENT: ${{ needs.layer-detect.outputs.present }}
+          GATE_RESULT: ${{ needs.static-dependency-gate.result }}
+        run: |
+          set -euo pipefail
+          echo "layer-detect=$DETECT_RESULT present=$PRESENT gate=$GATE_RESULT"
+          if [ "$DETECT_RESULT" != "success" ]; then
+            echo "::error title=Class S invariant::layer-detect did not succeed ($DETECT_RESULT)"
+            echo "### Class S invariant: FAIL (layer-detect=$DETECT_RESULT)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "$PRESENT" = "true" ]; then
+            if [ "$GATE_RESULT" != "success" ]; then
+              echo "::error title=Class S invariant::layers present but gate result is $GATE_RESULT"
+              echo "### Class S invariant: FAIL (layers present, gate=$GATE_RESULT)" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            echo "### Class S invariant: OK (layers present, gate=success)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$PRESENT" = "false" ] && [ "$GATE_RESULT" = "skipped" ]; then
+            echo "### Class S: NOT APPLICABLE (not evidence)" >> "$GITHUB_STEP_SUMMARY"
+            echo "Invariant holds: no normative layer paths, gate skipped."
+          else
+            echo "::error title=Class S invariant::unexpected state present=$PRESENT gate=$GATE_RESULT"
+            echo "### Class S invariant: FAIL (present=$PRESENT, gate=$GATE_RESULT)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
