@@ -37,7 +37,7 @@ Schematic reading caveat: the schematics are low-resolution PNG exports (EasyEDA
 - **Rails:**
   - **TPS63070** buck-boost (U2) → **RAIL_5.3V**. FB divider R2 = 560 kΩ / R5 = 100 kΩ [V]. With the TPS63070's 0.8 V reference that gives ≈5.28 V [I]. The block is titled "Buck-Boost 5.3 V rail" [V].
   - **TPS7A2133** 3.3 V **LDO** (U3) → Rail_3.3V (digital) [V BOM]. This block is an LDO, not a buck converter (P20-H7). The schematic block title "Buck converter 3.3V digital rail" is a mislabel on the drawing [V].
-  - **TPS7A2050** 5 V LDO (U4) → Rail_5V_Analog (for ADS1299) [V]. In the EasyEDA source this output net is named `Rail_Clean5V` (U4 OUT → ADS1299 AVDD) [proposed].
+  - **TPS7A2050** 5 V LDO (U4) → `Rail_Clean5V` (U4 OUT → ADS1299 AVDD) [V]. `Rail_Clean5V` is the canonical name, taken from the EasyEDA source per Owner decision (2026-10-16). Alias: `Rail_5V_Analog`, the name used in earlier revisions of this doc.
   - SW5 selects the module 3V3 feed between J_PSource and Rail_3.3V [V schematic]. Purpose [O, 2026-10-16]: it selects the ESP32 power input. The normal position is the main rail (Rail_3.3V); the other position takes power from a jumper (J_PSource) and is for emergency use only.
 - **LED driver:** **PCA9956BTW** (U8), I2C (see §5).
 - **Biopotential front end:** **ADS1299IPAGR** (U5) with EOG/EMG/EEG RC filter networks. Present, and to be used in future [O]. **Out of 0.1.x scope.**
@@ -54,7 +54,8 @@ Schematic reading caveat: the schematics are low-resolution PNG exports (EasyEDA
 - **Photodetectors:** PD1–PD4 **Vishay VEMD8082** [V BOM].
 - **TIAs:** U1, U4 **OPA2380AIDGKR** (dual, 4 channels) [V BOM].
 - **Emitters:** LED1–LED10 **SMT735D** symbols (pins VCC / 850 / 735 / NC) are on the optode sheet. **No emitter part appears in either BOM** [V: absent], and the symbols show no wires on the sheet [I]. The Owner says the LEDs are Marubeni; the datasheet is `Datasheet/SMT735D_850D-1.pdf` [O/V].
-  - [O, 2026-10-16] The LEDs are not in the BOM because the Owner already had them and did not buy them with the board. They are connected off-board by a **3-wire twisted cable: VCC, GND_735, GND_850**. Cable length and exact mounting are [U]; this is an Owner statement, not electrically verified.
+  - [O, 2026-10-16] The LEDs are not in the BOM because the Owner already had them and did not buy them with the board. They are connected off-board by a **3-wire twisted cable: VCC, `CATH_735`, `CATH_850` (NOT ground)**. The Owner's informal names were "GND 735/850". Cable length and exact mounting are [U]; this is an Owner statement, not electrically verified.
+  - ⚠ **Warning:** `CATH_735` / `CATH_850` are cathode returns to the PCA9956B constant-current sinks, not ground. Tying them to GND puts the LED directly across RAIL_5.3V_LED (5.3 V) with **no current limit**.
 
 ## 3. NN2 pin map — schematic vs V4 firmware
 
@@ -67,7 +68,7 @@ V4 column = `reference/` V4 `board.h` (read-only; per the 2026-10-16 hardware st
 | 45 | 26 | not connected [V] | not used | ✓ |
 | 46 | 16 | not connected [V] | not used | ✓ |
 | 6 | 6 | fNIRS_RESET (ADS131M04 SYNC/RESET#) [V] | ADS131M04 SYNC/RESET# | ✓ |
-| 7 | 7 | fNIRS_CS via R47 33 Ω [I: label placement] | ADS131M04 CS# | ✓ [I] |
+| 7 | 7 | fNIRS_CS via main:R47 33 Ω [I: label placement] | ADS131M04 CS# | ✓ [I] |
 | 15 | 8 | net_SDA [I: label placement] | I2C SDA | ✓ [I] |
 | 16 | 9 | net_SCL [I: label placement] | I2C SCL | ✓ [I] |
 | 17 | 10 | no net (stub) [I] | not used | ✓ |
@@ -149,8 +150,12 @@ V4 column = `reference/` V4 `board.h` (read-only; per the 2026-10-16 hardware st
 - **All 4 ADS131M04 channels carry detectors.** Note that the physical PD numbering does not equal the ADC channel number (PD1 = CH2, PD3 = CH0).
 - The TIA non-inverting input is tied to GND (U1/U4 +INA/+INB → GND) [derived from EasyEDA source, proposed].
 - The ADS131M04 digital lines on the optode side have pull resistors: R50 and R10 are 10 kΩ pull-ups to Rail_3.3D2 on fNIRS_RESET and fNIRS_CS; R11 and R12 are 47 kΩ pull-downs to GND on fNIRS_SCLK and fNIRS_MOSI [I]. The EasyEDA source agrees on values and nets [proposed].
-- **Flag (not resolved):** in the EasyEDA source R50's net label is `fNIRS_Reset`, while the ADS131M04 SYNC#/RESET# and FPC2.12 use `fNIRS_RESET`. If EasyEDA treats net names case-sensitively, R50 is not connected to the reset line. Agent 04 / Owner to confirm.
-- On the optode side, ADS131M04 DOUT reaches fNIRS_MISO through R47 33 Ω [derived from EasyEDA source, proposed].
+- **R50 label (open):** in the EasyEDA source R50's net label is `fNIRS_Reset`, while the ADS131M04 SYNC#/RESET# and FPC2.12 use `fNIRS_RESET`.
+  - [O, 2026-10-16] The Owner states the two nets are in separate EasyEDA projects (main board and PD board) joined physically by a jumper/cable, so the case mismatch is not a missing connection.
+  - Note: in the committed source both labels appear in `SCH_PD_board_2026-10-16.json`. Agent 04 / Owner to reconcile.
+  - **Stays open** until an EasyEDA netlist export or an Owner continuity check confirms it. Physical continuity: NOT RUN.
+  - Firmware should drive GPIO6 (fNIRS_RESET) to a defined level early in boot rather than rely on the R50 pull-up.
+- On the optode side, ADS131M04 DOUT reaches fNIRS_MISO through optode:R47 33 Ω [derived from EasyEDA source, proposed].
 
 ## 7. Strapping, buttons, indicators
 
@@ -169,7 +174,7 @@ ADS1299 (SPI2 on GPIO10–14/21/47/48), BQ24295 and MAX17048 are all populated, 
 2. Physical module marking photo (N16R8) and back-side PCB render/photo.
 3. ~~OE# = GND / RESET_LED pull~~: answered. R46 is a 10 kΩ pull-up (P20-H1), so RESET#-low is **not** a hardware off. Owner: no hardware emitter disable on v1; fix in Nocti board v2 (P20-H2, known deviation, not a waiver; #19 stays open).
 4. Is RAIL_5.3V_LED switchable? Is there any way to cut LED anode power?
-5. ~~SMT735D missing from BOMs~~: answered [O]. Owner already had the LEDs; connected off-board by a 3-wire twisted cable (VCC, GND_735, GND_850). Cable length/mounting still [U].
+5. ~~SMT735D missing from BOMs~~: answered [O]. Owner already had the LEDs; connected off-board by a 3-wire twisted cable (VCC, `CATH_735`, `CATH_850`, NOT ground; Owner's informal names "GND 735/850"). Cable length/mounting still [U].
 6. SMT735D absolute maximum ratings (DC/pulse current, duty) to set beside the approved 50 mA cap.
 7. ~~BQ24295 CE# default~~: R30 pulls CE_BQ up (P20-H6). Datasheet confirmation of the resulting charge-disable default is still needed.
 8. TIA bias/reference node and expected photocurrent range (gain = 100 kΩ).
@@ -209,9 +214,9 @@ Method: wires, pin endpoints, net labels and net flags in the EasyEDA JSON were 
 
 - **PCA9956B (U8, PCA9956BTWY):** OE# (pin 5) and AD0–AD2 → GND. REXT (pin 1) → R4 1 kΩ → GND. RESET# (pin 35) → RESET_LED → GPIO18 and R46 10 kΩ → Rail_3.3V. Agrees with §5.
 - **PCA channel map:** LED0/1 → L1_735/L1_850, LED2/3 → L2, LED4/5 → L3, LED6/7 → L4, LED8/9 → L5, LED14/15 → L6, LED16/17 → L7, LED18/19 → L8, LED20/21 → L9, LED22/23 → L10. LED10–LED13 are unconnected. Agrees with the V4 firmware channel use (0–9, 14–23) and resolves the [U] in §5.
-- **LED connectors LED1–LED10:** pin 1 "735" → Lx_735 (PCA sink), pin 2 "850" → Lx_850 (PCA sink), pins 3/4 VCC/VCC2 → RAIL_5.3V_LED, pin 5 SG → GND. RAIL_5.3V_LED = RAIL_5.3V through L2 600 Ω ferrite. The Owner's cable names "GND_735 / GND_850" correspond to the 735/850 cathode lines, which return to PCA9956B channel sinks, not to board GND.
+- **LED connectors LED1–LED10:** pin 1 "735" → Lx_735 (PCA sink), pin 2 "850" → Lx_850 (PCA sink), pins 3/4 VCC/VCC2 → RAIL_5.3V_LED, pin 5 SG → GND. RAIL_5.3V_LED = RAIL_5.3V through L2 600 Ω ferrite. The cable wires `CATH_735` / `CATH_850` (Owner's informal names "GND 735/850") are these cathode lines; they return to PCA9956B channel sinks, **not** to board GND (see §2 warning).
 - **R30 / CE_BQ:** R30 100 kΩ between CE_BQ and Rail_3.3V; CE_BQ → BQ24295 CE and GPIO8. Agrees with P20-H6.
 - **SW5 (SS-12D02):** common → ESP32 module 3V3; one throw → Rail_3.3V; other throw → J_PSource (J3 "Prog_Src_In", J3.2 = GND). Agrees with the Owner's answer.
 - **3.3 V digital:** U3 TPS7A2133 IN/EN = SYS_Out, OUT = Rail_3.3V. Agrees with P20-H7.
-- **ESP32 GPIOs:** IO6 fNIRS_RESET; IO7 → R47 33 Ω → fNIRS_CS; IO8 CE_BQ; IO15 net_SDA; IO16 net_SCL; IO18 RESET_LED; IO35 fNIRS_DRDY; IO36 → R48 33 Ω → fNIRS_SCLK; IO37 fNIRS_MISO; IO38 → R49 33 Ω → fNIRS_MOSI; IO10–14/21/47/48 ADS1299 as in §3. **IO33/IO34 have no connection.** Agrees with §3 (including the GPIO7/15/16 rows that were [I]) and with the GPIO35–37 usage in §4.
-- **Flags, not resolved:** (a) R50 label case `fNIRS_Reset` vs `fNIRS_RESET` (§6). (b) TPS7A2050 output net named `Rail_Clean5V`, not `Rail_5V_Analog` (§2). No conflict found with R46, R30 or GPIO35–37.
+- **ESP32 GPIOs:** IO6 fNIRS_RESET; IO7 → main:R47 33 Ω → fNIRS_CS; IO8 CE_BQ; IO15 net_SDA; IO16 net_SCL; IO18 RESET_LED; IO35 fNIRS_DRDY; IO36 → R48 33 Ω → fNIRS_SCLK; IO37 fNIRS_MISO; IO38 → R49 33 Ω → fNIRS_MOSI; IO10–14/21/47/48 ADS1299 as in §3. **IO33/IO34 have no connection.** Agrees with §3 (including the GPIO7/15/16 rows that were [I]) and with the GPIO35–37 usage in §4.
+- **Flags, not resolved:** (a) R50 label case `fNIRS_Reset` vs `fNIRS_RESET`: Owner statement recorded, still open (§6). (b) TPS7A2050 output: resolved by Owner decision; canonical `Rail_Clean5V`, alias `Rail_5V_Analog` (§2). No conflict found with R46, R30 or GPIO35–37.
