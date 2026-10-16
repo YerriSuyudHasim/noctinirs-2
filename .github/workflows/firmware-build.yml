@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # Source commit under test: PR head for pull_request events (not the merge commit), else the pushed SHA.
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   layer-detect:
     # Detection only. Not conformance evidence.
@@ -26,6 +30,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Detect layered components (ADR-0001 section 3.5)
         id: detect
@@ -57,6 +63,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Forbidden-include gate for layered components
         shell: bash
@@ -97,6 +105,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Record toolchain
         run: |
@@ -105,7 +115,9 @@ jobs:
           . "$IDF_PATH/export.sh" > /dev/null
           mkdir -p evidence
           {
-            echo "GITHUB_SHA=$GITHUB_SHA"
+            echo "SOURCE_SHA=$SOURCE_SHA"
+            echo "EVENT=$GITHUB_EVENT_NAME"
+            echo "GITHUB_SHA (event ref)=$GITHUB_SHA"
             echo "GITHUB_RUN_ID=$GITHUB_RUN_ID attempt=$GITHUB_RUN_ATTEMPT"
             echo "UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "IDF_PATH=$IDF_PATH"
@@ -153,6 +165,7 @@ jobs:
         run: |
           {
             echo "## Class B build evidence (build only, not hardware validation)"
+            echo "Source SHA: $SOURCE_SHA (event: $GITHUB_EVENT_NAME)"
             for f in toolchain.txt target.txt SHA256SUMS size.txt warning-count.txt; do
               [ -f "evidence/$f" ] && { echo "### $f"; echo '```'; cat "evidence/$f"; echo '```'; }
             done
@@ -165,7 +178,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: class-b-build-${{ github.sha }}
+          name: class-b-build-${{ github.event.pull_request.head.sha || github.sha }}
           retention-days: 90
           if-no-files-found: error
           path: |
