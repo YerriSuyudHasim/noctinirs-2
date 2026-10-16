@@ -1,7 +1,8 @@
 name: Firmware build
 
 # M0.2 (Refs #2). Evidence classes:
-#   static-dependency-gate -> Class S (static) only
+#   layer-detect           -> informational only (not evidence)
+#   static-dependency-gate -> Class S (static) only; skipped when layers are absent
 #   esp-idf-build          -> Class B (build) only
 # A successful build is NOT hardware validation, NOT unit/integration evidence,
 # and says nothing about timing, electrical behaviour, safety, or clinical validity.
@@ -15,8 +16,43 @@ permissions:
   contents: read
 
 jobs:
+  layer-detect:
+    # Detection only. Not conformance evidence.
+    name: Layer detect (informational, not a conformance check)
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.detect.outputs.present }}
+      dirs: ${{ steps.detect.outputs.dirs }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Detect layered components (ADR-0001 section 3.5)
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          dirs=()
+          for d in components/nn2_core components/nn2_app components/nn2_ports; do
+            [ -d "$d" ] && dirs+=("$d")
+          done
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "dirs=" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Class S dependency gate::NOT APPLICABLE (not evidence): components/nn2_core, nn2_app, nn2_ports absent; gate job skipped"
+            echo "### Class S: NOT APPLICABLE (not evidence)" >> "$GITHUB_STEP_SUMMARY"
+            echo "No layered components (components/nn2_core, components/nn2_app, components/nn2_ports). The gate job is skipped; no conformance is claimed." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "dirs=${dirs[*]}" >> "$GITHUB_OUTPUT"
+            echo "Layered components found: ${dirs[*]}"
+          fi
+
   static-dependency-gate:
     name: class-s-dependency-gate
+    needs: layer-detect
+    # Skipped (not green) when no layered components exist.
+    if: needs.layer-detect.outputs.present == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -24,27 +60,28 @@ jobs:
 
       - name: Forbidden-include gate for layered components
         shell: bash
+        env:
+          SCAN_DIRS: ${{ needs.layer-detect.outputs.dirs }}
         run: |
-          set -euo pipefail
-          dirs=()
-          for d in components/core components/application components/ports; do
-            [ -d "$d" ] && dirs+=("$d")
-          done
-          if [ "${#dirs[@]}" -eq 0 ]; then
-            echo "NOT APPLICABLE: no layered components yet"
-            echo "### Class S dependency gate: NOT APPLICABLE: no layered components yet" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+          set -uo pipefail
+          read -r -a dirs <<< "$SCAN_DIRS"
           echo "Scanning: ${dirs[*]}"
           pattern='^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"](esp_[^>"]*|freertos/[^>"]*|driver/[^>"]*|lwip/[^>"]*|hal/[^>"]*|soc/[^>"]*|sdkconfig\.h)[>"]'
-          if grep -rnE --include='*.c' --include='*.h' --include='*.cpp' --include='*.hpp' "$pattern" "${dirs[@]}" > violations.txt; then
+          grep -rnE --include='*.c' --include='*.h' --include='*.cpp' --include='*.hpp' "$pattern" "${dirs[@]}" > violations.txt
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
             echo "FAIL: forbidden platform includes found"
             cat violations.txt
             { echo "### Class S dependency gate: FAIL"; echo '```'; cat violations.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             exit 1
+          elif [ "$rc" -eq 1 ]; then
+            echo "PASS: no forbidden includes in ${dirs[*]}"
+            echo "### Class S dependency gate: PASS (${dirs[*]})" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error title=Class S dependency gate::grep error (exit $rc); gate result invalid"
+            echo "### Class S dependency gate: FAIL (grep exit $rc, scan error)" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
-          echo "PASS: no forbidden includes in ${dirs[*]}"
-          echo "### Class S dependency gate: PASS (${dirs[*]})" >> "$GITHUB_STEP_SUMMARY"
 
   esp-idf-build:
     name: class-b-esp-idf-build
