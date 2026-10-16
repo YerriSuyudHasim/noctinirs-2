@@ -14,3 +14,13 @@ const char *nn2_core_status_str(nn2_status_t status)
     default: return "UNKNOWN";
     }
 }
+
+const char *nn2_core_sample_src_str(nn2_sample_src_t src)
+{
+    switch (src) {
+    case NN2_SAMPLE_SRC_UNKNOWN: return "UNKNOWN";
+    case NN2_SAMPLE_SRC_FAKE: return "FAKE";
+    case NN2_SAMPLE_SRC_ADC: return "ADC";
+    default: return "INVALID";
+    }
+}

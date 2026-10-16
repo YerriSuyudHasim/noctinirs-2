@@ -91,10 +91,8 @@ jobs:
           read -r -a dirs <<< "$SCAN_DIRS"
           echo "Scanning: ${dirs[*]}"
           pattern='^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"](esp_[^>"]*|freertos/[^>"]*|driver/[^>"]*|lwip/[^>"]*|hal/[^>"]*|soc/[^>"]*|sdkconfig\.h)[>"]'
-          # GitHub runs bash with -e; capture grep's status explicitly so "no match" (rc=1, PASS)
-          # does not abort the step and rc>=2 (tool error) is still reported as FAIL.
-          rc=0
-          grep -rnE --include='*.c' --include='*.h' --include='*.cpp' --include='*.hpp' "$pattern" "${dirs[@]}" > violations.txt || rc=$?
+          grep -rnE --include='*.c' --include='*.h' --include='*.cpp' --include='*.hpp' "$pattern" "${dirs[@]}" > violations.txt
+          rc=$?
           if [ "$rc" -eq 0 ]; then
             echo "FAIL: forbidden platform includes found"
             cat violations.txt

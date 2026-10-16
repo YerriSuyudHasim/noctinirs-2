@@ -28,8 +28,8 @@ void app_main(void)
         .settle_us = CONFIG_NN2_LED_SETTLE_US,
     };
     if (nn2_core_ring_init(&s_ring) != NN2_OK ||
-        nn2_adapter_led_esp_init(&cfg.led) != NN2_OK ||
-        nn2_adapter_adc_esp_init(&cfg.adc) != NN2_OK) {
+        nn2_adapter_led_disabled_init(&cfg.led) != NN2_OK ||
+        nn2_adapter_adc_fake_init(&cfg.adc) != NN2_OK) {
         ESP_LOGE(TAG, "adapter init failed; halting demo");
         return;
     }
@@ -42,16 +42,21 @@ void app_main(void)
     for (int i = 0; i < CONFIG_NN2_DEMO_CYCLES; i++) {
         st = nn2_app_sequencer_run_cycle(&s_seq);
         if (st != NN2_OK) {
-            ESP_LOGE(TAG, "cycle %d failed: %s (state %s)", i, nn2_core_status_str(st),
-                     nn2_app_seq_state_str(nn2_app_sequencer_state(&s_seq)));
-            (void)nn2_app_sequencer_reset(&s_seq);
+            /* Fault: the sequencer already issued the fail-safe off(). Stop the
+             * demo; no further on() is issued. Cleanup runs in this task. */
+            ESP_LOGE(TAG, "cycle %d failed: %s (state %s); stopping, no further cycles", i,
+                     nn2_core_status_str(st), nn2_app_seq_state_str(nn2_app_sequencer_state(&s_seq)));
         }
         nn2_core_sample_t s;
         while (nn2_core_ring_pop(&s_ring, &s) == NN2_OK) {
-            ESP_LOGI(TAG, "sample seq=%" PRIu32 " ch=%u raw=%" PRIu32 " t_on=%" PRIu64 "us dt=%" PRIu64 "us",
-                     s.seq, (unsigned)s.channel, s.raw, s.t_led_on_us, s.t_sample_us - s.t_led_on_us);
+            ESP_LOGI(TAG, "sample seq=%" PRIu32 " ch=%u src=%s raw=%" PRIu32 " t_on=%" PRIu64 "us dt=%" PRIu64 "us",
+                     s.seq, (unsigned)s.channel, nn2_core_sample_src_str(s.src), s.raw, s.t_led_on_us,
+                     s.t_sample_us - s.t_led_on_us);
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
+        if (st != NN2_OK) {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); /* blocking (not busy) bounded inter-cycle delay */
     }
     ESP_LOGI(TAG, "done: cycles_ok=%" PRIu32 " faults=%" PRIu32 " dropped=%" PRIu32,
              s_seq.cycles_ok, s_seq.faults, s_ring.dropped);

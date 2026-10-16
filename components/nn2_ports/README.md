@@ -5,7 +5,7 @@ Header-only port contracts (ADR-0001 3.4/3.6): each port is a struct of function
 | Header | Port | Notes |
 |---|---|---|
 | `nn2_port_led.h` | LED/emitter on/off | `off()` must always be safe (fail-safe) |
-| `nn2_port_adc.h` | single raw ADC read (pull) | |
+| `nn2_port_adc.h` | single raw ADC read (pull) + `source` provenance | fake adapters set `NN2_SAMPLE_SRC_FAKE` |
 | `nn2_port_clock.h` | monotonic µs timebase + optional delay | |
 | `nn2_port_log.h` | leveled text log | never from ISR |
 

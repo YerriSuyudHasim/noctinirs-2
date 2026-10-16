@@ -10,8 +10,14 @@ static void seq_log(const nn2_app_sequencer_t *seq, nn2_log_level_t lvl, const c
 
 static nn2_status_t seq_fault(nn2_app_sequencer_t *seq, nn2_status_t err, const char *msg)
 {
-    /* Fail-safe: always request LED off; its result does not mask the original error. */
-    (void)seq->cfg.led.off(seq->cfg.led.ctx, seq->cfg.channel);
+    /* Fail-safe: request LED off on every error exit. The original error is
+     * returned; a failed off() is additionally logged and counted. The
+     * sequencer stays in FAULT either way; only a successful reset() leaves it. */
+    nn2_status_t off_st = seq->cfg.led.off(seq->cfg.led.ctx, seq->cfg.channel);
+    if (off_st != NN2_OK) {
+        seq->off_failures++;
+        seq_log(seq, NN2_LOG_ERROR, "seq: fail-safe led off FAILED");
+    }
     seq->state = NN2_APP_SEQ_FAULT;
     seq->faults++;
     seq->last_error = err;
@@ -43,6 +49,7 @@ nn2_status_t nn2_app_sequencer_step(nn2_app_sequencer_t *seq)
         memset(&seq->pending, 0, sizeof(seq->pending));
         seq->pending.seq = seq->next_seq;
         seq->pending.channel = seq->cfg.channel;
+        seq->pending.src = seq->cfg.adc.source;
         st = seq->cfg.led.on(seq->cfg.led.ctx, seq->cfg.channel);
         if (st != NN2_OK) {
             return seq_fault(seq, st, "seq: led on failed");
@@ -113,8 +120,17 @@ nn2_status_t nn2_app_sequencer_reset(nn2_app_sequencer_t *seq)
     if (seq == NULL) {
         return NN2_ERR_INVALID_ARG;
     }
-    (void)seq->cfg.led.off(seq->cfg.led.ctx, seq->cfg.channel);
+    /* Leave FAULT only if the LED is confirmed off. */
+    nn2_status_t st = seq->cfg.led.off(seq->cfg.led.ctx, seq->cfg.channel);
+    if (st != NN2_OK) {
+        seq->off_failures++;
+        seq->state = NN2_APP_SEQ_FAULT;
+        seq->last_error = st;
+        seq_log(seq, NN2_LOG_ERROR, "seq: reset led off failed, staying in FAULT");
+        return st;
+    }
     seq->state = NN2_APP_SEQ_IDLE;
+    seq->last_error = NN2_OK;
     return NN2_OK;
 }
 

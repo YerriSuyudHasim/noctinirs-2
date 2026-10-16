@@ -28,6 +28,15 @@ typedef enum {
     NN2_STATUS_COUNT_
 } nn2_status_t;
 
+/** Provenance of a sample value. Zero-initialised records read UNKNOWN.
+ *  FAKE = synthetic value from a disabled/fake adapter, NOT a measurement.
+ *  ADC  = value from a real ADC adapter (none exists in 0.1.x). */
+typedef enum {
+    NN2_SAMPLE_SRC_UNKNOWN = 0,
+    NN2_SAMPLE_SRC_FAKE,
+    NN2_SAMPLE_SRC_ADC
+} nn2_sample_src_t;
+
 /** One raw acquisition record. Values are raw counts; no physical/clinical meaning. */
 typedef struct {
     uint32_t seq;          /**< monotonically increasing cycle number */
@@ -35,10 +44,13 @@ typedef struct {
     uint32_t raw;          /**< raw ADC counts as delivered by the adc port */
     uint64_t t_led_on_us;  /**< timebase value when emitter was switched on */
     uint64_t t_sample_us;  /**< timebase value when sample was taken */
+    nn2_sample_src_t src;  /**< provenance of raw; copied from the adc port */
 } nn2_core_sample_t;
 
 /** Human-readable name for a status code (static string, never NULL). */
 const char *nn2_core_status_str(nn2_status_t status);
+/** Name for a sample provenance value (static string, never NULL). */
+const char *nn2_core_sample_src_str(nn2_sample_src_t src);
 
 #ifdef __cplusplus
 }

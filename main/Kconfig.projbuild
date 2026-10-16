@@ -1,38 +1,16 @@
 menu "NoctiNIRS 2 (draft v0.1.0)"
 
-    config NN2_LED_ENABLE
-        bool "Enable physical LED/emitter GPIO output"
-        default n
-        help
-            SAFETY: off by default. When disabled the LED adapter is a no-op that
-            only logs and never configures or drives any GPIO. Enable only after the
-            pin and the external circuit (current limiting) have been reviewed.
-
-    config NN2_LED_GPIO
-        int "LED GPIO number"
-        depends on NN2_LED_ENABLE
-        range 0 48
-        default 2
-        help
-            Placeholder, NOT a reviewed board pin. Confirm against the schematic.
-
-    config NN2_ADC_ENABLE
-        bool "Enable real ADC oneshot sampling"
-        default n
-        help
-            When disabled the ADC adapter returns a fixed raw value of 0 and does not
-            touch any pin. When enabled, ADC1 is used in oneshot mode (input only).
-
-    config NN2_ADC_CHANNEL
-        int "ADC1 channel (ESP32-S3: 0..9 = GPIO1..GPIO10)"
-        depends on NN2_ADC_ENABLE
-        range 0 9
-        default 0
+    # 0.1.x scope: no physical emitter/ADC options. The LED adapter is a disabled
+    # no-op and the ADC adapter is a fake (src=FAKE). See PR #15 (F1).
 
     config NN2_LED_SETTLE_US
-        int "Settle time between LED on and sample (us)"
-        range 0 100000
-        default 1000
+        int "Settle wait between (disabled) LED on and (fake) sample (us)"
+        range 0 1000
+        default 100
+        help
+            Short bounded busy-wait (esp_rom_delay_us) in the sequencer task.
+            Capped at 1 ms; any longer wait must become a blocking RTOS delay
+            (pending Agent 05 / RTOS review, #12).
 
     config NN2_DEMO_CYCLES
         int "Number of acquisition cycles to run at boot"

@@ -1,7 +1,12 @@
 /* Acquisition sequencer: IDLE -> LED_ON -> SAMPLE -> LED_OFF -> IDLE.
  * Ports are injected; no platform includes. Single-context use only.
  * On any port error the sequencer requests LED off (fail-safe) and enters FAULT;
- * nn2_app_sequencer_reset() returns to IDLE. */
+ * nn2_app_sequencer_reset() calls led.off() and returns to IDLE only if off()
+ * succeeds (then last_error is cleared); otherwise it returns the off() error
+ * and stays in FAULT.
+ * Caller context: one owner task, never ISR. The sequencer itself never blocks
+ * except through clock.delay_us(settle_us), which is bounded by settle_us.
+ * Cleanup (fail-safe off) runs synchronously in the caller's task. */
 #ifndef NN2_APP_SEQUENCER_H
 #define NN2_APP_SEQUENCER_H
 
@@ -41,6 +46,7 @@ typedef struct {
     uint32_t next_seq;
     uint32_t cycles_ok;
     uint32_t faults;
+    uint32_t off_failures;  /**< failed fail-safe/reset off() calls */
     nn2_status_t last_error;
 } nn2_app_sequencer_t;
 
