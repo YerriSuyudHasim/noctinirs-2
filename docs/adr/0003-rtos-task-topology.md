@@ -4,16 +4,16 @@
 |---|---|
 | ID | ADR-0003 |
 | Title | ESP32-S3 dual-core FreeRTOS task topology (optical acquisition + Wi-Fi command path) |
-| Status | **Proposed** (not Accepted; not implemented) |
-| Date | 2026-10-16 (rev 0) |
+| Status | **Accepted** (Owner Accept write authorization `confirm_accept_write`, 2026-10-17 Asia/Shanghai; prior Agent 07 IR APPROVE on Proposed PR #27 head `e8dfbe852e1d920fce476a90ce3a495f4b6ed33c`; this Accept PR still needs a fresh Agent 07 IR on its head SHA before Owner merge; firmware not implemented; Class H / flash / WCET **NOT RUN**) |
+| Date | 2026-10-17 (rev 1; Status → Accepted) |
 | Issue | [#25](https://github.com/YerriSuyudHasim/noctinirs-2/issues/25) |
 | Author role | Architect (Agent 02) and RTOS Specialist (Agent 05); file recorded from the #25 consensus under Owner write authorization |
-| Independent reviewer | TBD (must not be an author of this ADR; process names Agent 07) |
+| Independent reviewer | Agent 07 — APPROVE on prior Proposed head `e8dfbe852e1d920fce476a90ce3a495f4b6ed33c` ([PR #27](https://github.com/YerriSuyudHasim/noctinirs-2/pull/27#issuecomment-6212815872), 2026-10-16). This Accept revision still requires a fresh Agent 07 independent review on the Accept PR head SHA before Owner merge. The reviewer must not be an author of this ADR. |
 | Approver / merge | Project Owner `YerriSuyudHasim` only |
-| Input commit | `noctinirs-2` `main` @ `791e35b79ba8cef343280d76973fee21d3b41e42` |
+| Input commit | `noctinirs-2` `main` @ `791e35b79ba8cef343280d76973fee21d3b41e42` (Proposed text). Proposed land SHA `27e33d874387579986d781d547c61d8441d3631b` (squash of PR #27). This Accept revision starts from that land SHA. |
 | Evidence class of this document | Static (Class S design review only). Class H / flash / WCET: **NOT RUN** |
 
-> This ADR describes a *target* task topology. Nothing in it is implemented at the input commit. Status stays **Proposed** until a separate independent review and an explicit Owner Accept. Proposed names, ordering, and placement are not firmware requirements until that Accept. Literal priority, stack, queue, and timing-budget numbers stay **OPEN** until Class H. Historical V2/V3/V4 constants are **evidence only**. This ADR does **not** authorize flashing, hardware tests, merges, releases, or tags. A successful build is not hardware proof.
+> This ADR describes a *target* task topology. Nothing in it is implemented, and **Accepted** does not implement firmware. **Status: Accepted** (2026-10-17). Accepted means this topology contract is the approved design baseline for later firmware issues. It does **not** by itself authorize firmware implementation, flashing, Class H, hardware tests, merges, releases, or tags. Affinity, literal priority, stack, queue, and timing-budget numbers stay **OPEN** until Class H. Class H / flash / WCET remain **NOT RUN**. Where this document calls a placement or a numeric cell **Proposed** or **OPEN**, that cell is not a frozen pin. Historical V2/V3/V4 constants are **evidence only**. A successful build is not hardware proof. A fresh Agent 07 independent review of this Accept revision’s head SHA is still required before Owner merge.
 
 ## 1. Context
 
@@ -70,17 +70,17 @@ Issue #23 lock **A** places public task topology and ISR-to-task rules in a new 
 | R6 | Optical frame consumer Proposed placement is Core 0 mid-priority. Affinity stays **OPEN** until Class H. Core 1 below ADS is rejected as the Proposed placement. | Agent 05 Class S; G1 |
 | R7 | FreeRTOS `pcName` is `nn2_<role>`, snake_case, ASCII, no spaces, at most 15 characters plus NUL inside default `configMAX_TASK_NAME_LEN` 16. Priority, stack, and affinity macros live in **one** adapter header. | G1; Owner confirm A |
 | R8 | LED timing ownership: SlotPlan in `nn2_core` decides when slots fire; the scheduler adapter and DeadlineTimer enforce deadlines; the EmitterControl LED adapter applies pattern, completion, and SafeOff only. | #26 Owner lock |
-| R9 | ISR-to-task, bounded-wait, and TWDT rules in §3.8–§3.10 are normative **Proposed** text. | Owner outline; Agent 05 §4–§6 |
+| R9 | ISR-to-task, bounded-wait, and TWDT rules in §3.8–§3.10 are normative text in the Accepted baseline. On-target proof of those rules stays Class H **NOT RUN**. | Owner outline; Agent 05 §4–§6 |
 | R10 | M1 transport is Wi-Fi **STA to a local Visual Studio / ASP.NET (or equivalent) host on the LAN**. Cloudflare tunnel / Workers / edge is a later adapter behind the same ports, not an M1 definition of done. | G1; Owner confirm B |
 | R11 | Transport is Wi-Fi only (no BLE). Storage is M2. Power / fuel-gauge is not an M1 priority. | #26 |
 | R12 | No clinical claims. No fabricated Class H numbers. A green build does not prove deadlines, WCET, electrical behaviour, or safety. | Standing rules; #25 |
 | R13 | Sequencing before a frozen Core-1 numeric ladder: **A(+E) → C → D → B (Class H)**. | #23 |
 
-Non-goals of this ADR: firmware implementation, CMake or `sdkconfig` edits, edits under `reference/**`, flashing, Class H measurement, and Status → Accepted.
+Non-goals of this ADR: firmware implementation, CMake or `sdkconfig` edits, edits under `reference/**`, flashing, and Class H measurement. Status **Accepted** does not authorize those non-goals.
 
 ## 3. Decision
 
-All locks in this section are **Proposed**. They become Accepted only when the Owner accepts this ADR after independent review.
+The locks in this section are the **Accepted** topology contract: the approved design baseline for later firmware issues. Accept does not by itself authorize implementation, flash, or Class H. Final affinity, literal priority numbers, stack depth and unit, and queue or ring depths stay **OPEN** until Class H (§3.5, §3.11).
 
 ### 3.1 Layering (ADR-0001)
 
@@ -97,7 +97,7 @@ Adapters + app_main ──► Ports ──► Core ◄── Application
 | `nn2_app` | **No** FreeRTOS types | Use-case orchestration. May request start/stop through ports. Never `xTaskCreate*`. |
 | Adapters + `app_main` | **Yes** | Sole home of tasks, ISR registration, queues, GPTimer, and TWDT subscription. |
 
-Proposed locks:
+Accepted baseline locks:
 
 1. Tables in this ADR name adapter and composition tasks only. Domain code is never a FreeRTOS task owner.
 2. A blocking port documents caller context (task; ISR forbidden unless the port says otherwise), a timeout in portable units (milliseconds), and an error code. Tick conversion stays in the adapter.
@@ -116,7 +116,7 @@ Proposed locks:
 
 ### 3.3 LED timing ownership
 
-Owner lock from [#26](https://github.com/YerriSuyudHasim/noctinirs-2/issues/26#issuecomment-6211442017), fed into this ADR as **Proposed**:
+Owner lock from [#26](https://github.com/YerriSuyudHasim/noctinirs-2/issues/26#issuecomment-6211442017), part of the Accepted baseline:
 
 1. **SlotPlan** (`nn2_core`) decides when slots fire.
 2. **DeadlineTimer / scheduler adapter** enforces those deadlines.
@@ -128,7 +128,7 @@ SafeOff remains a software obligation on the emitter path. This ADR does not wai
 
 Every application task is listed here **before** the first `xTaskCreate*` or pinned create in firmware. `nn2_core` never creates tasks, ISRs, or queues. START / STOP / FAULTED ownership is documented per task. SCAN_STOP must not leave an orphan GPTimer alarm (§3.8, §3.10).
 
-| Logical role | `pcName` (Proposed) | Owns | Created by | Lives in |
+| Logical role | `pcName` (Accepted baseline) | Owns | Created by | Lives in |
 |---|---|---|---|---|
 | Composition | (boot; not an optical task) | Wire ports to adapters; start/stop order | Boot / shutdown | `app_main` only |
 | LED / emitter commit | `nn2_led` | Submit emitter updates; SafeOff. No domain policy. | Adapter + composition | Adapter |
@@ -143,7 +143,7 @@ M1 focus is the optical chain plus the Wi-Fi command and PC/server path (`nn2_ne
 
 ### 3.5 Priority ordering, affinity, stacks, and queues
 
-**Ordering lock (Proposed):** on the Core-1 hard-RT optical chain the priority order is:
+**Ordering lock (Accepted baseline; literal numbers OPEN):** on the Core-1 hard-RT optical chain the priority order is:
 
 **LED (`nn2_led`) > optical scheduler / DeadlineTimer (`nn2_sched`) > ADS (`nn2_ads`, woken from its ISR).**
 
@@ -171,7 +171,7 @@ Class U may later validate that a config table has a single source and a consist
 
 ### 3.6 Task naming
 
-G1 unanimous, Owner-confirmed (**Proposed**):
+G1 unanimous, Owner-confirmed (Accepted baseline; not implemented):
 
 | Rule | Lock |
 |---|---|
@@ -183,7 +183,7 @@ G1 unanimous, Owner-confirmed (**Proposed**):
 
 Logical titles in this ADR stay human-readable and map 1:1 onto those `pcName` strings.
 
-Agent 03 implementation notes, still **Proposed** and not a firmware change in this pull request:
+Agent 03 implementation notes only, and not a firmware change in this pull request:
 
 - Expose each name as a `static const char` or a macro beside the create site so `vTaskList` and log filters stay stable.
 - A later stack-watermark check should key off the same `nn2_*` strings. Keep the set short.
@@ -192,7 +192,7 @@ Truncated or opaque names hurt TWDT and `uxTaskGetSystemState` diagnostics durin
 
 ### 3.7 M1 transport
 
-**Proposed M1 path:** the device joins Wi-Fi as a **station** and talks to a **local Visual Studio / ASP.NET (or equivalent) process on the LAN**.
+**Accepted baseline M1 path:** the device joins Wi-Fi as a **station** and talks to a **local Visual Studio / ASP.NET (or equivalent) process on the LAN**.
 
 **Deferred:** Cloudflare tunnel, Workers, or other edge front ends. They are a **later adapter** behind the same ports:
 
@@ -204,9 +204,9 @@ Cloudflare is not an M1 definition of done. The network adapter must not depend 
 
 BLE is out of scope (§3.12).
 
-### 3.8 ISR → task handoff (normative Proposed)
+### 3.8 ISR → task handoff (normative; Accepted baseline)
 
-Agent 05 outline §4, adopted as normative Proposed text:
+Agent 05 outline §4, adopted as normative Accepted-baseline text:
 
 1. **ISR allowed work:** clear the interrupt, timestamp or capture minimal state, and wake a task with `xTaskNotifyGive` / `vTaskNotifyGiveFromISR` or a bounded `xQueueSendFromISR` that has a documented overflow counter. **No** I2C, allocation, logging, or domain policy in the ISR.
 2. **Deferred work** always runs in a named task from §3.4–§3.5.
@@ -214,9 +214,9 @@ Agent 05 outline §4, adopted as normative Proposed text:
 4. **Critical sections:** ISR and task critical-section length budgets are stated beside the implementation. A claim that a critical section is safe versus DRDY spacing is a **Class H** claim. None is made here.
 5. These public rules live in this ADR, not as one-off exceptions inside driver pull requests.
 
-### 3.9 Queues, timeouts, and bounded waits (normative Proposed)
+### 3.9 Queues, timeouts, and bounded waits (normative; Accepted baseline)
 
-Agent 05 outline §5, adopted as normative Proposed text. Wait contracts are finalized under sequence **C**, after this skeleton (**A**).
+Agent 05 outline §5, adopted as normative Accepted-baseline text. Wait contracts are finalized under sequence **C**, after this skeleton (**A**).
 
 1. **No `portMAX_DELAY`** on SCAN RUNNING, fault-detection, or recovery waits unless this ADR lists an exception **and** an alternate watchdog covers that wait.
 2. Idle or STOPPED waits may be unbounded **only if** TWDT (or an explicit exclusion in §3.10) covers the task.
@@ -224,7 +224,7 @@ Agent 05 outline §5, adopted as normative Proposed text. Wait contracts are fin
 4. Overflow policy is **count plus a fault or quality flag**. Required samples or events are never dropped silently.
 5. Ring depths, when later chosen, are justified by a backlog model (DRDY rate times the maximum preemption window) written beside the table. That model is not a Class H measurement.
 
-### 3.10 TWDT coverage (normative Proposed)
+### 3.10 TWDT coverage (normative; Accepted baseline)
 
 NN2 TWDT is **new**. It is not a lift from V4 (`esp_task_wdt` has 0 hits under `reference/v4` at the input commit). Mechanisms land under sequence **D**, after **A** and **C**, and they depend on **B** for critical-section and I2C WCET budgets. Those budgets are **NOT RUN**.
 
@@ -238,11 +238,11 @@ NN2 TWDT is **new**. It is not a lift from V4 (`esp_task_wdt` has 0 hits under `
 | Topic | State in this ADR |
 |---|---|
 | Final core affinity, including the frame consumer | Proposed Core 0 mid-prio for `nn2_frame`; **OPEN** until Class H |
-| Literal priority numbers | **OPEN**. Ordering LED > sched > ADS is Proposed. |
+| Literal priority numbers | **OPEN**. Ordering LED > sched > ADS is the Accepted baseline. |
 | Stack depth and unit | **OPEN** |
 | Queue and ring depths | **OPEN** |
 | Timing budgets, WCET, jitter, DRDY spacing versus I2C | **OPEN**. Class H **NOT RUN**. |
-| TWDT behaviour under Wi-Fi and optical load | Policy Proposed; measurement **NOT RUN** |
+| TWDT behaviour under Wi-Fi and optical load | Policy is the Accepted baseline; measurement **NOT RUN** |
 
 ### 3.12 Milestone scope (from #26)
 
@@ -257,7 +257,7 @@ NN2 TWDT is **new**. It is not a lift from V4 (`esp_task_wdt` has 0 hits under `
 
 - No firmware, CMake, `sdkconfig`, or `reference/**` change in the ADR pull request.
 - No flash, no Class H session, no claim that a green CI build proves hardware timing.
-- No Status change to Accepted in this revision. Accept requires independent review and Owner approval on a later decision.
+- Status **Accepted** approves this topology as the design baseline only. It does not authorize implementation, flash, or Class H. This Accept revision still needs a fresh Agent 07 independent review on the Accept PR head SHA before Owner merge.
 - No optical geometry restatement (ADR-0002).
 - No clinical, diagnostic, or patient-safety claims.
 - No BLE, no M1 storage, no M1 power/fuel-gauge.
@@ -325,11 +325,11 @@ No component is added or edited by this ADR. Later implementation, under its own
 
 | Class | What | When |
 |---|---|---|
-| **S** | This file exists and stays **Proposed**; task table present; ordering and do-not-lift stated; no FreeRTOS includes under `nn2_core` / `nn2_ports` once those trees exist | This pull request (document review). Include grep is **NOT APPLICABLE** until inner layers exist, and a skip is not a pass. |
+| **S** | This file exists and Status is **Accepted**; task table present; ordering and do-not-lift stated; OPEN cells remain OPEN; no FreeRTOS includes under `nn2_core` / `nn2_ports` once those trees exist | This pull request (document review). Include grep is **NOT APPLICABLE** until inner layers exist, and a skip is not a pass. |
 | **B** | Single macro header; build with stubs; no duplicate priority literals | Later firmware issue. Not this pull request. |
 | **U** | Host checks for overflow counters, timeout errors, and STOPPED lifecycle logic | Later. Not hardware. |
 | **H** | On-target p50/p99, TWDT, DRDY versus I2C WCET, Wi-Fi versus `nn2_frame` latency | **NOT RUN.** Separate Owner authorization before energize. |
-| **R** | Independent reviewer is not an author. Owner Accept is a separate decision from this draft. | Process |
+| **R** | Prior Agent 07 APPROVE was on Proposed PR #27 head `e8dfbe852e1d920fce476a90ce3a495f4b6ed33c`. This Accept PR still needs a fresh Agent 07 independent review on its head SHA before Owner merge. Author ≠ reviewer. | Process. Not yet satisfied for this revision. |
 
 This pull request’s evidence class is **static / document review** only. CI that compiles the scaffold, if it runs, is Class **B** for the unchanged scaffold. It does **not** prove this topology.
 
@@ -338,7 +338,7 @@ This pull request’s evidence class is **static / document review** only. CI th
 | # | Question / risk | Status (2026-10-16) | Owner of answer |
 |---|---|---|---|
 | Q-1 | Final affinity for `nn2_frame` and the rest of the table | Proposed Core 0 mid-prio; **OPEN** until Class H. Core 1 below ADS rejected as Proposed placement. | RTOS + Class H; Owner Accept |
-| Q-2 | Literal priorities, stacks, queue depths | **OPEN**. Ordering LED > sched > ADS is Proposed. | RTOS; Class H before lock |
+| Q-2 | Literal priorities, stacks, queue depths | **OPEN**. Ordering LED > sched > ADS is the Accepted baseline. | RTOS; Class H before lock |
 | Q-3 | Stack unit (bytes vs words) given V4 `*_STACK_BYTES` 6144 vs the outline’s “words” column | **OPEN**. Do not lift 6144. | Firmware + RTOS |
 | Q-4 | Whether `nn2_health` or a dark-diagnostic task exists in M1 | Not in M1 unless later scoped | Owner |
 | Q-5 | Wi-Fi softirq versus Core-0 frame consumer | Called out; measurement **NOT RUN** | RTOS; Class H |
@@ -354,7 +354,8 @@ This pull request’s evidence class is **static / document review** only. CI th
 - Issue [#24](https://github.com/YerriSuyudHasim/noctinirs-2/pull/24) — ADR-0002 Accepted; squash `791e35b`.
 - ADR-0001: `docs/adr/0001-clean-architecture-boundaries.md` (Proposed at `791e35b`).
 - ADR-0002: `docs/adr/0002-fnirs-optical-acquisition-timing.md` (Accepted at `791e35b`).
-- Base: `main` @ `791e35b79ba8cef343280d76973fee21d3b41e42`.
+- Base of the Proposed text: `main` @ `791e35b79ba8cef343280d76973fee21d3b41e42`.
+- Proposed land (squash of PR #27): `27e33d874387579986d781d547c61d8441d3631b`. This Accept revision starts from that SHA.
 
 Issue comments folded into this revision:
 
@@ -383,3 +384,4 @@ Standing rules: no merge, release, or flash without specific Owner approval; `re
 | Rev | Date | Change | Status |
 |---|---|---|---|
 | 0 | 2026-10-16 | Initial Proposed record from #25 Owner-confirmed G1 consensus and Agent 05 §4–§6. Core-1 ordering LED > sched > ADS with numbers OPEN. Frame consumer Core 0 mid-prio Proposed, affinity OPEN. Naming `nn2_*`. M1 LAN STA transport. Class H **NOT RUN**. No firmware. | **Proposed** |
+| 1 | 2026-10-17 | Status **Proposed → Accepted** under Owner Accept write authorization `confirm_accept_write` (2026-10-17 Asia/Shanghai). Prior Proposed land SHA `27e33d874387579986d781d547c61d8441d3631b` (squash of PR #27). Prior Agent 07 IR APPROVE on Proposed head `e8dfbe852e1d920fce476a90ce3a495f4b6ed33c`. This Accept revision still needs a fresh Agent 07 IR on the Accept PR head before Owner merge. Topology contract is the approved design baseline for later firmware issues. Does not authorize implementation, flash, or Class H. Affinity, literal priorities, stacks, and queues stay **OPEN**. Class H / flash / WCET **NOT RUN**. No firmware. | **Accepted** |
