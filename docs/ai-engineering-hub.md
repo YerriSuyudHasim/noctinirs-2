@@ -4,13 +4,11 @@
 
 The repositories are connected by documentation and verified URLs, not by a Git submodule. This keeps product history, access, releases, and build configuration independent from governance history.
 
-After the private GitHub repository is published:
+The reciprocal registration records are:
 
-1. Verify the exact repository URL, default branch, visibility, and human owner.
-2. Complete `ai-engineering-hub-registration-draft.yaml` without guessing unknown values.
-3. In `ai-engineering-hub`, create a governance issue and a branch for `projects/registry.yaml`.
-4. Add the verified project record and link back to this repository's root `AGENTS.md`.
-5. Submit the hub change through review and human merge approval.
-6. Protect both default branches and run a low-risk pilot issue through the full workflow.
+1. `project.yaml` in this repository, which identifies the product-owned source and links to the hub.
+2. `projects/noctinirs-2/project.yaml` in `ai-engineering-hub`, which defines the governance boundary and links back to this repository.
+
+Verify both records together after either repository URL or boundary changes. Unknown human-owner, risk, or retention fields remain `null` or pending until the human owner approves exact values. Submit changes in each repository through its own issue, branch, review, and human merge approval workflow. Protect both default branches and run a low-risk pilot issue through the full workflow.
 
 Do not duplicate product source in the hub. Do not place hub policy files inside historical snapshots.

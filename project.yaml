@@ -1,0 +1,72 @@
+schema_version: 1
+record_role: product-repository
+
+project:
+  id: noctinirs-2
+  name: NoctiNIRS 2
+  status: active-development
+  product_type: esp32-s3-firmware
+  development_version: "0.1.0"
+  architecture: clean-architecture
+  target: esp32s3
+  framework:
+    name: ESP-IDF
+    version: "6.1"
+  rtos: FreeRTOS
+
+repositories:
+  governance:
+    slug: YerriSuyudHasim/ai-engineering-hub
+    url: https://github.com/YerriSuyudHasim/ai-engineering-hub
+    project_record_url: https://github.com/YerriSuyudHasim/ai-engineering-hub/blob/main/projects/noctinirs-2/project.yaml
+    policy_url: https://github.com/YerriSuyudHasim/ai-engineering-hub/blob/main/AGENTS.md
+    owns:
+      - cross-project-policy
+      - workflows
+      - role-boundaries
+      - handoff-contract
+      - project-registration
+  product:
+    slug: YerriSuyudHasim/noctinirs-2
+    url: https://github.com/YerriSuyudHasim/noctinirs-2
+    project_record: project.yaml
+    policy: AGENTS.md
+    default_branch: main
+    visibility: private
+    owns:
+      - firmware-source
+      - tests
+      - build-configuration
+      - implementation-documentation
+      - architecture-decisions
+      - releases
+
+historical_references:
+  root: reference
+  versions:
+    - v2
+    - v3
+    - v4
+  mode: read-only
+  agent_edits: forbidden
+  active_build_inputs: false
+  integrity_manifest: reference/MANIFEST.sha256
+  verification_command: pwsh -File tools/verify-reference.ps1
+
+workflow:
+  autonomy: supervised
+  lifecycle:
+    - issue
+    - branch
+    - pull-request
+    - ci
+    - independent-review
+    - human-merge-approval
+  merge_approval: human-required
+  direct_agent_merge: forbidden
+
+unresolved_governance:
+  human_owner: null
+  backup_owner: null
+  risk_class: pending-human-classification
+  evidence_retention: pending-human-decision

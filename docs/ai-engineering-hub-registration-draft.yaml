@@ -1,12 +1,13 @@
 schema_version: 1
-status: pending-verification
+status: superseded
+superseded_by: ../project.yaml
 project:
   name: NoctiNIRS 2
-  repository_url: null
+  repository_url: https://github.com/YerriSuyudHasim/noctinirs-2
   visibility: private
   type: esp32-s3-firmware
   default_branch: main
-  initial_firmware_version: 0.1.0
+  initial_firmware_version: "0.1.0"
   framework:
     name: ESP-IDF
     version: "6.1"
@@ -32,5 +33,6 @@ project:
   evidence_retention: pending-human-decision
   incident_contact: null
 notes:
+  - This draft is retained for traceability; use ../project.yaml as the product record.
+  - The canonical hub record is ai-engineering-hub/projects/noctinirs-2/project.yaml.
   - Replace null and pending values only with verified human-approved data.
-  - Copy this record into ai-engineering-hub/projects/registry.yaml through its reviewed workflow.
