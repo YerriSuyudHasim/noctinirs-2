@@ -1,0 +1,47 @@
+NoctiNIRSv3 Prompt 3 file-level delta from Prompt 2
+
+Source/configuration modified:
+- README.md
+- sdkconfig.defaults
+- main/app_main.c
+- components/nocti_v3_adc/include/nocti_v3_adc.h
+- components/nocti_v3_adc/nocti_v3_adc.c
+- components/nocti_v3_board/include/nocti_v3_board.h
+- components/nocti_v3_board/nocti_v3_board.c
+- components/nocti_v3_common/include/nocti_v3_common.h
+- components/nocti_v3_common/include/nocti_v3_config.h
+- components/nocti_v3_common/include/nocti_v3_version.h
+- components/nocti_v3_common/nocti_v3_common.c
+- components/nocti_v3_led/CMakeLists.txt
+- components/nocti_v3_led/include/nocti_v3_led.h
+- components/nocti_v3_led/nocti_v3_led.c
+- components/nocti_v3_optical/CMakeLists.txt
+- components/nocti_v3_optical/include/nocti_v3_optical.h
+- components/nocti_v3_optical/nocti_v3_optical.c
+- components/nocti_v3_stream/include/nocti_v3_stream.h
+- components/nocti_v3_stream/nocti_v3_stream.c
+- components/nocti_v3_timebase/include/nocti_v3_timebase.h
+- components/nocti_v3_timebase/nocti_v3_timebase.c
+- components/nocti_v3_wifi/include/nocti_v3_wifi.h
+- components/nocti_v3_wifi/nocti_v3_wifi.c
+
+Project documents updated:
+- docs/V3_ARCHITECTURE_CONTRACT.md
+- docs/V3_MIGRATION_MAP.md
+- docs/V3_PROGRESS.md
+- docs/V3_BUILD_NOTES.md
+- docs/V3_STATIC_REVIEW.md
+- docs/V3_FINAL_CHECKS.txt
+- docs/V3_FILE_MANIFEST.txt
+
+Prompt 3 evidence added:
+- docs/V3_BUILD_ATTEMPT_P3.txt
+- docs/V3_P3_ARCHITECTURE_DELTA.md
+- docs/V3_P3_DIFF_FROM_P2.txt
+- docs/V3_P3_HARDWARE_TEST.md
+- docs/V3_P3_LOGIC_CHECK.txt
+- docs/V3_P3_REALTIME_REVIEW.md
+- docs/V3_P3_SOURCE_SCAN.txt
+- docs/V3_P3_STATE_EVENT_DIAGRAM.md
+- docs/V3_P3_STATIC_CHECK.txt
+- docs/V3_P3_TIMING_ANALYSIS.md

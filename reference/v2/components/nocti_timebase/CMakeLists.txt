@@ -1,0 +1,12 @@
+idf_component_register(
+    SRCS
+        "nocti_timebase.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        nocti_common
+    PRIV_REQUIRES
+        esp_driver_gptimer
+        freertos
+        esp_common
+)

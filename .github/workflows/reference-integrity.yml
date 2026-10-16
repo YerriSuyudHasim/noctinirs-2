@@ -1,0 +1,19 @@
+name: Reference integrity
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-reference:
+    name: reference-integrity
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Verify historical snapshots
+        shell: pwsh
+        run: ./tools/verify-reference.ps1

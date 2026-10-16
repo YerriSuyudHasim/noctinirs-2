@@ -1,0 +1,8 @@
+NoctiNIRSv3 3.4.6 static validation
+
+PASS host_static_check.sh: 11/11 translation units
+PASS run_host_logic_tests.sh: stream-v1 CRC/layout/sequence
+PASS check_logging_config.py: INFO compiled, dynamic/master enabled, USB Serial/JTAG primary
+PASS test_ads_status_policy.py: bounded post-SYNC F_RESYNC accepted; repeated F_RESYNC and hard faults rejected
+
+Full ESP-IDF 5.5.1 target build not run in this packaging environment.

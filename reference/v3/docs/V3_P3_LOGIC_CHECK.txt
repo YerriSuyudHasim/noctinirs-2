@@ -1,0 +1,14 @@
+NoctiNIRSv3 Prompt 3 logic check
+RESULT: PASS
+descriptors=20 slot_indices=0..19 sources=0..9 wavelengths=735/850 alternating
+PCA outputs=0,1,2,3,4,5,6,7,8,9,14,15,16,17,18,19,20,21,22,23
+unused_PCA_outputs=10,11,12,13
+one_hot_payloads=20/20 all_other_LEDOUT_states=OFF
+atomic_LEDOUT_wire_bits=72
+ideal_wire_time_400k_us=180.0
+ideal_wire_time_1MHz_us=72.0
+conservative_ON_window_us=1750 phase_safe_floor_samples=14
+conservative_I_LED_OFF_window_us=1350 phase_safe_floor_samples=10
+max_commit_allowance_for_OFF_K10_us=350
+K target remains a hardware acceptance target, not a build-time guarantee.
+DUMP_SLOT_TIMING_capacity_bytes=8192

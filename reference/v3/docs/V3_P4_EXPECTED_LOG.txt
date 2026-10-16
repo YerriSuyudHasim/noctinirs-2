@@ -1,0 +1,13 @@
+NoctiNIRSv3 Prompt 4 expected log shape
+THIS IS NOT A HARDWARE LOG.
+
+I (...) nocti_v3_main: NoctiNIRSv3 firmware=3.3.0 phase=P4_OPTICAL_PROCESSING target=ESP32-S3 ESP-IDF=5.5.1
+I (...) nocti_v3_ads131: SPI3 mode=1 clock=8000000 frame=18B target=8000 measured=<measured> ready=1 core=1
+I (...) nocti_v3_led: PCA init verified addr=0x01 MODE1=0x40 MODE2=0x00 change_on_STOP=1
+I (...) nocti_v3_main: scheduler core=1 processing_core=0 frame_sink_core=0 slots=20 slot_us=5000 frame_hz=10 K_target=10/10 K_min=8/8 representative=mean_latest_contiguous_K
+
+After START SCAN:
+I (...) nocti_v3_optical: health SCAN session=<n> frames=<n> valid=<n> partial=<n> invalid=<n> slots=<n> underk_on=<n> underk_off=<n> subtarget_on=<n> subtarget_off=<n> min_n_on=<n> min_n_off=<n> reject_transition=<n> reject_settle=<n> reject_guard=<n> reject_stale=<n> frame_q=<n> frame_ovf=<n> sched_missed=<n> abort=<n>
+
+Expected HEALTH reply shape:
+FNIRS HEALTH phase=P4_OPTICAL_PROCESSING frames_total=... frames_valid=... partial_frames=... invalid_frames=... slots_total=... underk_on=... underk_off=... subtarget_on=... subtarget_off=... min_n_on=... min_n_off=... adc_ok=... adc_missed=... adc_sequence_gap=... drdy_event_overflow=... adc_ring_overflow=... adc_period_min_us=... adc_period_max_us=... adc_period_gap=... adc_max_gap_us=... crc_bad=... status_errors=... spi_errors=... spi_duration_max_us=... consecutive_spi=... consecutive_crc=... consecutive_status=... consecutive_period=... led_errors=... i2c_nack=... i2c_timeout=... i2c_queue_full=... i2c_completion_ring_overflow=... stale_i2c_completion=... led_commit_latency_max_us=... recovery_count=... consecutive_led=... sched_missed=... sched_abort=... scheduler_lateness_max_us=... scheduler_event_overflow=... led_on_stable_min_us=... led_off_stable_min_us=... raw_on=... raw_I_LED_OFF=... reject_transition=... reject_settle=... reject_guard=... reject_stale=... reject_ambiguous=... timing_ring_overflow=... sample_scratch_overflow=... completed_frame_ring_overflow=... frame_ring_depth=... frame_ring_depth_max=... frames_consumed=... network_drop=0 stream_errors=0 cores=... stacks=... session=... config_gen=... fault=... reason=... esp_err=...

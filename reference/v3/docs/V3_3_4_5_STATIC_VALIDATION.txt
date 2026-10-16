@@ -1,0 +1,23 @@
+NoctiNIRSv3 3.4.5 static validation
+====================================
+
+Basis
+- NoctiNIRSv2(16) validated I2C HAL + PCA LED phase flow
+- NoctiNIRSv2(16) validated SPI HAL + ADS131 contiguous transfer flow
+
+Checks executed in this environment
+- tools/check_logging_config.py: PASS
+- tools/host_static_check.sh: PASS, 11/11 translation units
+- tools/run_host_logic_tests.sh: PASS stream-v1 CRC/layout/sequence
+- sdkconfig: CONFIG_SPIRAM disabled
+- sdkconfig.defaults: CONFIG_SPIRAM disabled
+- compile guard rejects CONFIG_SPIRAM/CONFIG_ESP32S3_SPIRAM_SUPPORT enable
+- ADS SPI invariants: SPI3, mode 1, 8 MHz, DMA off, queue 1,
+  max_transfer_sz=256, CS guard pre/post=1/1, 18-byte contiguous polling frame
+- PCA I2C invariants: qdepth=0 init/readback, recreate qdepth=4 runtime,
+  one in-flight persistent payload and callback completion
+
+Not executed
+- Full ESP-IDF 5.5.1 target build was not run because the ESP-IDF toolchain is
+  not installed in this execution environment.
+- Hardware validation must be performed on the NoctiBoard.

@@ -1,0 +1,20 @@
+idf_component_register(
+    SRCS
+        "app_main_fnirs_test.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        freertos
+        driver
+        log
+        nocti_common
+        nocti_timebase
+        nocti_board
+        nocti_hal_spi
+        nocti_hal_i2c
+        nocti_led_driver
+        nocti_fnirs
+        nocti_scheduler
+        nocti_stream
+        nocti_wifi
+)

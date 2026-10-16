@@ -1,0 +1,32 @@
+NoctiNIRSv3 Prompt 2 deterministic logic checks
+UTC: 2026-07-27T10:03:21Z
+
+CRC-16/CCITT-FALSE check
+- polynomial: 0x1021
+- initial value: 0xFFFF
+- check vector: ASCII "123456789"
+- calculated: 0x29B1
+- expected: 0x29B1
+- result: PASS
+
+ADS sample-rate configuration math
+- CLKIN assumption: 8192000 Hz
+- OSR: 512
+- data rate: CLKIN / (2 * OSR) = 8000 SPS
+- result: PASS
+
+SPI frame math
+- frame: 18 bytes = 144 bits
+- SCLK: 8000000 Hz
+- ideal wire time: 18 us
+- nominal DRDY period: 125 us
+- ideal wire occupancy: 14.4%
+- result: PASS (mathematical only; driver overhead is not included)
+
+Ring configuration
+- DRDY event ring: 128 records, power of two
+- raw sample ring: 1024 records, power of two
+- nominal capacities: 16 ms and 128 ms at 8 kSPS
+- result: PASS
+
+These checks do not establish ESP-IDF linking, peripheral timing, CRC correctness on the physical wire, or hardware stability.

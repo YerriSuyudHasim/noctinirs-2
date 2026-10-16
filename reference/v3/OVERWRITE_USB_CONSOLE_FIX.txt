@@ -1,0 +1,9 @@
+NoctiNIRSv3 3.4.4 USB Serial/JTAG console overwrite pack
+
+1. Copy the files in this archive over the same relative paths in your NoctiNIRSv3 project.
+2. Delete the existing build directory or run `idf.py fullclean`.
+3. Run `idf.py set-target esp32s3`.
+4. Build and flash both bootloader and application with `idf.py -p COMx flash monitor`.
+5. Confirm the boot/app banner reports version 3.4.4 and console=USB_SERIAL_JTAG.
+
+Do not flash the old build/NoctiNIRSv3.bin after replacing these source/config files.

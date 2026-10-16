@@ -1,0 +1,18 @@
+idf_component_register(
+    SRCS
+        "nocti_wifi.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        freertos
+        nvs_flash
+        esp_netif
+        esp_event
+        esp_wifi
+        lwip
+        nocti_common
+        nocti_timebase
+        nocti_stream
+    PRIV_REQUIRES
+        log
+)

@@ -1,0 +1,45 @@
+NoctiNIRSv3 P5 diff from P4 backup
+
+Only in NoctiNIRSv3: CHANGELOG_NoctiNIRSv3.md
+Only in NoctiNIRSv3: Kconfig.projbuild
+Only in NoctiNIRSv3: NoctiNIRSv3_Validation_Checklist.md
+Files NoctiNIRSv3_P4_backup/README.md and NoctiNIRSv3/README.md differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_adc/nocti_v3_adc.c and NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_adc.c differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_board/nocti_v3_board.c and NoctiNIRSv3/components/nocti_v3_board/nocti_v3_board.c differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_common/include/nocti_v3_config.h and NoctiNIRSv3/components/nocti_v3_common/include/nocti_v3_config.h differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_common/include/nocti_v3_version.h and NoctiNIRSv3/components/nocti_v3_common/include/nocti_v3_version.h differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_common/nocti_v3_common.c and NoctiNIRSv3/components/nocti_v3_common/nocti_v3_common.c differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_health/include/nocti_v3_health.h and NoctiNIRSv3/components/nocti_v3_health/include/nocti_v3_health.h differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_health/nocti_v3_health.c and NoctiNIRSv3/components/nocti_v3_health/nocti_v3_health.c differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_led/include/nocti_v3_led.h and NoctiNIRSv3/components/nocti_v3_led/include/nocti_v3_led.h differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_led/nocti_v3_led.c and NoctiNIRSv3/components/nocti_v3_led/nocti_v3_led.c differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_optical/CMakeLists.txt and NoctiNIRSv3/components/nocti_v3_optical/CMakeLists.txt differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_optical/include/nocti_v3_optical.h and NoctiNIRSv3/components/nocti_v3_optical/include/nocti_v3_optical.h differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_optical/nocti_v3_optical.c and NoctiNIRSv3/components/nocti_v3_optical/nocti_v3_optical.c differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_stream/include/nocti_v3_stream_compat.h and NoctiNIRSv3/components/nocti_v3_stream/include/nocti_v3_stream_compat.h differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_stream/nocti_v3_stream.c and NoctiNIRSv3/components/nocti_v3_stream/nocti_v3_stream.c differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_wifi/CMakeLists.txt and NoctiNIRSv3/components/nocti_v3_wifi/CMakeLists.txt differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_wifi/include/nocti_v3_wifi.h and NoctiNIRSv3/components/nocti_v3_wifi/include/nocti_v3_wifi.h differ
+Files NoctiNIRSv3_P4_backup/components/nocti_v3_wifi/nocti_v3_wifi.c and NoctiNIRSv3/components/nocti_v3_wifi/nocti_v3_wifi.c differ
+Only in NoctiNIRSv3/docs: V3_ACCEPTANCE_TEST_MATRIX.md
+Files NoctiNIRSv3_P4_backup/docs/V3_ARCHITECTURE_CONTRACT.md and NoctiNIRSv3/docs/V3_ARCHITECTURE_CONTRACT.md differ
+Only in NoctiNIRSv3/docs: V3_BUILD_ATTEMPT_P5.txt
+Files NoctiNIRSv3_P4_backup/docs/V3_BUILD_NOTES.md and NoctiNIRSv3/docs/V3_BUILD_NOTES.md differ
+Only in NoctiNIRSv3/docs: V3_COMMAND_COMPATIBILITY.md
+Only in NoctiNIRSv3/docs: V3_FAULT_RECOVERY_TABLE.md
+Only in NoctiNIRSv3/docs: V3_FINAL_TASK_CORE_AUDIT.md
+Files NoctiNIRSv3_P4_backup/docs/V3_HEALTH_COUNTERS.md and NoctiNIRSv3/docs/V3_HEALTH_COUNTERS.md differ
+Files NoctiNIRSv3_P4_backup/docs/V3_MIGRATION_MAP.md and NoctiNIRSv3/docs/V3_MIGRATION_MAP.md differ
+Only in NoctiNIRSv3/docs: V3_P5_ARCHITECTURE.md
+Only in NoctiNIRSv3/docs: V3_P5_DIFF_FROM_P4.txt
+Only in NoctiNIRSv3/docs: V3_P5_EXPECTED_LOG.txt
+Only in NoctiNIRSv3/docs: V3_P5_LOGIC_CHECK.txt
+Only in NoctiNIRSv3/docs: V3_P5_SOURCE_SCAN.txt
+Only in NoctiNIRSv3/docs: V3_P5_STATIC_CHECK.txt
+Only in NoctiNIRSv3/docs: V3_P5_STATIC_REVIEW.md
+Only in NoctiNIRSv3/docs: V3_PACKET_COMPATIBILITY.md
+Files NoctiNIRSv3_P4_backup/docs/V3_PROGRESS.md and NoctiNIRSv3/docs/V3_PROGRESS.md differ
+Files NoctiNIRSv3_P4_backup/docs/V3_STATIC_REVIEW.md and NoctiNIRSv3/docs/V3_STATIC_REVIEW.md differ
+Files NoctiNIRSv3_P4_backup/main/app_main.c and NoctiNIRSv3/main/app_main.c differ
+Files NoctiNIRSv3_P4_backup/sdkconfig.defaults and NoctiNIRSv3/sdkconfig.defaults differ
+Only in NoctiNIRSv3: tools

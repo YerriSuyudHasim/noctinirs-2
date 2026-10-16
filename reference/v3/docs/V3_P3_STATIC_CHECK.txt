@@ -1,0 +1,23 @@
+CHECK components/nocti_v3_adc/nocti_v3_adc.c
+PASS
+CHECK components/nocti_v3_adc/nocti_v3_ads131m04.c
+PASS
+CHECK components/nocti_v3_board/nocti_v3_board.c
+PASS
+CHECK components/nocti_v3_common/nocti_v3_common.c
+PASS
+CHECK components/nocti_v3_health/nocti_v3_health.c
+PASS
+CHECK components/nocti_v3_led/nocti_v3_led.c
+PASS
+CHECK components/nocti_v3_optical/nocti_v3_optical.c
+PASS
+CHECK components/nocti_v3_stream/nocti_v3_stream.c
+PASS
+CHECK components/nocti_v3_timebase/nocti_v3_timebase.c
+PASS
+CHECK components/nocti_v3_wifi/nocti_v3_wifi.c
+PASS
+CHECK main/app_main.c
+PASS
+RESULT ok=11 fail=0

@@ -1,0 +1,177 @@
+--- NOCTINIRSv2/main/app_main_fnirs_test.c	2026-07-14 02:17:48.000000000 +0000
++++ /mnt/data/noctinirs-fw-revised/NOCTINIRSv2/main/app_main_fnirs_test.c	2026-07-14 04:50:05.159801682 +0000
+@@ -67,8 +67,16 @@
+ #define FNIRS_K_FIXED                  (3u)
+ #define FNIRS_SETTLE_US                (200u)
+ #define FNIRS_WINDOW_US                (3200u)
+-#define FNIRS_ON_TIME_US               (3700u)
+-#define FNIRS_OFF_GAP_US               (200u)
++
++// SLOT_END is the physical LED-OFF command. Keep the sampling window and
++// LED-OFF deadline identical so the timestamp used for averaging matches the
++// actual optical window. The remaining tick budget is the guaranteed OFF gap.
++#define FNIRS_LED_OFF_US               (FNIRS_SETTLE_US + FNIRS_WINDOW_US)
++#define FNIRS_OFF_GAP_US               (FNIRS_TICK_PERIOD_US - FNIRS_LED_OFF_US)
++
++#if (FNIRS_LED_OFF_US + FNIRS_OFF_GAP_US) != FNIRS_TICK_PERIOD_US
++#error "fNIRS slot timing must exactly fill one scheduler tick"
++#endif
+ 
+ #define FNIRS_DEFAULT_CURRENT_735_MA    (15u)
+ #define FNIRS_DEFAULT_CURRENT_850_MA    (15u)
+@@ -355,7 +363,6 @@
+     for (uint8_t led = 0u; led < FNIRS_SOURCE_COUNT; led++) {
+         g_slots[index].led_id = led;
+         g_slots[index].wavelength = NOCTI_WL_735;
+-        g_slots[index].on_time_us = FNIRS_ON_TIME_US;
+         g_slots[index].settle_us = FNIRS_SETTLE_US;
+         g_slots[index].sample_window_us = FNIRS_WINDOW_US;
+         g_slots[index].off_gap_us = FNIRS_OFF_GAP_US;
+@@ -364,7 +371,6 @@
+ 
+         g_slots[index].led_id = led;
+         g_slots[index].wavelength = NOCTI_WL_850;
+-        g_slots[index].on_time_us = FNIRS_ON_TIME_US;
+         g_slots[index].settle_us = FNIRS_SETTLE_US;
+         g_slots[index].sample_window_us = FNIRS_WINDOW_US;
+         g_slots[index].off_gap_us = FNIRS_OFF_GAP_US;
+@@ -1180,7 +1186,7 @@
+     nocti_board_cfg_t board_cfg;
+     nocti_board_cfg_set_defaults(&board_cfg);
+ 
+-    board_cfg.i2c_clk_hz = 1000000u;
++    board_cfg.i2c_clk_hz = 400000u;
+     board_cfg.i2c_enable_internal_pullups = true;
+ 
+     board_cfg.spi_host_ads1299 = SPI2_HOST;
+@@ -1292,6 +1298,14 @@
+     scheduler_cfg.pin_to_core = true;
+     scheduler_cfg.core_id = FNIRS_ACQ_CORE;
+ 
++    NOCTI_LOGI(TAG,
++               "slot timing: settle=%lu us window=%lu us led_off=%lu us off_gap=%lu us tick=%lu us",
++               (unsigned long)FNIRS_SETTLE_US,
++               (unsigned long)FNIRS_WINDOW_US,
++               (unsigned long)FNIRS_LED_OFF_US,
++               (unsigned long)FNIRS_OFF_GAP_US,
++               (unsigned long)FNIRS_TICK_PERIOD_US);
++
+     if (!nocti_scheduler_init(&scheduler_cfg, scheduler_callback, NULL)) {
+         (void)nocti_led_driver_all_off();
+         NOCTI_LOGE(TAG, "scheduler init failed");
+--- NOCTINIRSv2/components/nocti_scheduler/include/nocti_scheduler.h	2026-07-13 11:37:54.000000000 +0000
++++ /mnt/data/noctinirs-fw-revised/NOCTINIRSv2/components/nocti_scheduler/include/nocti_scheduler.h	2026-07-14 04:50:52.756927144 +0000
+@@ -30,7 +30,8 @@
+ //    - SAMPLE: waktu ideal untuk ADC read
+ //    - sample_window_us: waktu window sampling/averaging
+ //    - END: biasanya LED OFF
+-//    - on_time_us/off_gap_us: memastikan total timing sesuai slot definition
++//    - END/LED OFF terjadi tepat setelah settle_us + sample_window_us
++//    - off_gap_us: waktu LED pasti OFF sebelum tick berikutnya
+ //
+ // Timestamp policy:
+ // - ev.t_event_us adalah "tick aligned timestamp" dari timebase ISR
+@@ -55,9 +56,8 @@
+     nocti_wavelength_t wavelength;  // slash: pakai dari nocti_types.h (735 atau 850)
+ 
+     // Slot timing in microseconds (inside one tick)
+-    uint16_t on_time_us;            // total LED on duration in this tick
+-    uint16_t settle_us;             // wait after LED on before sampling
+-    uint16_t sample_window_us;      // sampling window duration
++    uint16_t settle_us;             // candidate-window start after LED ON
++    uint16_t sample_window_us;      // SAMPLE-to-END duration; END commands LED OFF
+     uint16_t off_gap_us;            // gap after LED off
+ 
+     // Requested current for this slot (optional use by LED driver)
+--- NOCTINIRSv2/components/nocti_scheduler/nocti_scheduler.c	2026-07-13 11:38:48.000000000 +0000
++++ /mnt/data/noctinirs-fw-revised/NOCTINIRSv2/components/nocti_scheduler/nocti_scheduler.c	2026-07-14 04:49:32.632085032 +0000
+@@ -231,16 +231,12 @@
+         } else {
+             const nocti_slot_t *slot = &s.cfg.slots[s.slot_index];
+ 
+-            // Deadlines absolut di dalam tick
++            // Absolute deadlines inside one tick. SLOT_END is the physical
++            // LED-OFF command and therefore also the end timestamp of the ADC
++            // candidate window used by the acquisition callback.
+             nocti_time_us_t t_sample = t_tick + (nocti_time_us_t)slot->settle_us;
+-            nocti_time_us_t t_end_on = t_tick + (nocti_time_us_t)slot->on_time_us;
+-
+-            // // sample_window dimaknai sebagai durasi setelah SAMPLE sebelum END event
+-            nocti_time_us_t t_end_event = t_sample + (nocti_time_us_t)slot->sample_window_us;
+-            if (t_end_event > t_end_on) {
+-                // // safety: END event tidak boleh lewat on_time
+-                t_end_event = t_end_on;
+-            }
++            nocti_time_us_t t_led_off =
++                t_sample + (nocti_time_us_t)slot->sample_window_us;
+ 
+             // BEGIN
+             emit_event(NOCTI_EV_SLOT_BEGIN, slot, t_tick);
+@@ -249,16 +245,13 @@
+             wait_until_deadline_us(t_sample);
+             emit_event(NOCTI_EV_SLOT_SAMPLE, slot, t_sample);
+ 
+-            // END (LED OFF idealnya di callback ini)
+-            wait_until_deadline_us(t_end_event);
+-            emit_event(NOCTI_EV_SLOT_END, slot, t_end_event);
+-
+-            // // Pastikan LED ON window selesai (hingga on_time_us), lalu off_gap
+-            // // Ini menjaga spacing slot sesuai definisi
+-            wait_until_deadline_us(t_end_on);
+-
+-            // // Off gap menambah jarak setelah LED OFF, tapi tetap di dalam tick budget
+-            nocti_time_us_t t_after_gap = t_end_on + (nocti_time_us_t)slot->off_gap_us;
++            // END: callback commands LED OFF and closes the ADC window.
++            wait_until_deadline_us(t_led_off);
++            emit_event(NOCTI_EV_SLOT_END, slot, t_led_off);
++
++            // Guaranteed LED-OFF gap, still constrained by the tick budget.
++            nocti_time_us_t t_after_gap =
++                t_led_off + (nocti_time_us_t)slot->off_gap_us;
+             if (t_after_gap > t_tick_end) {
+                 // // jika user set off_gap terlalu besar, kita clamp ke tick_end
+                 t_after_gap = t_tick_end;
+@@ -306,12 +299,11 @@
+     for (uint16_t i = 0; i < s.cfg.slot_count; i++) {
+         const nocti_slot_t *sl = &s.cfg.slots[i];
+ 
+-        uint32_t settle_plus_window =
++        uint32_t led_off_us =
+             (uint32_t)sl->settle_us + (uint32_t)sl->sample_window_us;
++        uint32_t total_tick = led_off_us + (uint32_t)sl->off_gap_us;
+ 
+-        if (settle_plus_window > (uint32_t)sl->on_time_us) return false;
+-
+-        uint32_t total_tick = (uint32_t)sl->on_time_us + (uint32_t)sl->off_gap_us;
++        if (led_off_us == 0u) return false;
+         if (total_tick > s.cfg.tick_period_us) return false;
+ 
+         if (sl->wavelength != NOCTI_WL_735 && sl->wavelength != NOCTI_WL_850) return false;
+--- NOCTINIRSv2/components/nocti_led_driver/nocti_led_driver.c	2026-07-13 10:23:02.000000000 +0000
++++ /mnt/data/noctinirs-fw-revised/NOCTINIRSv2/components/nocti_led_driver/nocti_led_driver.c	2026-07-14 04:50:52.757648990 +0000
+@@ -28,6 +28,7 @@
+ #define PCA9956_REG_PWMALL    0x3F
+ 
+ #define PCA9956_REG_IREF0     0x22
++#define PCA9956_REG_OFFSET    0x3A
+ 
+ // LEDOUT 2-bit field
+ #define PCA9956_LDR_OFF       0x0u
+@@ -348,10 +349,16 @@
+     err = pca_write_reg8(PCA9956_REG_MODE1, mode1);
+     if (err != ESP_OK) return err;
+ 
+-    // MODE2 deterministic default
++    // MODE2 deterministic default: output changes are latched on STOP.
+     err = pca_write_reg8(PCA9956_REG_MODE2, 0x00);
+     if (err != ESP_OK) return err;
+ 
++    // Disable the PCA9956B per-output turn-on staggering. The power-on default
++    // is OFFSET[3:0] = 1000b; writing zero makes all mapped LED outputs use the
++    // same deterministic transition delay.
++    err = pca_write_reg8(PCA9956_REG_OFFSET, 0x00);
++    if (err != ESP_OK) return err;
++
+     if (s.cfg.force_disable_pwm_regs) {
+         // slash: GRPPWM/GRPFREQ hanya relevan kalau pakai group dimming, kita nol-kan saja
+         err = pca_write_reg8(PCA9956_REG_GRPPWM, 0x00);

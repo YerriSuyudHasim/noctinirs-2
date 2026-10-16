@@ -1,0 +1,39 @@
+NoctiNIRSv3 P5 source-policy scan
+date_utc=2026-07-28T05:15:00Z
+
+arduino_files=0
+legacy_i2c_include_files=0
+no_affinity_files=0
+application_heap_call_files=0
+sendto_locations:
+components/nocti_v3_wifi/nocti_v3_wifi.c:229:    const int sent = sendto(wifi->stream_socket, wifi->datagram_buffer, bytes,
+components/nocti_v3_wifi/nocti_v3_wifi.c:541:            const int sent = sendto(socket_fd, wifi->reply_buffer, reply_length, 0,
+
+vTaskDelay_locations:
+components/nocti_v3_led/nocti_v3_led.c:431:            vTaskDelay(pdMS_TO_TICKS(NOCTI_V3_LED_RECOVERY_COOLDOWN_MS));
+main/app_main.c:128:        vTaskDelay(pdMS_TO_TICKS(NOCTI_V3_OPTICAL_HEALTH_PERIOD_MS));
+
+protocol_microsecond_delay_locations:
+components/nocti_v3_adc/nocti_v3_ads131m04.c:240:    esp_rom_delay_us(300u);
+components/nocti_v3_adc/nocti_v3_ads131m04.c:243:    esp_rom_delay_us(20u);
+components/nocti_v3_adc/nocti_v3_ads131m04.c:265:    esp_rom_delay_us(5u);
+components/nocti_v3_led/nocti_v3_led.c:162:    esp_rom_delay_us(NOCTI_V3_PCA_RESET_LOW_US);
+components/nocti_v3_led/nocti_v3_led.c:165:    esp_rom_delay_us(NOCTI_V3_PCA_RESET_RECOVERY_US);
+
+ISR/callback definitions:
+components/nocti_v3_adc/nocti_v3_adc.c:216:static void IRAM_ATTR drdy_isr(void *argument)
+components/nocti_v3_adc/nocti_v3_adc.c:296:    err = gpio_isr_handler_add(drdy, drdy_isr, runtime);
+components/nocti_v3_led/nocti_v3_led.c:92:static void IRAM_ATTR update_max_u32(volatile uint32_t *value, uint32_t candidate)
+components/nocti_v3_led/nocti_v3_led.c:215:static bool IRAM_ATTR i2c_done_callback(i2c_master_dev_handle_t device,
+components/nocti_v3_led/nocti_v3_led.c:280:        .on_trans_done = NULL,
+components/nocti_v3_led/nocti_v3_led.c:291:        .on_trans_done = i2c_done_callback,
+components/nocti_v3_timebase/nocti_v3_timebase.c:11:static bool IRAM_ATTR on_alarm(gptimer_handle_t timer,
+components/nocti_v3_timebase/nocti_v3_timebase.c:60:    err = gptimer_register_event_callbacks(timebase->timer, &callbacks, timebase);
+components/nocti_v3_timebase/nocti_v3_timebase.c:100:esp_err_t IRAM_ATTR nocti_v3_timebase_now_us_isr(
+
+logging inside ISR/callback function ranges manually reviewed: none
+per_sample_logging_matches:
+
+MBLL/SSR/bandpass/UI algorithm matches in source:
+components/nocti_v3_stream/nocti_v3_stream.c:340:            "Binary stream-v1 paired ON/I_LED_OFF frames are sent on UDP 3334; MBLL, SSR, bandpass, and UI remain host-side.\n");
+main/app_main.c:140:             "P5 contract: decoupled UDP stream-v1 transport + non-real-time commands; no MBLL/SSR/UI");

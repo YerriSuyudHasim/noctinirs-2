@@ -1,0 +1,12 @@
+idf_component_register(
+    SRCS
+        "nocti_stream.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        log
+        freertos
+        nocti_timebase
+        nocti_common
+        esp_ringbuf
+)

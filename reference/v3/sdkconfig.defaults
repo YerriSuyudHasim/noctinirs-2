@@ -1,0 +1,71 @@
+# NoctiNIRSv3 final integration — ESP32-S3 / ESP-IDF 5.5.1
+# These defaults are intentionally limited to settings justified by the
+# architecture. The generated sdkconfig must still be reviewed after menuconfig.
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_FREERTOS_HZ=1000
+# CONFIG_FREERTOS_UNICORE is not set
+
+# Keep both interrupt and task watchdogs enabled. Five seconds is retained;
+# no task is expected to monopolize either core for a comparable interval.
+CONFIG_ESP_INT_WDT=y
+CONFIG_ESP_INT_WDT_CHECK_CPU1=y
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=y
+# CONFIG_ESP_TASK_WDT_PANIC is not set
+
+# Keep application/network work on core 0; the ADS/LED/scheduler domain is
+# explicitly pinned to core 1 by source code.
+CONFIG_ESP_MAIN_TASK_AFFINITY_CPU0=y
+CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0=y
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+
+# BLE is outside the fNIRS validation build.
+# CONFIG_BT_ENABLED is not set
+
+
+# ESP32-S3-WROOM-1-N16R8 has 16 MB flash. Match the image header to the
+# detected device so boot no longer reports a 16 MB versus 2 MB mismatch.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# Diagnostics are periodic and never emitted per ADC sample or normal slot.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_DYNAMIC_LEVEL_CONTROL=y
+CONFIG_LOG_MASTER_LEVEL=y
+# Native USB console for ESP32-S3-WROOM custom board:
+# GPIO19 = USB D-, GPIO20 = USB D+. No CH340/CP2102 is present.
+# CONFIG_ESP_CONSOLE_UART_DEFAULT is not set
+# CONFIG_ESP_CONSOLE_USB_CDC is not set
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# GPTimer absolute-deadline callback and control path.
+CONFIG_GPTIMER_CTRL_FUNC_IN_IRAM=y
+CONFIG_GPTIMER_ISR_CACHE_SAFE=y
+
+# The PCA9956B transaction-done callback is the asynchronous commit boundary.
+CONFIG_I2C_ISR_IRAM_SAFE=y
+
+# The ADS path uses one 18-byte polling transaction. Retain the SPI ISR in IRAM
+# for driver robustness; the whole SPI driver is not forced into IRAM because
+# that would also require the broader FreeRTOS-in-IRAM option and more IRAM.
+CONFIG_SPI_MASTER_ISR_IN_IRAM=y
+
+# Wi-Fi SoftAP/UDP compatibility and selected IRAM optimizations.
+CONFIG_ESP_WIFI_ENABLED=y
+CONFIG_ESP_WIFI_NVS_ENABLED=y
+CONFIG_ESP_WIFI_IRAM_OPT=y
+CONFIG_ESP_WIFI_RX_IRAM_OPT=y
+
+# Hot rings and asynchronous command buffers are static internal objects.
+# Retain the hardware-validated V2 ADS131 pin map on GPIO35-38.
+# PSRAM support is deliberately disabled for this board/firmware profile.
+# CONFIG_SPIRAM is not set
+
+# PCA9956B clock profile: 400 kHz remains the only default. The alternative
+# profile must be selected deliberately in menuconfig for controlled testing.
+CONFIG_NOCTI_V3_I2C_PROFILE_400KHZ=y
+# CONFIG_NOCTI_V3_I2C_PROFILE_1MHZ_EXPERIMENT is not set

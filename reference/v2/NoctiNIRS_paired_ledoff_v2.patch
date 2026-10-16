@@ -1,0 +1,2530 @@
+diff -ruN old/firmware/PAIRED_LED_OFF_V2.md new/firmware/PAIRED_LED_OFF_V2.md
+--- old/firmware/PAIRED_LED_OFF_V2.md	1970-01-01 00:00:00.000000000 +0000
++++ new/firmware/PAIRED_LED_OFF_V2.md	2026-07-17 05:09:13.994758589 +0000
+@@ -0,0 +1,51 @@
++# Paired LED-OFF protocol v2
++
++## Why the old sequence failed
++
++The previous live-view started a standalone `MODE DARK` acquisition, attempted to build a five-second median LED-off profile, and only then switched to `MODE SCAN`. When the DARK profile did not satisfy the fixed-K validity rule, the software stopped before SCAN, so the LEDs never lit.
++
++A standalone profile also becomes stale when ambient light or electronic offset changes after the profile was recorded.
++
++## Final acquisition model
++
++For every optical slot, the firmware measures a local LED-OFF phase and a local LED-ON phase. Both are placed in phase records that share the same `session_id` and `frame_id`.
++
++```text
++previous LED OFF
++    |
++    +-- 1000 us settling guard
++    +-- newest 5 contiguous LED-OFF samples
++    |
++current LED ON
++    +-- 1000 us settling guard
++    +-- 1400 us acquisition window
++    +-- newest 5 contiguous LED-ON samples
++    |
++current LED OFF
++```
++
++The bridge emits a corrected frame only after both records arrive:
++
++```text
++I_corrected[frame, slot, PD]
++  = I_LED_ON[frame, slot, PD]
++  - I_LED_OFF[frame, slot, PD]
++```
++
++No previous LED-OFF record is reused. If either phase is absent, under-K, CRC-invalid, or has an unequal sample count, that slot is invalid.
++
++## Why K=5 rather than K=6
++
++At 4 kSPS, each conversion period is 250 us. A five-sample average provides useful noise reduction while leaving a full 1000 us settling guard for both ON and OFF states inside the fixed 5 ms slot. K=6 gives only a small additional averaging benefit but substantially reduces timing margin once LED-driver I2C latency and ADC/filter settling are included.
++
++## Data-integrity rules
++
++1. ADS131M04 register readback must match the intended 4 kSPS configuration.
++2. Measured DRDY rate must be within ±5% of 4000 SPS before acquisition is allowed.
++3. Samples must be CRC-valid.
++4. Selected samples must have consecutive `drdy_sequence` values.
++5. Exactly K samples must exist in both phases.
++6. LED-ON and LED-OFF records must have the same session and frame ID.
++7. Corrected intensity must remain signed. The software does not apply `abs()` to hide negative values.
++
++A negative corrected value is therefore treated as a polarity, saturation, mapping, or optical-coupling problem that must be investigated rather than numerically concealed.
+diff -ruN old/firmware/README.md new/firmware/README.md
+--- old/firmware/README.md	2026-07-14 04:54:59.000000000 +0000
++++ new/firmware/README.md	2026-07-17 05:09:13.988065751 +0000
+@@ -1,53 +1,83 @@
+-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-H21 | ESP32-H4 | ESP32-P4 | ESP32-S2 | ESP32-S3 | Linux |
+-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | --------- | -------- | -------- | -------- | -------- | ----- |
+-
+-# Hello World Example
+-
+-Starts a FreeRTOS task to print "Hello World".
+-
+-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+-
+-## How to use example
+-
+-Follow detailed instructions provided specifically for this example.
+-
+-Select the instructions depending on Espressif chip installed on your development board:
+-
+-- [ESP32 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/stable/get-started/index.html)
+-- [ESP32-S2 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s2/get-started/index.html)
+-
+-
+-## Example folder contents
+-
+-The project **hello_world** contains one source file in C language [hello_world_main.c](main/hello_world_main.c). The file is located in folder [main](main).
+-
+-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt` files that provide set of directives and instructions describing the project's source files and targets (executable, library, or both).
+-
+-Below is short explanation of remaining files in the project folder.
+-
+-```
+-├── CMakeLists.txt
+-├── pytest_hello_world.py      Python script used for automated testing
+-├── main
+-│   ├── CMakeLists.txt
+-│   └── hello_world_main.c
+-└── README.md                  This is the file you are currently reading
+-```
+-
+-For more information on structure and contents of ESP-IDF projects, please refer to Section [Build System](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html) of the ESP-IDF Programming Guide.
+-
+-## Troubleshooting
+-
+-* Program upload failure
+-
+-    * Hardware connection is not correct: run `idf.py -p PORT monitor`, and reboot your board to see if there are any output logs.
+-    * The baud rate for downloading is too high: lower your baud rate in the `menuconfig` menu, and try again.
+-
+-## Technical support and feedback
+-
+-Please use the following feedback channels:
+-
+-* For technical queries, go to the [esp32.com](https://esp32.com/) forum
+-* For a feature request or bug report, create a [GitHub issue](https://github.com/espressif/esp-idf/issues)
+-
+-We will get back to you as soon as possible.
++# NoctiNIRS fNIRS validation firmware
++
++Target: ESP32-S3, ESP-IDF 5.5.1.
++
++The active application is `main/app_main_fnirs_test.c`. This revision implements protocol `paired_v2`, where every 100 ms optical frame is transmitted as two phase records with the same `frame_id`:
++
++```text
++LED-ON phase  +  LED-OFF phase
++               |
++               v
++I_corrected = I_LED_ON - I_LED_OFF
++```
++
++`I_LED_OFF` means LED-off intensity. It may contain photodiode dark current, electronic offset, ambient light, and other LED-off contributions.
++
++## Precision timing
++
++```text
++ADS131M04 data rate       4000 SPS (250 us/sample)
++Optical frame rate        10 Hz
++Slots per frame           20
++Slot period               5000 us
++LED-ON settling guard     1000 us
++LED-ON sample window      1400 us
++LED-ON total budget       2400 us
++LED-OFF nominal budget    2600 us
++LED-OFF settling guard    1000 us
++Samples per phase         K=5 contiguous CRC-valid samples
++```
++
++The ADC runs continuously. The firmware does not retry a CRC-failed conversion by reading the next frame. For each phase, it accepts only the newest contiguous block of exactly five valid DRDY conversions after the settling guard. It never fills a missing sample using an older conversion.
++
++## Protocol behavior
++
++- Frame payload version: `2`
++- `NOCTI_FNIRS_FRAME_F_PAIRED`: phase belongs to paired acquisition
++- `NOCTI_FNIRS_FRAME_F_LED_OFF`: phase is LED-OFF; absence means LED-ON
++- Both phase records use the same `frame_id`
++- A slot is invalid when either phase is under-K, CRC-invalid, or missing
++- The host must never substitute an LED-OFF phase from another frame
++
++## Modes
++
++- `SCAN`: all 20 source/wavelength slots operate normally
++- `SINGLE`: only the selected slot lights; useful for validation
++- `DARK`: all LEDs intentionally remain off; diagnostic mode only
++
++Normal acquisition must start in `SCAN` or `SINGLE`. A separate five-second DARK session is no longer required.
++
++## Build and flash
++
++```bash
++idf.py fullclean
++idf.py build
++idf.py flash monitor
++```
++
++## Acceptance checks
++
++At boot:
++
++```text
++ADS131 DRDY count over 1 second: 3800..4200
++ADS131=4000 SPS
++paired K(on/off)=5/5
++```
++
++During a stable SCAN run, `STATUS` should show:
++
++```text
++protocol=paired_v2
++adc_sps=4000
++k_on=5 k_off=5
++min_n_on=5 min_n_off=5
++underk_on=0 underk_off=0
++partial=0
++crc_bad=0 led_err=0
++sched_missed=0 sched_abort=0
++```
++
++The measured `off_dark_min_us` must be greater than the 1000 us LED-OFF settling guard and should normally be near the nominal dark budget after I2C overhead.
++
++See `PAIRED_LED_OFF_V2.md` and `REVISION_NOTES_2026-07-17.md` for the design rationale and change list.
+diff -ruN old/firmware/REVISION_NOTES_2026-07-17.md new/firmware/REVISION_NOTES_2026-07-17.md
+--- old/firmware/REVISION_NOTES_2026-07-17.md	1970-01-01 00:00:00.000000000 +0000
++++ new/firmware/REVISION_NOTES_2026-07-17.md	2026-07-17 05:09:14.001379856 +0000
+@@ -0,0 +1,22 @@
++# NoctiNIRS paired LED-OFF revision — 2026-07-17
++
++## Firmware
++
++- Added fNIRS config payload v2 with separate `k_on`, `k_off`, and phase timing metadata.
++- Added paired phase flags to the fNIRS frame protocol.
++- Added local per-slot LED-OFF acquisition instead of a standalone DARK profile.
++- Added strict same-frame ON/OFF pairing semantics.
++- Changed the precision timing to K=5 per phase with a 1000 us settling guard.
++- Added contiguous-DRDY enforcement; CRC failures and sample gaps are not backfilled.
++- Added hard ADS131M04 register and measured DRDY-rate validation.
++- Added status/health diagnostics for ON and OFF under-K counts, minimum sample counts, and measured dark duration.
++- Preserved explicit DARK mode as an all-LED-off diagnostic.
++
++## Host software
++
++- Added paired phase assembler keyed by UDP session and fNIRS frame ID.
++- Computes `I_corrected = I_LED_ON - I_LED_OFF` only after a complete valid pair is available.
++- Removed the automatic five-second DARK profile stage.
++- Starts SCAN/SINGLE directly, so LEDs light immediately in normal acquisition.
++- Rejects missing, under-K, CRC-invalid, unbalanced, or stale phase data.
++- Exposes LED-ON, LED-OFF, corrected intensity, and per-phase sample counts to the UI.
+diff -ruN old/firmware/components/nocti_common/include/nocti_types.h new/firmware/components/nocti_common/include/nocti_types.h
+--- old/firmware/components/nocti_common/include/nocti_types.h	2026-07-14 04:55:00.000000000 +0000
++++ new/firmware/components/nocti_common/include/nocti_types.h	2026-07-17 04:41:46.413109991 +0000
+@@ -188,23 +188,50 @@
+ 
+ typedef char nocti_payload_fnirs_cfg_v1_size_check[(sizeof(nocti_payload_fnirs_cfg_v1_t) == 12) ? 1 : -1];
+ 
++// Paired LED-ON / LED-OFF acquisition metadata. The two phase records use the
++// same frame_id and are paired by the host. Both phases use the same fixed K so
++// subtraction never mixes averages with different sample counts.
++#define NOCTI_PAYLOAD_FNIRS_CFG_V2_VERSION      (2u)
++
++typedef struct __attribute__((packed)) {
++    uint8_t  version;          // = NOCTI_PAYLOAD_FNIRS_CFG_V2_VERSION
++    uint8_t  map_mode;         // nocti_fnirs_map_mode_t
++    uint8_t  frame_fs_hz;
++    uint8_t  slot_count;
++
++    uint8_t  k_on;
++    uint8_t  k_off;
++    uint8_t  current_735_mA;
++    uint8_t  current_850_mA;
++
++    uint16_t on_settle_us;
++    uint16_t on_window_us;
++    uint16_t off_min_settle_us;
++    uint16_t slot_period_us;
++} nocti_payload_fnirs_cfg_v2_t;
++
++typedef char nocti_payload_fnirs_cfg_v2_size_check[(sizeof(nocti_payload_fnirs_cfg_v2_t) == 16) ? 1 : -1];
++
+ 
+ // ============================================================
+-// Payload: fNIRS frame v1 (NOCTI_REC_FNIRS_FRAME)
++// Payload: fNIRS frame v1/v2 (NOCTI_REC_FNIRS_FRAME)
+ // slash:
+ // /belajar: 1 payload mewakili 1 frame (100 ms) berisi 20 slot
+ // /belajar: mapping slot tidak dikirim, karena sudah dijelaskan lewat FNIRS_CFG
+ // ============================================================
+ 
+ #define NOCTI_PAYLOAD_FNIRS_FRAME_V1_VERSION    (1u)
++#define NOCTI_PAYLOAD_FNIRS_FRAME_V2_VERSION    (2u)
+ 
+ typedef enum {
+-    NOCTI_FNIRS_FRAME_F_NONE     = 0x00,
+-    NOCTI_FNIRS_FRAME_F_PARTIAL  = 0x01, // slash: ada slot yang belum terkumpul saat frame di-flush
++    NOCTI_FNIRS_FRAME_F_NONE       = 0x00,
++    NOCTI_FNIRS_FRAME_F_PARTIAL    = 0x01, // one or more slots are incomplete
++    NOCTI_FNIRS_FRAME_F_LED_OFF    = 0x02, // v2 phase record: 0=LED-ON, 1=LED-OFF
++    NOCTI_FNIRS_FRAME_F_PAIRED     = 0x04, // v2 record belongs to a paired ON/OFF frame
+ } nocti_fnirs_frame_flags_t;
+ 
+ typedef struct __attribute__((packed)) {
+-    uint8_t  version;        // = NOCTI_PAYLOAD_FNIRS_FRAME_V1_VERSION
++    uint8_t  version;        // = V1 for legacy, V2 for paired phase records
+     uint8_t  flags;          // nocti_fnirs_frame_flags_t
+ 
+     uint16_t frame_id;       // slash: monotonik, wrap ok
+diff -ruN old/firmware/components/nocti_stream/include/nocti_stream.h new/firmware/components/nocti_stream/include/nocti_stream.h
+--- old/firmware/components/nocti_stream/include/nocti_stream.h	2026-07-14 04:55:00.000000000 +0000
++++ new/firmware/components/nocti_stream/include/nocti_stream.h	2026-07-17 04:41:46.413521945 +0000
+@@ -231,6 +231,13 @@
+     return nocti_stream_push(s, NOCTI_REC_FNIRS_CFG, now_us, p, sizeof(*p));
+ }
+ 
++static inline esp_err_t nocti_stream_push_fnirs_cfg_v2(nocti_stream_t *s,
++                                                       nocti_time_us_t now_us,
++                                                       const nocti_payload_fnirs_cfg_v2_t *p)
++{
++    return nocti_stream_push(s, NOCTI_REC_FNIRS_CFG, now_us, p, sizeof(*p));
++}
++
+ static inline esp_err_t nocti_stream_push_fnirs_frame_v1(nocti_stream_t *s,
+                                                          nocti_time_us_t now_us,
+                                                          const nocti_payload_fnirs_frame_v1_t *p)
+diff -ruN old/firmware/main/app_main_fnirs_test.c new/firmware/main/app_main_fnirs_test.c
+--- old/firmware/main/app_main_fnirs_test.c	2026-07-16 12:51:03.000000000 +0000
++++ new/firmware/main/app_main_fnirs_test.c	2026-07-17 05:06:12.581647074 +0000
+@@ -25,7 +25,7 @@
+ // - NOCTI_REC_TIME64
+ // - NOCTI_REC_FNIRS_CFG
+ // - NOCTI_REC_EVENT (test-mode metadata)
+-// - NOCTI_REC_FNIRS_FRAME
++// - NOCTI_REC_FNIRS_FRAME (paired v2: one LED-ON and one LED-OFF phase record per frame)
+ // ============================================================
+ 
+ #include <ctype.h>
+@@ -64,14 +64,25 @@
+ #define FNIRS_TICK_PERIOD_US           (5000u)
+ #define FNIRS_FRAME_PERIOD_US          (100000u)
+ 
+-// At 4 kSPS, a 2700 us LED-ON acquisition window contains nominally
+-// 10-11 ADC conversions. Use the latest six valid conversions so the early
+-// transition region is excluded while retaining enough samples for averaging.
+-#define FNIRS_K_FIXED                  (6u)
+-#define FNIRS_SETTLE_US                (300u)
+-#define FNIRS_WINDOW_US                (2700u)
+-#define FNIRS_ON_TIME_US               (3000u)
+-#define FNIRS_OFF_GAP_US               (2000u)
++// Paired per-slot acquisition:
++//   1) collect the latest K LED-OFF samples immediately before LED turn-on;
++//   2) turn on the selected LED;
++//   3) collect the latest K LED-ON samples near the end of the ON window.
++//
++// The ON interval is intentionally shortened to leave a long, fully dark
++// interval before the next slot. At 4 kSPS, the sinc3 path needs approximately three output periods to
++// settle after a large optical step. We therefore impose a full 1000 us guard
++// after every LED transition, then average five conversions from a 1400 us
++// window. The same K and settling rule are used for LED-ON and LED-OFF. This
++// trades only a small amount of averaging gain for a substantially larger
++// timing margin and prevents transition samples from entering I_corrected.
++#define FNIRS_K_ON_FIXED               (5u)
++#define FNIRS_K_OFF_FIXED              (5u)
++#define FNIRS_SETTLE_US                (1000u)
++#define FNIRS_WINDOW_US                (1400u)
++#define FNIRS_ON_TIME_US               (2400u)
++#define FNIRS_OFF_GAP_US               (2600u)
++#define FNIRS_OFF_MIN_SETTLE_US        (1000u)
+ 
+ #define FNIRS_SCHED_END_GUARD_US        (400u)
+ #define FNIRS_SCHED_LATE_WARN_US        (200u)
+@@ -107,8 +118,10 @@
+                "on_time_us must equal settle plus sample window");
+ _Static_assert(FNIRS_ON_TIME_US + FNIRS_OFF_GAP_US == FNIRS_TICK_PERIOD_US,
+                "optical ON and OFF budgets must equal one slot tick");
+-_Static_assert(FNIRS_WINDOW_NOMINAL_SAMPLES >= (FNIRS_K_FIXED + 3u),
+-               "ADC window must leave transition margin beyond K samples");
++_Static_assert(FNIRS_WINDOW_NOMINAL_SAMPLES >= FNIRS_K_ON_FIXED,
++               "ADC window must contain at least K fully settled samples");
++_Static_assert(FNIRS_K_ON_FIXED == FNIRS_K_OFF_FIXED,
++               "paired subtraction requires equal ON and OFF sample counts");
+ 
+ // Continuous ADC ring buffer. The producer writes complete entries, then
+ // advances g_adc_wr. The scheduler reads only indices below a write snapshot.
+@@ -190,21 +203,27 @@
+ static volatile uint32_t g_stream_err_cnt = 0u;
+ static volatile uint32_t g_frame_count = 0u;
+ static volatile uint32_t g_partial_frame_count = 0u;
+-static volatile uint32_t g_under_k_slot_count = 0u;
++static volatile uint32_t g_under_k_on_slot_count = 0u;
++static volatile uint32_t g_under_k_off_slot_count = 0u;
+ static volatile uint32_t g_slot_abort_count = 0u;
+ 
+ static volatile uint32_t g_led_on_max_us = 0u;
+ static volatile uint32_t g_led_off_max_us = 0u;
+ static volatile uint32_t g_led_on_count = 0u;
+ static volatile uint32_t g_led_off_count = 0u;
++static volatile uint32_t g_off_dark_min_us = UINT32_MAX;
++static volatile uint8_t g_on_min_n_used = UINT8_MAX;
++static volatile uint8_t g_off_min_n_used = UINT8_MAX;
+ 
+ // ============================================================
+ // fNIRS frame accumulator
+ // ============================================================
+ 
+-static nocti_payload_fnirs_frame_v1_t g_fnirs_frame;
++static nocti_payload_fnirs_frame_v1_t g_fnirs_on_frame;
++static nocti_payload_fnirs_frame_v1_t g_fnirs_off_frame;
+ static uint16_t g_fnirs_frame_id = 0u;
+ static nocti_time_us_t g_slot_t0_us[FNIRS_SLOT_COUNT];
++static nocti_time_us_t g_led_off_ready_us = 0;
+ static uint32_t g_slot_pending_mask = 0u;
+ static bool g_frame_open = false;
+ static bool g_force_partial_frame = false;
+@@ -269,7 +288,8 @@
+     g_stream_err_cnt = 0u;
+     g_frame_count = 0u;
+     g_partial_frame_count = 0u;
+-    g_under_k_slot_count = 0u;
++    g_under_k_on_slot_count = 0u;
++    g_under_k_off_slot_count = 0u;
+     g_slot_abort_count = 0u;
+     g_adc_max_gap_us = 0u;
+     g_adc_missed_drdy_count = 0u;
+@@ -280,15 +300,50 @@
+     g_led_off_max_us = 0u;
+     g_led_on_count = 0u;
+     g_led_off_count = 0u;
++    g_off_dark_min_us = UINT32_MAX;
++    g_on_min_n_used = UINT8_MAX;
++    g_off_min_n_used = UINT8_MAX;
+     nocti_led_driver_reset_stats();
+ }
+ 
++static void fnirs_phase_frame_reset(nocti_payload_fnirs_frame_v1_t *frame,
++                                    bool led_off_phase)
++{
++    if (!frame) return;
++    memset(frame, 0, sizeof(*frame));
++    frame->version = NOCTI_PAYLOAD_FNIRS_FRAME_V2_VERSION;
++    frame->flags = NOCTI_FNIRS_FRAME_F_PAIRED |
++                   (led_off_phase ? NOCTI_FNIRS_FRAME_F_LED_OFF : 0u);
++    frame->frame_id = g_fnirs_frame_id;
++}
++
+ static void fnirs_frame_reset(void)
+ {
+-    memset(&g_fnirs_frame, 0, sizeof(g_fnirs_frame));
+-    g_fnirs_frame.version = NOCTI_PAYLOAD_FNIRS_FRAME_V1_VERSION;
+-    g_fnirs_frame.flags = NOCTI_FNIRS_FRAME_F_NONE;
+-    g_fnirs_frame.frame_id = g_fnirs_frame_id;
++    fnirs_phase_frame_reset(&g_fnirs_on_frame, false);
++    fnirs_phase_frame_reset(&g_fnirs_off_frame, true);
++}
++
++static void fnirs_store_phase_slot(nocti_payload_fnirs_frame_v1_t *frame,
++                                   uint8_t slot_index,
++                                   uint8_t n_used,
++                                   const int32_t average[4],
++                                   bool any_crc_bad,
++                                   uint8_t required_k)
++{
++    if (!frame || slot_index >= FNIRS_SLOT_COUNT) return;
++
++    const uint32_t slot_bit = (1u << slot_index);
++    frame->n_used[slot_index] = n_used;
++
++    if (n_used > 0u && average) {
++        frame->avg[slot_index][0] = average[0];
++        frame->avg[slot_index][1] = average[1];
++        frame->avg[slot_index][2] = average[2];
++        frame->avg[slot_index][3] = average[3];
++        frame->valid_mask |= slot_bit;
++    }
++    if (n_used < required_k) frame->underk_mask |= slot_bit;
++    if (any_crc_bad) frame->crc_mask |= slot_bit;
+ }
+ 
+ static void send_ctrlf(nocti_wifi_t *wifi,
+@@ -529,17 +584,30 @@
+     return ESP_OK;
+ }
+ 
+-static void log_drdy_rate_once(void)
++static esp_err_t validate_drdy_rate_once(void)
+ {
+     const uint32_t before = nocti_fnirs_dbg_drdy_count();
+     vTaskDelay(pdMS_TO_TICKS(1000u));
+     const uint32_t after = nocti_fnirs_dbg_drdy_count();
+     const uint32_t delta = after - before;
++    const uint32_t minimum = (ADS131_SAMPLE_RATE_HZ * 95u) / 100u;
++    const uint32_t maximum = (ADS131_SAMPLE_RATE_HZ * 105u) / 100u;
+ 
+     NOCTI_LOGI(TAG,
+-               "ADS131 DRDY count over 1 second: %lu (expected about %u)",
++               "ADS131 DRDY count over 1 second: %lu (required %u..%u)",
+                (unsigned long)delta,
+-               (unsigned)ADS131_SAMPLE_RATE_HZ);
++               (unsigned)minimum,
++               (unsigned)maximum);
++
++    if (delta < minimum || delta > maximum) {
++        NOCTI_LOGE(TAG,
++                   "ADS131 data-rate validation failed; refusing acquisition "
++                   "because paired K=%u/%u assumes 4 kSPS",
++                   (unsigned)FNIRS_K_ON_FIXED,
++                   (unsigned)FNIRS_K_OFF_FIXED);
++        return ESP_ERR_INVALID_STATE;
++    }
++    return ESP_OK;
+ }
+ 
+ // ============================================================
+@@ -548,20 +616,23 @@
+ 
+ static void push_fnirs_cfg_once(nocti_time_us_t now_us)
+ {
+-    nocti_payload_fnirs_cfg_v1_t cfg;
++    nocti_payload_fnirs_cfg_v2_t cfg;
+     memset(&cfg, 0, sizeof(cfg));
+ 
+-    cfg.version = NOCTI_PAYLOAD_FNIRS_CFG_V1_VERSION;
++    cfg.version = NOCTI_PAYLOAD_FNIRS_CFG_V2_VERSION;
+     cfg.map_mode = (uint8_t)NOCTI_FNIRS_MAP_LEDID2_WL;
+     cfg.frame_fs_hz = (uint8_t)FNIRS_FRAME_FS_HZ;
+     cfg.slot_count = (uint8_t)FNIRS_SLOT_COUNT;
+-    cfg.k_fixed = (uint8_t)FNIRS_K_FIXED;
++    cfg.k_on = (uint8_t)FNIRS_K_ON_FIXED;
++    cfg.k_off = (uint8_t)FNIRS_K_OFF_FIXED;
+     cfg.current_735_mA = (uint8_t)g_current_735_ma;
+     cfg.current_850_mA = (uint8_t)g_current_850_ma;
+-    cfg.settle_us = (uint16_t)FNIRS_SETTLE_US;
+-    cfg.window_us = (uint16_t)FNIRS_WINDOW_US;
++    cfg.on_settle_us = (uint16_t)FNIRS_SETTLE_US;
++    cfg.on_window_us = (uint16_t)FNIRS_WINDOW_US;
++    cfg.off_min_settle_us = (uint16_t)FNIRS_OFF_MIN_SETTLE_US;
++    cfg.slot_period_us = (uint16_t)FNIRS_TICK_PERIOD_US;
+ 
+-    if (nocti_stream_push_fnirs_cfg_v1(&g_stream, now_us, &cfg) != ESP_OK) {
++    if (nocti_stream_push_fnirs_cfg_v2(&g_stream, now_us, &cfg) != ESP_OK) {
+         g_stream_err_cnt++;
+     }
+ }
+@@ -683,6 +754,8 @@
+ 
+     int64_t accumulator[4] = {0, 0, 0, 0};
+     uint8_t n_used = 0u;
++    bool have_newer_sequence = false;
++    uint32_t newer_sequence = 0u;
+ 
+     const uint32_t write_snapshot = adc_wr_snapshot();
+     uint32_t available = write_snapshot;
+@@ -707,11 +780,18 @@
+             continue;
+         }
+ 
++        // Precision rule: use only one contiguous block of the newest K
++        // conversions. Never bridge across a CRC failure or a missing DRDY by
++        // substituting an older sample, because that changes the effective
++        // averaging time and can mix different optical states.
+         if (!entry->crc_ok) {
+             if (out_any_crc_bad) {
+                 *out_any_crc_bad = true;
+             }
+-            continue;
++            break;
++        }
++        if (have_newer_sequence && (newer_sequence - entry->drdy_sequence) != 1u) {
++            break;
+         }
+ 
+         accumulator[0] += (int64_t)entry->ch[0];
+@@ -720,6 +800,8 @@
+         accumulator[3] += (int64_t)entry->ch[3];
+ 
+         n_used++;
++        newer_sequence = entry->drdy_sequence;
++        have_newer_sequence = true;
+         if (n_used >= k_fixed) {
+             break;
+         }
+@@ -761,6 +843,20 @@
+     }
+ }
+ 
++static void update_min_u32(volatile uint32_t *minimum, uint32_t value)
++{
++    if (minimum && value < *minimum) {
++        *minimum = value;
++    }
++}
++
++static void update_min_u8(volatile uint8_t *minimum, uint8_t value)
++{
++    if (minimum && value < *minimum) {
++        *minimum = value;
++    }
++}
++
+ static void handle_fatal_led_driver_state(void)
+ {
+     if (nocti_led_driver_is_ready()) {
+@@ -782,30 +878,41 @@
+ static void finalize_fnirs_frame(nocti_time_us_t timestamp_us,
+                                  bool force_partial)
+ {
+-    if (!g_frame_open) {
+-        return;
+-    }
++    if (!g_frame_open) return;
+ 
+     const uint32_t expected_mask = (1u << FNIRS_SLOT_COUNT) - 1u;
+-    const uint32_t missing_mask =
+-        expected_mask & ~g_fnirs_frame.valid_mask;
++    const uint32_t on_missing = expected_mask & ~g_fnirs_on_frame.valid_mask;
++    const uint32_t off_missing = expected_mask & ~g_fnirs_off_frame.valid_mask;
+ 
+-    if (missing_mask != 0u) {
+-        g_fnirs_frame.underk_mask |= missing_mask;
+-    }
++    g_fnirs_on_frame.underk_mask |= on_missing;
++    g_fnirs_off_frame.underk_mask |= off_missing;
+ 
+-    if (force_partial || g_force_partial_frame || missing_mask != 0u) {
+-        g_fnirs_frame.flags |= NOCTI_FNIRS_FRAME_F_PARTIAL;
++    const bool pair_partial = force_partial ||
++                              g_force_partial_frame ||
++                              ((g_fnirs_on_frame.underk_mask & expected_mask) != 0u) ||
++                              ((g_fnirs_off_frame.underk_mask & expected_mask) != 0u) ||
++                              ((g_fnirs_on_frame.crc_mask & expected_mask) != 0u) ||
++                              ((g_fnirs_off_frame.crc_mask & expected_mask) != 0u);
++    if (pair_partial) {
++        g_fnirs_on_frame.flags |= NOCTI_FNIRS_FRAME_F_PARTIAL;
++        g_fnirs_off_frame.flags |= NOCTI_FNIRS_FRAME_F_PARTIAL;
+         g_partial_frame_count++;
+     }
+ 
+-    g_under_k_slot_count +=
+-        popcount32(g_fnirs_frame.underk_mask & expected_mask);
+-
++    g_under_k_on_slot_count +=
++        popcount32(g_fnirs_on_frame.underk_mask & expected_mask);
++    g_under_k_off_slot_count +=
++        popcount32(g_fnirs_off_frame.underk_mask & expected_mask);
++
++    // Two records share the same frame_id. The host must pair them before
++    // computing I_corrected = I_LED_ON - I_LED_OFF. A lost phase record causes
++    // the complete pair to be discarded rather than silently using stale data.
+     if (nocti_stream_push_fnirs_frame_v1(
+-            &g_stream,
+-            timestamp_us,
+-            &g_fnirs_frame) != ESP_OK) {
++            &g_stream, timestamp_us, &g_fnirs_on_frame) != ESP_OK) {
++        g_stream_err_cnt++;
++    }
++    if (nocti_stream_push_fnirs_frame_v1(
++            &g_stream, timestamp_us, &g_fnirs_off_frame) != ESP_OK) {
+         g_stream_err_cnt++;
+     }
+ 
+@@ -830,9 +937,7 @@
+     }
+ 
+     if (event->frame_index != g_scheduler_frame_index) {
+-        // A frame transition with an open accumulator means one or more slot
+-        // callbacks were skipped. Preserve it as a partial frame rather than
+-        // mixing samples from two optical frames.
++        // Never mix phase data from two optical frames.
+         finalize_fnirs_frame(event->t_event_us, true);
+         g_scheduler_frame_index = event->frame_index;
+     }
+@@ -843,9 +948,7 @@
+ {
+     (void)user;
+ 
+-    if (!event || !g_run) {
+-        return ESP_OK;
+-    }
++    if (!event || !g_run) return ESP_OK;
+ 
+     if (event->phase == NOCTI_EV_DARK_TICK) {
+         (void)nocti_stream_maybe_push_time64(&g_stream, event->t_event_us);
+@@ -855,9 +958,7 @@
+     synchronize_accumulator_frame(event);
+ 
+     const uint8_t slot_index = slot_index_from_event(event);
+-    if (slot_index >= FNIRS_SLOT_COUNT) {
+-        return ESP_ERR_INVALID_ARG;
+-    }
++    if (slot_index >= FNIRS_SLOT_COUNT) return ESP_ERR_INVALID_ARG;
+ 
+     const uint32_t slot_bit = (1u << slot_index);
+ 
+@@ -866,17 +967,21 @@
+         g_force_partial_frame = true;
+         g_slot_abort_count++;
+         g_slot_pending_mask &= ~slot_bit;
+-        g_fnirs_frame.underk_mask |= slot_bit;
++        g_fnirs_on_frame.underk_mask |= slot_bit;
++        g_fnirs_off_frame.underk_mask |= slot_bit;
+ 
+         const nocti_time_us_t off_start_us = nocti_timebase_now_us();
+         const esp_err_t off_err = nocti_led_driver_all_off();
+-        const uint32_t off_duration_us = duration_us_u32(
+-            off_start_us, nocti_timebase_now_us());
++        const nocti_time_us_t off_done_us = nocti_timebase_now_us();
++        const uint32_t off_duration_us = duration_us_u32(off_start_us, off_done_us);
+         g_led_off_count++;
+         update_max_u32(&g_led_off_max_us, off_duration_us);
+ 
+-        if (off_err != ESP_OK) {
++        if (off_err == ESP_OK) {
++            g_led_off_ready_us = off_done_us;
++        } else {
+             g_led_err_cnt++;
++            g_led_off_ready_us = 0;
+             handle_fatal_led_driver_state();
+         }
+ 
+@@ -888,9 +993,37 @@
+ 
+     if (event->phase == NOCTI_EV_SLOT_BEGIN) {
+         g_frame_open = true;
+-        if (event->missed_ticks_before > 0u) {
+-            g_force_partial_frame = true;
++        if (event->missed_ticks_before > 0u) g_force_partial_frame = true;
++
++        // Capture LED-OFF immediately before changing the LED state. This is a
++        // local, per-slot reference and therefore follows ambient-light and
++        // electronics-offset drift continuously rather than relying on a stale
++        // standalone DARK session.
++        int32_t off_average[4] = {0, 0, 0, 0};
++        bool off_crc_bad = false;
++        uint8_t off_n_used = 0u;
++        const nocti_time_us_t off_window_end_us = nocti_timebase_now_us();
++        if (g_led_off_ready_us > 0) {
++            update_min_u32(&g_off_dark_min_us,
++                           duration_us_u32(g_led_off_ready_us, off_window_end_us));
++            const nocti_time_us_t off_window_start_us =
++                g_led_off_ready_us + (nocti_time_us_t)FNIRS_OFF_MIN_SETTLE_US;
++            if (off_window_end_us > off_window_start_us) {
++                off_n_used = fnirs_collect_and_average(
++                    off_window_start_us,
++                    off_window_end_us,
++                    (uint8_t)FNIRS_K_OFF_FIXED,
++                    off_average,
++                    &off_crc_bad);
++            }
+         }
++        update_min_u8(&g_off_min_n_used, off_n_used);
++        fnirs_store_phase_slot(&g_fnirs_off_frame,
++                               slot_index,
++                               off_n_used,
++                               off_average,
++                               off_crc_bad,
++                               (uint8_t)FNIRS_K_OFF_FIXED);
+ 
+         esp_err_t err;
+         if (slot_led_is_active(slot_index)) {
+@@ -901,22 +1034,24 @@
+             g_led_on_count++;
+             update_max_u32(&g_led_on_max_us, on_duration_us);
+         } else {
++            const nocti_time_us_t off_start_us = nocti_timebase_now_us();
+             err = nocti_led_driver_all_off();
++            const nocti_time_us_t off_done_us = nocti_timebase_now_us();
++            g_led_off_count++;
++            update_max_u32(&g_led_off_max_us,
++                           duration_us_u32(off_start_us, off_done_us));
++            if (err == ESP_OK) g_led_off_ready_us = off_done_us;
+         }
+ 
+         if (err != ESP_OK) {
+             g_led_err_cnt++;
+             g_force_partial_frame = true;
+-            // If a runtime LEDOUT write fails, the driver pulses RESET# and
+-            // makes every output OFF. The device is then marked unready so the
+-            // acquisition stops and the next START performs full recovery.
++            g_led_off_ready_us = 0;
+             handle_fatal_led_driver_state();
+             return err;
+         }
+ 
+-        // STOP can race with a blocking I2C SLOT_BEGIN callback. Re-check the
+-        // run gate after the transaction so a late callback can never leave an
+-        // LED ON after stop_fnirs_acquisition() has already issued all_off().
++        // STOP can race with a blocking I2C transaction.
+         if (!g_run) {
+             const esp_err_t off_err = nocti_led_driver_all_off();
+             if (off_err != ESP_OK) {
+@@ -924,6 +1059,7 @@
+                 handle_fatal_led_driver_state();
+                 return off_err;
+             }
++            g_led_off_ready_us = nocti_timebase_now_us();
+             return ESP_ERR_INVALID_STATE;
+         }
+ 
+@@ -936,60 +1072,49 @@
+         return ESP_OK;
+     }
+ 
+-    if (event->phase != NOCTI_EV_SLOT_END) {
+-        return ESP_OK;
+-    }
++    if (event->phase != NOCTI_EV_SLOT_END) return ESP_OK;
+ 
+     esp_err_t led_err;
++    const nocti_time_us_t off_start_us = nocti_timebase_now_us();
+     if (slot_led_is_active(slot_index)) {
+-        const nocti_time_us_t off_start_us = nocti_timebase_now_us();
+         led_err = nocti_led_driver_slot_end(&event->slot);
+-        const uint32_t off_duration_us = duration_us_u32(
+-            off_start_us, nocti_timebase_now_us());
+-        g_led_off_count++;
+-        update_max_u32(&g_led_off_max_us, off_duration_us);
+     } else {
+         led_err = nocti_led_driver_all_off();
+     }
++    const nocti_time_us_t off_done_us = nocti_timebase_now_us();
++    g_led_off_count++;
++    update_max_u32(&g_led_off_max_us,
++                   duration_us_u32(off_start_us, off_done_us));
+ 
+-    if (led_err != ESP_OK) {
++    if (led_err == ESP_OK) {
++        g_led_off_ready_us = off_done_us;
++    } else {
+         g_led_err_cnt++;
+         g_force_partial_frame = true;
++        g_led_off_ready_us = 0;
+         handle_fatal_led_driver_state();
+     }
+ 
+     if ((g_slot_pending_mask & slot_bit) != 0u) {
+-        int32_t average[4];
+-        bool any_crc_bad = false;
+-
+-        const uint8_t n_used = fnirs_collect_and_average(
++        int32_t on_average[4] = {0, 0, 0, 0};
++        bool on_crc_bad = false;
++        const uint8_t on_n_used = fnirs_collect_and_average(
+             g_slot_t0_us[slot_index],
+             event->t_event_us,
+-            (uint8_t)FNIRS_K_FIXED,
+-            average,
+-            &any_crc_bad);
+-
+-        g_fnirs_frame.n_used[slot_index] = n_used;
+-
+-        if (n_used > 0u) {
+-            g_fnirs_frame.avg[slot_index][0] = average[0];
+-            g_fnirs_frame.avg[slot_index][1] = average[1];
+-            g_fnirs_frame.avg[slot_index][2] = average[2];
+-            g_fnirs_frame.avg[slot_index][3] = average[3];
+-            g_fnirs_frame.valid_mask |= slot_bit;
+-        }
+-
+-        if (n_used < (uint8_t)FNIRS_K_FIXED) {
+-            g_fnirs_frame.underk_mask |= slot_bit;
+-        }
+-
+-        if (any_crc_bad) {
+-            g_fnirs_frame.crc_mask |= slot_bit;
+-        }
+-
++            (uint8_t)FNIRS_K_ON_FIXED,
++            on_average,
++            &on_crc_bad);
++
++        update_min_u8(&g_on_min_n_used, on_n_used);
++        fnirs_store_phase_slot(&g_fnirs_on_frame,
++                               slot_index,
++                               on_n_used,
++                               on_average,
++                               on_crc_bad,
++                               (uint8_t)FNIRS_K_ON_FIXED);
+         g_slot_pending_mask &= ~slot_bit;
+     } else {
+-        g_fnirs_frame.underk_mask |= slot_bit;
++        g_fnirs_on_frame.underk_mask |= slot_bit;
+         g_force_partial_frame = true;
+     }
+ 
+@@ -1055,6 +1180,7 @@
+     g_force_partial_frame = false;
+     g_scheduler_frame_seen = false;
+     g_scheduler_frame_index = 0u;
++    g_led_off_ready_us = 0;
+ 
+     // Reset the write index only after the producer has stopped. Old entries
+     // are ignored because the collector never reads indices >= g_adc_wr.
+@@ -1074,6 +1200,7 @@
+         handle_fatal_led_driver_state();
+         return err;
+     }
++    g_led_off_ready_us = nocti_timebase_now_us();
+ 
+     g_fnirs_adc_run = true;
+     if (g_fnirs_adc_task) {
+@@ -1163,7 +1290,7 @@
+         wifi,
+         peer,
+         "FNIRS STATUS running=%u mode=%s slot=%u current735=%u current850=%u "
+-        "frames=%lu partial=%lu underk_slots=%lu abort_slots=%lu "
++        "frames=%lu partial=%lu underk_on=%lu underk_off=%lu abort_slots=%lu "
+         "adc_ok=%lu adc_err=%lu adc_max_gap_us=%lu adc_missed=%lu "
+         "adc_seq_gap_max=%lu crc_bad=%lu "
+         "led_err=%lu led_on_max_us=%lu led_off_max_us=%lu "
+@@ -1171,7 +1298,9 @@
+         "led_state_known=%u led_ready=%u led_fatal=%u "
+         "sched_missed=%lu sched_late=%lu sched_late_max_us=%lu "
+         "sched_abort=%lu sched_overrun=%lu stream_err=%lu drops=%lu "
+-        "adc_sps=%u k=%u on_us=%u off_us=%u i2c_hz=%u session=%lu\n",
++        "adc_sps=%u k_on=%u k_off=%u min_n_on=%u min_n_off=%u "
++        "on_us=%u off_us=%u off_settle_us=%u off_dark_min_us=%lu "
++        "i2c_hz=%u protocol=paired_v2 session=%lu\n",
+         g_run ? 1u : 0u,
+         test_mode_name(g_test_mode),
+         (unsigned)g_selected_slot,
+@@ -1179,7 +1308,8 @@
+         (unsigned)g_current_850_ma,
+         (unsigned long)g_frame_count,
+         (unsigned long)g_partial_frame_count,
+-        (unsigned long)g_under_k_slot_count,
++        (unsigned long)g_under_k_on_slot_count,
++        (unsigned long)g_under_k_off_slot_count,
+         (unsigned long)g_slot_abort_count,
+         (unsigned long)g_adc_ok_cnt,
+         (unsigned long)g_adc_err_cnt,
+@@ -1204,9 +1334,14 @@
+         (unsigned long)g_stream_err_cnt,
+         (unsigned long)nocti_stream_drop_fnirs(&g_stream),
+         (unsigned)ADS131_SAMPLE_RATE_HZ,
+-        (unsigned)FNIRS_K_FIXED,
++        (unsigned)FNIRS_K_ON_FIXED,
++        (unsigned)FNIRS_K_OFF_FIXED,
++        (unsigned)((g_on_min_n_used == UINT8_MAX) ? 0u : g_on_min_n_used),
++        (unsigned)((g_off_min_n_used == UINT8_MAX) ? 0u : g_off_min_n_used),
+         (unsigned)FNIRS_ON_TIME_US,
+         (unsigned)FNIRS_OFF_GAP_US,
++        (unsigned)FNIRS_OFF_MIN_SETTLE_US,
++        (unsigned long)((g_off_dark_min_us == UINT32_MAX) ? 0u : g_off_dark_min_us),
+         (unsigned)FNIRS_I2C_CLOCK_HZ,
+         (unsigned long)g_session_id);
+ }
+@@ -1264,11 +1399,14 @@
+         nocti_scheduler_get_stats(&scheduler_stats);
+         send_ctrlf(self,
+                    from,
+-                   "FNIRS STOPPED frames=%lu partial=%lu adc_ok=%lu adc_err=%lu "
+-                   "adc_missed=%lu crc_bad=%lu sched_missed=%lu sched_abort=%lu "
++                   "FNIRS STOPPED frames=%lu partial=%lu underk_on=%lu underk_off=%lu "
++                   "adc_ok=%lu adc_err=%lu adc_missed=%lu crc_bad=%lu "
++                   "sched_missed=%lu sched_abort=%lu "
+                    "led_fatal=%u\n",
+                    (unsigned long)g_frame_count,
+                    (unsigned long)g_partial_frame_count,
++                   (unsigned long)g_under_k_on_slot_count,
++                   (unsigned long)g_under_k_off_slot_count,
+                    (unsigned long)g_adc_ok_cnt,
+                    (unsigned long)g_adc_err_cnt,
+                    (unsigned long)g_adc_missed_drdy_count,
+@@ -1423,7 +1561,7 @@
+     if (strcmp(command, "INFO") == 0) {
+         send_ctrlf(self,
+                    from,
+-                   "NOCTI FNIRS_TEST ctrl=3333 stream=3334 modes=DARK,SINGLE,SCAN\n");
++                   "NOCTI FNIRS_TEST ctrl=3333 stream=3334 modes=DARK,SINGLE,SCAN protocol=paired_v2\n");
+         return;
+     }
+ 
+@@ -1570,7 +1708,11 @@
+         return;
+     }
+ 
+-    log_drdy_rate_once();
++    err = validate_drdy_rate_once();
++    if (err != ESP_OK) {
++        (void)nocti_led_driver_all_off();
++        return;
++    }
+ 
+     nocti_scheduler_cfg_t scheduler_cfg;
+     memset(&scheduler_cfg, 0, sizeof(scheduler_cfg));
+@@ -1645,11 +1787,12 @@
+     NOCTI_LOGI(TAG,
+                "optical timing: 20 slots x 5 ms, ON budget=%u us "
+                "(settle=%u us after I2C STOP + window=%u us), "
+-               "OFF budget=%u us, end_guard=%u us",
++               "OFF budget=%u us (min settled=%u us), end_guard=%u us",
+                (unsigned)FNIRS_ON_TIME_US,
+                (unsigned)FNIRS_SETTLE_US,
+                (unsigned)FNIRS_WINDOW_US,
+                (unsigned)FNIRS_OFF_GAP_US,
++               (unsigned)FNIRS_OFF_MIN_SETTLE_US,
+                (unsigned)FNIRS_SCHED_END_GUARD_US);
+     NOCTI_LOGI(TAG,
+                "LED bus: %u Hz, external pull-ups, atomic one-hot LEDOUT writes",
+@@ -1660,11 +1803,12 @@
+                (unsigned)FNIRS_LED_RESET_LOW_US,
+                (unsigned)FNIRS_LED_RESET_RECOVERY_US);
+     NOCTI_LOGI(TAG,
+-               "ADS131=%u SPS, expected period=%u us, K=%u latest samples; "
++               "ADS131=%u SPS, expected period=%u us, paired K(on/off)=%u/%u; "
+                "DRDY timestamps captured in ISR",
+                (unsigned)ADS131_SAMPLE_RATE_HZ,
+                (unsigned)ADS131_EXPECTED_PERIOD_US,
+-               (unsigned)FNIRS_K_FIXED);
++               (unsigned)FNIRS_K_ON_FIXED,
++               (unsigned)FNIRS_K_OFF_FIXED);
+     NOCTI_LOGI(TAG, "default mode=DARK; send HELP for commands");
+ 
+     while (true) {
+@@ -1677,6 +1821,9 @@
+             nocti_scheduler_get_stats(&scheduler_stats);
+ 
+             if (drops != 0u ||
++                g_partial_frame_count != 0u ||
++                g_under_k_on_slot_count != 0u ||
++                g_under_k_off_slot_count != 0u ||
+                 g_adc_err_cnt != 0u ||
+                 g_adc_missed_drdy_count != 0u ||
+                 g_led_err_cnt != 0u ||
+@@ -1684,11 +1831,17 @@
+                 scheduler_stats.aborted_slot_count != 0u) {
+                 NOCTI_LOGW(
+                     TAG,
+-                    "health frames=%lu partial=%lu drops=%lu adc_err=%lu "
+-                    "adc_missed=%lu crc_bad=%lu led_err=%lu "
++                    "health frames=%lu partial=%lu underk_on=%lu underk_off=%lu "
++                    "min_n_on=%u min_n_off=%u off_dark_min_us=%lu "
++                    "drops=%lu adc_err=%lu adc_missed=%lu crc_bad=%lu led_err=%lu "
+                     "sched_missed=%lu sched_abort=%lu",
+                     (unsigned long)g_frame_count,
+                     (unsigned long)g_partial_frame_count,
++                    (unsigned long)g_under_k_on_slot_count,
++                    (unsigned long)g_under_k_off_slot_count,
++                    (unsigned)((g_on_min_n_used == UINT8_MAX) ? 0u : g_on_min_n_used),
++                    (unsigned)((g_off_min_n_used == UINT8_MAX) ? 0u : g_off_min_n_used),
++                    (unsigned long)((g_off_dark_min_us == UINT32_MAX) ? 0u : g_off_dark_min_us),
+                     (unsigned long)drops,
+                     (unsigned long)g_adc_err_cnt,
+                     (unsigned long)g_adc_missed_drdy_count,
+diff -ruN old/software/I_LED_OFF_UPDATE_NOTES.md new/software/I_LED_OFF_UPDATE_NOTES.md
+--- old/software/I_LED_OFF_UPDATE_NOTES.md	2026-07-16 12:44:36.000000000 +0000
++++ new/software/I_LED_OFF_UPDATE_NOTES.md	2026-07-17 05:09:14.016551491 +0000
+@@ -1,54 +1,37 @@
+-# NoctiNIRS Live View — I_LED_OFF update
++# NoctiNIRS live view — paired I_LED_OFF update
+ 
+-## What this update does
+-
+-The live-view now applies an explicit LED-off correction before baseline and MBLL:
++## Processing equation
+ 
+ ```text
+-I_corrected(t) = I_LED_ON(t) - I_LED_OFF_profile
++I_corrected(t) = I_LED_ON(t) - I_LED_OFF(t)
+ OD(t) = ln(I_corrected_baseline / I_corrected(t))
+ OD -> optional short-separation regression -> MBLL
+ ```
+ 
+-`I_LED_OFF` is not described only as dark current because it can contain photodiode dark current, ambient light, electronic offset, and other LED-off contributions.
+-
+-## Automatic acquisition sequence
+-
+-For `SCAN` or `SINGLE` mode with **Use I_LED_OFF correction** enabled:
+-
+-1. The software sends `STOP`.
+-2. The software starts `MODE DARK`.
+-3. LED-off frames are collected for the selected duration (default 5 s).
+-4. A median profile is calculated for every channel and wavelength.
+-5. The software stops DARK mode and starts the requested SCAN/SINGLE mode.
+-6. The physiological baseline is collected from `I_corrected`, not raw `I_LED_ON`.
+-7. Corrected OD, short-separation regression, and MBLL are calculated.
++`I_LED_OFF` is LED-off intensity, not merely photodiode dark current. It may also contain ambient light, electronic offset, and other LED-off contributions.
+ 
+-The profile is intentionally not stored between live sessions. Recapture it after moving the probe or changing the room-light condition.
++## Acquisition behavior
+ 
+-## Live interface changes
++The software no longer records a separate five-second `MODE DARK` profile. Firmware protocol v2 sends two phase records per frame:
+ 
+-- I_LED_OFF status in the header, processing sidebar, and diagnostics.
+-- **Recapture I_LED_OFF** button.
+-- Configurable LED-off capture duration.
+-- Selected-channel optical values show `I_LED_ON / I_LED_OFF / I_corrected`.
+-- Slots marked `UNDER-K` are rejected before LED-off profile, baseline, OD, and MBLL processing.
+-- Profile and corrected-baseline coverage checks require at least 70% valid samples per wavelength-specific measurement.
+-- Non-positive `I_LED_ON - I_LED_OFF` values are rejected instead of hidden with an absolute-value operation.
++- LED-ON phase
++- LED-OFF phase
+ 
+-## Important limitation
++The bridge pairs them using the UDP session and fNIRS `frame_id`. A corrected frame is emitted only after both phases are present and valid. A missing phase is never replaced with an older LED-OFF record.
+ 
+-The current firmware frame contains only one 20-slot intensity matrix. Therefore, this software uses a separate `MODE DARK` profile. It does **not yet** receive real-time I_LED_OFF averages from the 2-ms inter-slot OFF interval.
++## Quality rules
+ 
+-A later firmware/protocol revision can add per-slot I_LED_OFF data. The processing order in this software is already structured around explicit `I_LED_ON`, `I_LED_OFF`, and `I_corrected` values.
++- Equal ON/OFF sample counts are mandatory.
++- The configured K is mandatory when v2 config metadata is available.
++- Under-K and CRC-affected slots are rejected.
++- Non-finite values are rejected.
++- `I_LED_ON - I_LED_OFF <= 0` is rejected before OD/MBLL.
++- No absolute-value correction is applied.
+ 
+-## Installation
+-
+-Copy the updated files over the existing `noctinirs-fnirs-liveview-offline` folder, preserving the folder structure. Then run:
+-
+-```bash
+-npm run check
+-npm start
+-```
++## Interface behavior
+ 
+-Open `http://localhost:8000`.
++- Start in SCAN/SINGLE turns the LEDs on immediately.
++- DARK is an explicit LED-off diagnostic mode.
++- Diagnostics show paired valid-slot coverage and ON/OFF under-K counts.
++- Selected-channel details expose `I_LED_ON`, `I_LED_OFF`, and `I_corrected` at both wavelengths.
++- The reset button clears paired-status/baseline state; it does not launch a separate DARK capture.
+diff -ruN old/software/PAIRED_LED_OFF_V2.md new/software/PAIRED_LED_OFF_V2.md
+--- old/software/PAIRED_LED_OFF_V2.md	1970-01-01 00:00:00.000000000 +0000
++++ new/software/PAIRED_LED_OFF_V2.md	2026-07-17 05:09:15.198929503 +0000
+@@ -0,0 +1,16 @@
++# Host handling for paired LED-OFF protocol v2
++
++1. Decode both fNIRS phase records.
++2. Key pending records by `UDP session_id + fNIRS frame_id`.
++3. Require one `led_on` and one `led_off` record.
++4. Validate each slot independently:
++   - valid bit set in both phases;
++   - no under-K bit;
++   - no CRC-drop bit;
++   - equal ON/OFF sample count;
++   - exact configured K when config v2 is available;
++   - four finite PD averages.
++5. Calculate signed corrected intensity for valid slots only.
++6. Expire unmatched phases; never use a previous frame as a fallback.
++
++The firmware currently uses K=5 at 4 kSPS with 1000 us settling guards for both phases. The bridge reads these values from the v2 config record rather than hard-coding them. If the config packet has not yet arrived, the firmware under-K masks remain authoritative and ON/OFF counts must still be equal.
+diff -ruN old/software/PROCESSING_LIBRARY.md new/software/PROCESSING_LIBRARY.md
+--- old/software/PROCESSING_LIBRARY.md	2026-07-16 12:44:36.000000000 +0000
++++ new/software/PROCESSING_LIBRARY.md	2026-07-17 05:09:15.077314409 +0000
+@@ -127,12 +127,15 @@
+ The live-view sequence is:
+ 
+ ```text
+-MODE DARK -> median I_LED_OFF profile
+-MODE SCAN/SINGLE -> I_corrected = I_LED_ON - I_LED_OFF
+-corrected baseline -> OD -> optional short-separation regression -> MBLL
++paired_v2 LED-ON + LED-OFF records with the same session/frame ID
++-> I_corrected = I_LED_ON - I_LED_OFF
++-> corrected baseline
++-> OD
++-> optional short-separation regression
++-> MBLL
+ ```
+ 
+-The current firmware stream contains one intensity matrix per frame, so this software version obtains a separate LED-off profile in `MODE DARK`. It does not yet receive per-slot real-time I_LED_OFF values from the 2-ms inter-slot interval.
++The bridge rejects incomplete, under-K, CRC-affected, or unequal-count phase pairs. It never substitutes an LED-OFF value from another frame.
+ 
+ ## MBLL with short-separation regression
+ 
+diff -ruN old/software/README.md new/software/README.md
+--- old/software/README.md	2026-07-16 12:44:36.000000000 +0000
++++ new/software/README.md	2026-07-17 05:09:14.009212904 +0000
+@@ -1,97 +1,102 @@
+-# NoctiNIRS fNIRS Validation Live View
++# NoctiNIRS fNIRS validation live view
+ 
++This package is matched to the NoctiNIRS `paired_v2` firmware.
+ 
+-## New white/blue UI prototype
+-
+-The dashboard includes a welcome/setup workflow, automatic I_LED_OFF profile capture, corrected optical-intensity processing, and a 16-channel bilateral ECG-style sweep display. See `UI_PROTOTYPE.md` for the current interface and processing behavior.
+-
+-Dashboard ini dibuat khusus untuk firmware `app_main_fnirs_test.c`.
+-
+-## Arsitektur
++## Architecture
+ 
+ ```text
+-ESP32-S3 NoctiNIRS
+-  UDP control 192.168.4.1:3333
+-  UDP stream  -> laptop:3334
+-              |
+-              v
+-bridge.js (Node.js)
+-  UDP 3334 <-> WebSocket 8080
+-  optional static HTTP 8000
+-              |
+-              v
+-public/index.html + app.js
++ESP32-S3
++  UDP control :3333
++  UDP stream  :3334
++        |
++        v
++bridge.js
++  strict LED-ON/LED-OFF pairing
++  WebSocket :8080
++  HTTP :8000
++        |
++        v
++browser dashboard
+ ```
+ 
+-Browser tidak dapat membuka UDP socket secara langsung. Karena itu `bridge.js` wajib tetap berjalan walaupun halaman dibuka menggunakan VS Code Live Server.
++The browser cannot receive UDP directly, so `bridge.js` must remain open.
+ 
+-## Persyaratan
++## Requirements
+ 
+-- Node.js 18 atau lebih baru
+-- Laptop tersambung ke Wi-Fi NoctiNIRS:
++- Node.js 18 or newer
++- Laptop connected to:
+   - SSID: `NOCTINIRS`
+   - Password: `12345678`
+-- Firmware fNIRS test sudah berjalan pada ESP32-S3
++- Firmware protocol `paired_v2`
+ 
+-## Menjalankan dengan server bawaan
++## Run
+ 
+ ```bash
+ npm install
++npm run check
+ npm start
+ ```
+ 
+-Buka:
++Open `http://localhost:8000`.
++
++On an offline laptop, the supplied package can be started with `start_bridge_windows.bat`. Keep the terminal window open.
++
++## Corrected acquisition flow
++
++For `SCAN` or `SINGLE`, Start now sends:
+ 
+ ```text
+-http://localhost:8000
++STOP
++MODE SCAN or MODE SINGLE
++CURRENT 735 ...
++CURRENT 850 ...
++START
++STATUS
+ ```
+ 
+-## Menjalankan dengan VS Code Live Server
+-
+-1. Jalankan bridge:
++There is no automatic standalone DARK recording. Each firmware frame carries paired LED-ON and LED-OFF phase records. The bridge accepts only records with the same UDP session and `frame_id`, then calculates:
+ 
+-```bash
+-npm install
+-npm start
++```text
++I_corrected(t) = I_LED_ON(t) - I_LED_OFF(t)
++OD(t) = ln(I_corrected_baseline / I_corrected(t))
++OD -> optional short-separation regression -> MBLL
+ ```
+ 
+-2. Di VS Code, buka folder `public`.
+-3. Klik kanan `index.html` lalu pilih **Open with Live Server**.
+-4. Halaman Live Server tetap terhubung ke `ws://localhost:8080`.
++`I_LED_OFF` may contain photodiode dark current, ambient light, electronic offset, and other LED-off contributions.
+ 
+-## Alur acquisition dengan koreksi I_LED_OFF
++## Strict validity policy
+ 
+-Untuk mode `SCAN` atau `SINGLE`, tombol **Start acquisition** menjalankan urutan otomatis:
++A wavelength-specific slot is processed only when:
+ 
+-```text
+-1. STOP acquisition lama
+-2. MODE DARK
+-3. Rekam I_LED_OFF selama durasi yang dipilih
+-4. Hitung median per channel dan wavelength
+-5. STOP lalu pindah ke MODE SCAN/SINGLE
+-6. I_corrected = I_LED_ON - I_LED_OFF
+-7. Rekam baseline dari I_corrected
+-8. OD -> short-separation regression (opsional) -> MBLL
+-```
++- both phase records are present for the same session/frame;
++- ON and OFF have equal sample counts;
++- sample count equals the firmware-configured K when config metadata is available;
++- neither phase is marked under-K;
++- neither phase reports a CRC-dropped sample;
++- all four PD averages are finite.
+ 
+-Profil I_LED_OFF tidak disimpan lintas sesi karena harus direkam kembali ketika posisi probe atau pencahayaan berubah. Tombol **Recapture I_LED_OFF** tersedia pada sidebar.
++The bridge never substitutes a previous LED-OFF value. Non-positive corrected intensity is rejected rather than hidden with an absolute-value operation.
+ 
+-Versi ini menggunakan profil terpisah dari `MODE DARK`. Firmware saat ini belum mengirim rata-rata I_LED_OFF real-time dari interval OFF 2 ms pada setiap slot.
++## Expected normal status
+ 
+-## Urutan validasi yang disarankan
++```text
++protocol=paired_v2
++adc_sps=4000
++k_on=5 k_off=5
++min_n_on=5 min_n_off=5
++underk_on=0 underk_off=0
++partial=0
++```
+ 
+-1. Hubungkan laptop ke SSID `NOCTINIRS`.
+-2. Buka dashboard dan pastikan WebSocket **Connected**.
+-3. Tekan **Connect device** sampai status Device menjadi **Online**.
+-4. Pilih mode `SCAN` atau `SINGLE` dan aktifkan **Use I_LED_OFF correction**.
+-5. Tekan **Start**; software akan mengambil profil LED-off lebih dahulu.
+-6. Periksa status I_LED_OFF menjadi **Ready** sebelum baseline dimulai.
+-7. Periksa `UNDER-K`, CRC, dan valid-slot diagnostics.
+-8. Gunakan **Recapture I_LED_OFF** setelah probe bergerak atau kondisi cahaya berubah.
++The UI should report approximately:
++
++```text
++Paired 20/20 · UK 0/0
++```
+ 
+-Perubahan mode, slot, dan current hanya dapat dilakukan saat acquisition berhenti.
++`DARK` remains available only as a diagnostic mode; LEDs intentionally remain off in that mode.
+ 
+-## Command firmware yang digunakan
++## Device commands
+ 
+ ```text
+ HELLO
+@@ -102,13 +107,15 @@
+ MODE SINGLE
+ MODE SCAN
+ SLOT 0..19
+-CURRENT 735 0..20
+-CURRENT 850 0..20
++CURRENT 735 0..50
++CURRENT 850 0..50
+ START
+ STOP
+ ```
+ 
+-## Pengujian tanpa device
++Mode, slot, and current changes must be made while acquisition is stopped.
++
++## Simulator
+ 
+ Terminal 1:
+ 
+@@ -122,36 +129,8 @@
+ npm run simulate
+ ```
+ 
+-Kemudian buka `http://localhost:8000`. Simulator mendukung command, mode DARK/SINGLE/SCAN, dan stream 10 Hz sehingga seluruh pipeline dapat diuji sebelum memakai hardware.
+-
+-## Tampilan dan data
+-
+-- Grafik live empat photodetector untuk slot terpilih
+-- Raw counts atau delta terhadap reference
+-- Tabel 20 slot dengan `n_used`, valid, under-K, dan CRC-drop
+-- Frame rate, packet loss, outer UDP CRC, dan stream CRC
+-- Session, frame ID, current configuration, dan control log
+-- Perekaman CSV untuk slot yang sedang dipilih
+-
+-CSV merekam satu baris per frame untuk slot terpilih dan memiliki batas keselamatan 100.000 baris.
+-
+-## Port default
+-
+-| Fungsi | Port |
+-|---|---:|
+-| Device UDP control | 3333 |
+-| Laptop UDP stream/reply | 3334 |
+-| WebSocket | 8080 |
+-| HTTP static server | 8000 |
+-
+-## Opsi bridge
+-
+-```bash
+-node bridge.js --device 192.168.4.1 --control-port 3333 --stream-port 3334 --ws-port 8080 --http-port 8000
+-```
+-
+-Device IP juga dapat diubah langsung dari dashboard.
++Then open `http://localhost:8000`.
+ 
+-## Processing library
++## Processing
+ 
+-Geometry, MBLL, and selectable 5-mm/8-mm/both short-separation modules are documented in `PROCESSING_LIBRARY.md`.
++Channel geometry, OD, MBLL, DPF, and selectable 5-mm/8-mm/both short-separation processing are documented in `PROCESSING_LIBRARY.md`. Protocol details are in `PAIRED_LED_OFF_V2.md`.
+diff -ruN old/software/UI_PROTOTYPE.md new/software/UI_PROTOTYPE.md
+--- old/software/UI_PROTOTYPE.md	2026-07-16 12:44:36.000000000 +0000
++++ new/software/UI_PROTOTYPE.md	2026-07-17 05:09:14.023317128 +0000
+@@ -1,30 +1,21 @@
+ # NoctiNIRS white/blue live-view prototype
+ 
+-This UI pass introduces:
++The interface provides:
+ 
+-- White scientific-instrument theme with blue typography, borders, and grids.
+-- Welcome screen with device state, processing summary, and probe preview.
+-- Four-step setup flow: Device, MBLL, Short Separation, Session.
+-- Live layout aligned to the physical probe:
+-  - CH1–CH8 in the left hemisphere column.
+-  - CH9–CH16 in the right hemisphere column.
+-- Sixteen simultaneous compact plots.
+-- ECG-style sweep plotting:
+-  - Static CSS grid.
+-  - One new segment drawn per sample.
+-  - Narrow erase gap ahead of the live cursor.
+-  - Full redraw only after resize, scale/window change, or explicit clear.
+-- Hb, optical-density, and intensity display modes.
+-- Automatic I_LED_OFF profile capture before SCAN/SINGLE acquisition.
+-- Channel details showing I_LED_ON / I_LED_OFF / I_corrected for both wavelengths.
+-- MBLL parameter controls and short-separation modes: disabled, 5 mm, 8 mm, or both.
+-- Demo mode for UI evaluation without hardware.
++- white scientific-instrument theme with blue typography, borders, and grids;
++- welcome/setup workflow;
++- CH1–CH8 left and CH9–CH16 right probe-aligned layout;
++- sixteen simultaneous ECG-style sweep plots;
++- Hb, optical-density, and intensity views;
++- paired per-frame `I_LED_ON`, `I_LED_OFF`, and `I_corrected` details;
++- MBLL controls and short-separation modes: disabled, 5 mm, 8 mm, or both;
++- simulator/demo operation without hardware.
+ 
+-## Current live-processing behavior
++## Live-processing behavior
+ 
+-The live prototype first records a wavelength- and channel-specific I_LED_OFF profile in `MODE DARK`. It then switches automatically to the requested SCAN/SINGLE mode and applies `I_corrected = I_LED_ON - I_LED_OFF`. The corrected intensities are used to create the user-configurable baseline, convert to optical density, and run MBLL. When short-separation correction is enabled, rolling OD-domain regression is used before MBLL conversion.
++Firmware protocol v2 measures LED-OFF and LED-ON locally for each optical slot. The Node bridge waits for both phase records with the same session and frame ID, rejects incomplete or invalid pairs, and computes `I_corrected = I_LED_ON - I_LED_OFF`.
+ 
+-The firmware/raw stream remains unchanged. Therefore, this version uses a separate LED-off profile rather than real-time I_LED_OFF values sampled from every inter-slot OFF interval.
++The corrected intensity creates the physiological baseline, then optical density, optional OD-domain short-separation regression, and MBLL results. The UI does not perform a standalone DARK profile capture. Selecting DARK is a deliberate diagnostic action and keeps all LEDs off.
+ 
+ ## Run
+ 
+@@ -33,4 +24,4 @@
+ npm start
+ ```
+ 
+-Open `http://localhost:8000`. Use **Preview demo** to inspect the 16-channel sweep display without a device.
++Open `http://localhost:8000` or use **Preview demo** without hardware.
+diff -ruN old/software/bridge.js new/software/bridge.js
+--- old/software/bridge.js	2026-07-14 04:11:58.000000000 +0000
++++ new/software/bridge.js	2026-07-17 05:06:13.771592524 +0000
+@@ -17,6 +17,7 @@
+   parseStreamFrame,
+   parseUdpPacket,
+ } from "./protocol.js";
++import { PairedFrameAssembler } from "./paired-frame.js";
+ 
+ const __filename = fileURLToPath(import.meta.url);
+ const __dirname = path.dirname(__filename);
+@@ -52,8 +53,13 @@
+   packetLoss: 0,
+   duplicateOrOutOfOrder: 0,
+   fnirsFrames: 0,
++  fnirsPhaseRecords: 0,
++  pairedFrames: 0,
++  unpairedPhaseDrops: 0,
+   partialFrames: 0,
+   underKSlots: 0,
++  underKOnSlots: 0,
++  underKOffSlots: 0,
+   crcDroppedSlots: 0,
+   lastUdpSequence: null,
+   lastUdpSessionId: null,
+@@ -70,6 +76,7 @@
+ let frameRateWindow = [];
+ let udpSocketReady = false;
+ let shuttingDown = false;
++const pairedFrameAssembler = new PairedFrameAssembler({ timeoutMs: 1500, maxPending: 64 });
+ 
+ function isValidIpv4(address) {
+   const parts = String(address).trim().split(".");
+@@ -295,6 +302,45 @@
+   };
+ 
+   if (decoded.kind === "fnirs_frame") {
++    stats.fnirsPhaseRecords += 1;
++
++    if (decoded.paired && Number(decoded.version) >= 2) {
++      const assembly = pairedFrameAssembler.push({
++        sessionId: udp.header.sessionId,
++        frame: decoded,
++        envelope,
++        kOn: latestConfig?.kOn ?? latestConfig?.kFixed ?? null,
++        kOff: latestConfig?.kOff ?? latestConfig?.kFixed ?? null,
++      });
++      stats.unpairedPhaseDrops += assembly.dropped;
++      if (!assembly.complete) return;
++
++      const { frame, onEnvelope, offEnvelope } = assembly.complete;
++      stats.fnirsFrames += 1;
++      stats.pairedFrames += 1;
++      if (frame.partial) stats.partialFrames += 1;
++      stats.underKSlots += frame.underKSlotCount;
++      stats.underKOnSlots += frame.underKOnSlotCount;
++      stats.underKOffSlots += frame.underKOffSlotCount;
++      stats.crcDroppedSlots += frame.crcSlotCount;
++      frameRateWindow.push(Date.now());
++
++      latestFrame = {
++        type: "fnirs_frame",
++        ...onEnvelope,
++        pair: {
++          ledOnUdpSequence: onEnvelope?.udp?.sequence ?? null,
++          ledOffUdpSequence: offEnvelope?.udp?.sequence ?? null,
++          ledOnStreamSequence: onEnvelope?.stream?.sequence ?? null,
++          ledOffStreamSequence: offEnvelope?.stream?.sequence ?? null,
++        },
++        data: frame,
++      };
++      broadcast(latestFrame);
++      return;
++    }
++
++    // Legacy v1 compatibility: one record is forwarded without LED-OFF pairing.
+     stats.fnirsFrames += 1;
+     if (decoded.partial) stats.partialFrames += 1;
+     stats.underKSlots += decoded.underKSlotCount;
+@@ -305,8 +351,14 @@
+     return;
+   }
+ 
++  if (decoded.kind === "session") {
++    latestSession = decoded;
++    // A new session must not inherit timing/K metadata from a previous run.
++    // The paired-frame assembler can temporarily rely on the firmware's
++    // under-K masks until the v2 config record arrives.
++    latestConfig = null;
++  }
+   if (decoded.kind === "fnirs_config") latestConfig = decoded;
+-  if (decoded.kind === "session") latestSession = decoded;
+   if (decoded.kind === "unsupported") stats.unsupportedRecords += 1;
+ 
+   broadcast({ type: decoded.kind, ...envelope, data: decoded });
+@@ -405,6 +457,7 @@
+ 
+ const maintenanceTimer = setInterval(() => {
+   const now = Date.now();
++  stats.unpairedPhaseDrops += pairedFrameAssembler.purge(now);
+   const lastSeen = Math.max(stats.lastFrameAt, stats.lastControlAt);
+   if (udpSocketReady) {
+     if (lastSeen === 0 || now - lastSeen > 5000) sendDeviceCommand("HELLO");
+diff -ruN old/software/package.json new/software/package.json
+--- old/software/package.json	2026-07-14 04:11:58.000000000 +0000
++++ new/software/package.json	2026-07-17 04:54:19.506311845 +0000
+@@ -8,7 +8,7 @@
+     "start": "node bridge.js",
+     "start:local-device": "node bridge.js --device 127.0.0.1",
+     "simulate": "node simulator.js",
+-    "check": "node --check bridge.js && node --check protocol.js && node --check simulator.js && node --check public/app.js && node --check public/lib/fnirs-geometry.js && node --check public/lib/fnirs-mbll.js && node --check public/lib/fnirs-short-separation.js && npm test",
++    "check": "node --check bridge.js && node --check paired-frame.js && node --check protocol.js && node --check simulator.js && node --check public/app.js && node --check public/lib/fnirs-geometry.js && node --check public/lib/fnirs-mbll.js && node --check public/lib/fnirs-short-separation.js && npm test",
+     "test": "node tests/fnirs-processing.test.js"
+   },
+   "engines": {
+diff -ruN old/software/paired-frame.js new/software/paired-frame.js
+--- old/software/paired-frame.js	1970-01-01 00:00:00.000000000 +0000
++++ new/software/paired-frame.js	2026-07-17 05:06:13.771208341 +0000
+@@ -0,0 +1,211 @@
++// ============================================================
++// File: paired-frame.js
++// Strict assembly of NoctiNIRS paired LED-ON / LED-OFF phase records.
++// A corrected optical frame is emitted only when both phase records with the
++// same UDP session and frame_id are present. Missing phases are never replaced
++// with a previous frame, which prevents silent stale-dark subtraction.
++// ============================================================
++
++const SLOT_COUNT = 20;
++const SLOT_MASK = 0x000fffff;
++
++function popcount32(value) {
++  let v = value >>> 0;
++  let count = 0;
++  while (v !== 0) {
++    v &= v - 1;
++    count += 1;
++  }
++  return count;
++}
++
++function finiteAverages(slot) {
++  return Array.isArray(slot?.averages)
++    && slot.averages.length >= 4
++    && slot.averages.slice(0, 4).every((value) => Number.isFinite(Number(value)));
++}
++
++function phaseSlotValid(slot, requiredK) {
++  const nUsed = Number(slot?.nUsed);
++  const countIsValid = Number.isInteger(nUsed)
++    && nUsed > 0
++    && (requiredK === null || nUsed === requiredK);
++  return Boolean(slot)
++    && slot.valid !== false
++    && slot.underK !== true
++    && slot.crcDropped !== true
++    && countIsValid
++    && finiteAverages(slot);
++}
++
++export function buildPairedFrame(ledOnFrame, ledOffFrame, {
++  kOn = null,
++  kOff = null,
++} = {}) {
++  if (!ledOnFrame || !ledOffFrame) throw new TypeError("Both LED-ON and LED-OFF frames are required");
++  if (ledOnFrame.frameId !== ledOffFrame.frameId) throw new RangeError("Phase frame_id mismatch");
++  if (ledOnFrame.phase !== "led_on" || ledOffFrame.phase !== "led_off") {
++    throw new RangeError("Invalid LED phase ordering");
++  }
++  if (!Array.isArray(ledOnFrame.slots) || !Array.isArray(ledOffFrame.slots)) {
++    throw new TypeError("Both phase records must contain slots");
++  }
++
++  const requiredOn = Number.isInteger(Number(kOn)) && Number(kOn) > 0 ? Number(kOn) : null;
++  const requiredOff = Number.isInteger(Number(kOff)) && Number(kOff) > 0 ? Number(kOff) : null;
++  const slots = [];
++  let validMask = 0;
++  let underKMask = 0;
++  let crcMask = 0;
++  let underKOnSlotCount = 0;
++  let underKOffSlotCount = 0;
++
++  for (let slotIndex = 0; slotIndex < SLOT_COUNT; slotIndex += 1) {
++    const onSlot = ledOnFrame.slots[slotIndex];
++    const offSlot = ledOffFrame.slots[slotIndex];
++    const bit = 1 << slotIndex;
++
++    const onCount = Number(onSlot?.nUsed ?? 0);
++    const offCount = Number(offSlot?.nUsed ?? 0);
++    const underKOn = !onSlot
++      || onCount <= 0
++      || (requiredOn !== null && onCount !== requiredOn)
++      || onSlot?.underK === true;
++    const underKOff = !offSlot
++      || offCount <= 0
++      || (requiredOff !== null && offCount !== requiredOff)
++      || offSlot?.underK === true;
++    const unbalancedCount = onCount !== offCount;
++    const underK = underKOn || underKOff || unbalancedCount;
++    const crcDropped = onSlot?.crcDropped === true || offSlot?.crcDropped === true;
++    const valid = !unbalancedCount
++      && phaseSlotValid(onSlot, requiredOn)
++      && phaseSlotValid(offSlot, requiredOff);
++
++    const ledOnAverages = finiteAverages(onSlot)
++      ? onSlot.averages.slice(0, 4).map(Number)
++      : [null, null, null, null];
++    const ledOffAverages = finiteAverages(offSlot)
++      ? offSlot.averages.slice(0, 4).map(Number)
++      : [null, null, null, null];
++    const averages = ledOnAverages.map((value, pd) => (
++      Number.isFinite(value) && Number.isFinite(ledOffAverages[pd])
++        ? value - ledOffAverages[pd]
++        : null
++    ));
++
++    if (valid) validMask |= bit;
++    if (underK) underKMask |= bit;
++    if (underKOn) underKOnSlotCount += 1;
++    if (underKOff) underKOffSlotCount += 1;
++    if (crcDropped) crcMask |= bit;
++
++    slots.push({
++      slotIndex,
++      sourceId: onSlot?.sourceId ?? offSlot?.sourceId ?? Math.floor(slotIndex / 2),
++      wavelengthNm: onSlot?.wavelengthNm ?? offSlot?.wavelengthNm ?? ((slotIndex & 1) === 0 ? 735 : 850),
++      valid,
++      underK,
++      crcDropped,
++      nUsed: Math.min(Number(onSlot?.nUsed ?? 0), Number(offSlot?.nUsed ?? 0)),
++      nUsedOn: Number(onSlot?.nUsed ?? 0),
++      nUsedOff: Number(offSlot?.nUsed ?? 0),
++      averages,
++      ledOnAverages,
++      ledOffAverages,
++    });
++  }
++
++  const partial = ledOnFrame.partial === true
++    || ledOffFrame.partial === true
++    || (validMask & SLOT_MASK) !== SLOT_MASK;
++
++  return {
++    kind: "fnirs_frame",
++    version: Math.max(Number(ledOnFrame.version) || 2, Number(ledOffFrame.version) || 2),
++    flags: (partial ? 0x01 : 0x00) | 0x04,
++    frameId: ledOnFrame.frameId,
++    partial,
++    phase: "paired",
++    paired: true,
++    kOn: requiredOn,
++    kOff: requiredOff,
++    validMask: validMask >>> 0,
++    underKMask: underKMask >>> 0,
++    crcMask: crcMask >>> 0,
++    validSlotCount: popcount32(validMask & SLOT_MASK),
++    underKSlotCount: popcount32(underKMask & SLOT_MASK),
++    underKOnSlotCount,
++    underKOffSlotCount,
++    crcSlotCount: popcount32(crcMask & SLOT_MASK),
++    slots,
++    correctedSlots: slots,
++    ledOnSlots: ledOnFrame.slots,
++    ledOffSlots: ledOffFrame.slots,
++  };
++}
++
++export class PairedFrameAssembler {
++  constructor({ timeoutMs = 1500, maxPending = 64 } = {}) {
++    this.timeoutMs = Math.max(100, Number(timeoutMs) || 1500);
++    this.maxPending = Math.max(4, Number(maxPending) || 64);
++    this.pending = new Map();
++  }
++
++  purge(now = Date.now()) {
++    let dropped = 0;
++    for (const [key, entry] of this.pending) {
++      if (now - entry.updatedAt > this.timeoutMs) {
++        this.pending.delete(key);
++        dropped += 1;
++      }
++    }
++    while (this.pending.size > this.maxPending) {
++      const oldestKey = this.pending.keys().next().value;
++      this.pending.delete(oldestKey);
++      dropped += 1;
++    }
++    return dropped;
++  }
++
++  push({ sessionId, frame, envelope, kOn = null, kOff = null, now = Date.now() }) {
++    const dropped = this.purge(now);
++    if (!frame?.paired || Number(frame.version) < 2) {
++      return { legacy: true, dropped, complete: null };
++    }
++    if (frame.phase !== "led_on" && frame.phase !== "led_off") {
++      return { legacy: false, dropped: dropped + 1, complete: null };
++    }
++
++    const key = `${Number(sessionId) >>> 0}:${Number(frame.frameId) & 0xffff}`;
++    const entry = this.pending.get(key) ?? {
++      sessionId: Number(sessionId) >>> 0,
++      frameId: Number(frame.frameId) & 0xffff,
++      createdAt: now,
++      updatedAt: now,
++      led_on: null,
++      led_off: null,
++    };
++    entry.updatedAt = now;
++    entry[frame.phase] = { frame, envelope };
++    this.pending.delete(key);
++    this.pending.set(key, entry);
++
++    if (!entry.led_on || !entry.led_off) {
++      const overflowDropped = this.purge(now);
++      return { legacy: false, dropped: dropped + overflowDropped, complete: null };
++    }
++
++    this.pending.delete(key);
++    const pairedFrame = buildPairedFrame(entry.led_on.frame, entry.led_off.frame, { kOn, kOff });
++    return {
++      legacy: false,
++      dropped,
++      complete: {
++        frame: pairedFrame,
++        onEnvelope: entry.led_on.envelope,
++        offEnvelope: entry.led_off.envelope,
++      },
++    };
++  }
++}
+diff -ruN old/software/protocol.js new/software/protocol.js
+--- old/software/protocol.js	2026-07-14 04:11:58.000000000 +0000
++++ new/software/protocol.js	2026-07-17 04:45:23.478914425 +0000
+@@ -192,20 +192,45 @@
+ }
+ 
+ export function decodeFnirsConfigV1(payload) {
+-  if (payload.length !== 12) {
++  if (payload.length !== 12 && payload.length !== 16) {
+     return { kind: "decode_error", error: "fnirs_config_size", actual: payload.length };
+   }
++
++  const version = payload.readUInt8(0);
++  if (version >= 2 && payload.length === 16) {
++    return {
++      kind: "fnirs_config",
++      version,
++      mapMode: payload.readUInt8(1),
++      frameRateHz: payload.readUInt8(2),
++      slotCount: payload.readUInt8(3),
++      kOn: payload.readUInt8(4),
++      kOff: payload.readUInt8(5),
++      kFixed: payload.readUInt8(4),
++      current735Ma: payload.readUInt8(6),
++      current850Ma: payload.readUInt8(7),
++      onSettleUs: payload.readUInt16LE(8),
++      onWindowUs: payload.readUInt16LE(10),
++      offMinSettleUs: payload.readUInt16LE(12),
++      slotPeriodUs: payload.readUInt16LE(14),
++      pairedLedOff: true,
++    };
++  }
++
+   return {
+     kind: "fnirs_config",
+-    version: payload.readUInt8(0),
++    version,
+     mapMode: payload.readUInt8(1),
+     frameRateHz: payload.readUInt8(2),
+     slotCount: payload.readUInt8(3),
+     kFixed: payload.readUInt8(4),
++    kOn: payload.readUInt8(4),
++    kOff: null,
+     current735Ma: payload.readUInt8(5),
+     current850Ma: payload.readUInt8(6),
+     settleUs: payload.readUInt16LE(8),
+     windowUs: payload.readUInt16LE(10),
++    pairedLedOff: false,
+   };
+ }
+ 
+@@ -268,6 +293,8 @@
+     flags,
+     frameId,
+     partial: (flags & 0x01) !== 0,
++    phase: (flags & 0x02) !== 0 ? "led_off" : "led_on",
++    paired: (flags & 0x04) !== 0,
+     validMask,
+     underKMask,
+     crcMask,
+diff -ruN old/software/public/app.js new/software/public/app.js
+--- old/software/public/app.js	2026-07-16 12:44:36.000000000 +0000
++++ new/software/public/app.js	2026-07-17 05:10:07.378973068 +0000
+@@ -3,7 +3,6 @@
+   SHORT_CHANNELS,
+   extractNamedIntensities,
+   estimateReference,
+-  ledOffCorrectIntensity,
+   mbllFromOpticalDensity,
+   opticalDensity,
+   resolveDpf,
+@@ -25,8 +24,8 @@
+   displayNotice: $("displayNotice"), clearSweepsButton: $("clearSweepsButton"), leftChannelGrid: $("leftChannelGrid"), rightChannelGrid: $("rightChannelGrid"), channelCardTemplate: $("channelCardTemplate"),
+   selectedChannelName: $("selectedChannelName"), selectedHemisphere: $("selectedHemisphere"), selectedGeometry: $("selectedGeometry"), selectedQualityDot: $("selectedQualityDot"), selectedHbO: $("selectedHbO"), selectedHbR: $("selectedHbR"), selectedHbT: $("selectedHbT"), selectedI735Label: $("selectedI735Label"), selectedI850Label: $("selectedI850Label"), selectedOD735Label: $("selectedOD735Label"), selectedOD850Label: $("selectedOD850Label"), selectedI735: $("selectedI735"), selectedI850: $("selectedI850"), selectedOD735: $("selectedOD735"), selectedOD850: $("selectedOD850"), selectedScrMode: $("selectedScrMode"), selectedRegressor: $("selectedRegressor"), selectedBeta735: $("selectedBeta735"), selectedBeta850: $("selectedBeta850"), qualityMeterFill: $("qualityMeterFill"), selectedQualityText: $("selectedQualityText"), selectedValidSamples: $("selectedValidSamples"),
+   setupForm: $("setupForm"), setupBackButton: $("setupBackButton"), setupNextButton: $("setupNextButton"), launchLiveButton: $("launchLiveButton"), setupConnectButton: $("setupConnectButton"), setupDeviceBadge: $("setupDeviceBadge"),
+-  deviceIpInput: $("deviceIpInput"), modeSelect: $("modeSelect"), current735Input: $("current735Input"), current850Input: $("current850Input"), baselineDurationInput: $("baselineDurationInput"), baselineEstimatorSelect: $("baselineEstimatorSelect"), ledOffCorrectionInput: $("ledOffCorrectionInput"), ledOffDurationInput: $("ledOffDurationInput"), dpf735Input: $("dpf735Input"), dpf850Input: $("dpf850Input"), ageYearsInput: $("ageYearsInput"), computedDpfText: $("computedDpfText"), manualDpfFields: $("manualDpfFields"), ageDpfFields: $("ageDpfFields"), sessionNameInput: $("sessionNameInput"), subjectIdInput: $("subjectIdInput"), protocolSelect: $("protocolSelect"), operatorInput: $("operatorInput"), sessionNotesInput: $("sessionNotesInput"),
+-  liveScrModeSelect: $("liveScrModeSelect"), liveDpf735Input: $("liveDpf735Input"), liveDpf850Input: $("liveDpf850Input"), liveBaselineDurationInput: $("liveBaselineDurationInput"), liveLedOffDurationInput: $("liveLedOffDurationInput"), applyLiveSettingsButton: $("applyLiveSettingsButton"),
++  deviceIpInput: $("deviceIpInput"), modeSelect: $("modeSelect"), current735Input: $("current735Input"), current850Input: $("current850Input"), baselineDurationInput: $("baselineDurationInput"), baselineEstimatorSelect: $("baselineEstimatorSelect"), ledOffCorrectionInput: $("ledOffCorrectionInput"), dpf735Input: $("dpf735Input"), dpf850Input: $("dpf850Input"), ageYearsInput: $("ageYearsInput"), computedDpfText: $("computedDpfText"), manualDpfFields: $("manualDpfFields"), ageDpfFields: $("ageDpfFields"), sessionNameInput: $("sessionNameInput"), subjectIdInput: $("subjectIdInput"), protocolSelect: $("protocolSelect"), operatorInput: $("operatorInput"), sessionNotesInput: $("sessionNotesInput"),
++  liveScrModeSelect: $("liveScrModeSelect"), liveDpf735Input: $("liveDpf735Input"), liveDpf850Input: $("liveDpf850Input"), liveBaselineDurationInput: $("liveBaselineDurationInput"), applyLiveSettingsButton: $("applyLiveSettingsButton"),
+   diagWsValue: $("diagWsValue"), diagDeviceValue: $("diagDeviceValue"), diagSessionValue: $("diagSessionValue"), diagLastFrameValue: $("diagLastFrameValue"), diagCrcValue: $("diagCrcValue"), diagFrameQualityValue: $("diagFrameQualityValue"), diagLedOffValue: $("diagLedOffValue"), deviceLog: $("deviceLog"), clearLogButton: $("clearLogButton"), requestStatusButton: $("requestStatusButton"), markerMenu: $("markerMenu"),
+ };
+ 
+@@ -38,7 +37,6 @@
+   baselineDuration: 10,
+   baselineEstimator: "median",
+   ledOffCorrection: true,
+-  ledOffDuration: 5,
+   dpfMode: "manual",
+   dpf735: 6.0,
+   dpf850: 6.0,
+@@ -370,147 +368,63 @@
+   elements.diagLedOffValue.textContent = text;
+ }
+ 
+-function resetLedOffProfile(reason = "Not set") {
++function resetLedOffProfile(reason = "Waiting for paired frames") {
+   state.ledOff = {
+     ready: false,
+-    samples: {},
++    realtime: true,
+     references: {},
+     count: 0,
+-    target: Math.max(3, Math.round(Number(state.config.ledOffDuration) * Math.max(1, state.frameRateHz || 10))),
+     capturedAt: null,
+     invalidKeys: [],
+   };
+   updateLedOffUi(state.config.ledOffCorrection ? reason : "Disabled");
+ }
+ 
+-function collectLedOffFrame(message) {
+-  const named = extractNamedIntensities(message.data);
+-  for (const key of intensityMeasurementKeys()) {
+-    const value = named[key];
+-    if (!Number.isFinite(value)) continue;
+-    if (!state.ledOff.samples[key]) state.ledOff.samples[key] = [];
+-    state.ledOff.samples[key].push(value);
+-  }
+-
+-  state.ledOff.count += 1;
+-  const progressSeconds = state.ledOff.count / Math.max(1, state.frameRateHz || 10);
+-  const progress = Math.min(100, Math.round(state.ledOff.count / state.ledOff.target * 100));
+-  updateLedOffUi(`${Math.min(state.config.ledOffDuration, progressSeconds).toFixed(1)} / ${state.config.ledOffDuration}s`);
+-  elements.displayNotice.textContent = `I_LED_OFF capture ${progress}%`;
+-  if (state.ledOff.count >= state.ledOff.target) finalizeLedOffProfile();
+-}
+-
+-function finalizeLedOffProfile() {
+-  const minimumSamples = Math.max(3, Math.floor(state.ledOff.target * 0.7));
+-  const invalidKeys = [];
+-  const references = {};
+-
+-  for (const key of intensityMeasurementKeys()) {
+-    const values = state.ledOff.samples[key] ?? [];
+-    if (values.length < minimumSamples) {
+-      invalidKeys.push(key);
+-      continue;
+-    }
+-    try { references[key] = estimateReference(values, "median"); }
+-    catch { invalidKeys.push(key); }
++function updatePairedLedOffStatus(message) {
++  if (!state.config.ledOffCorrection) {
++    state.ledOff.ready = false;
++    updateLedOffUi("Disabled");
++    return;
+   }
+ 
+-  state.ledOff.invalidKeys = invalidKeys;
+-  if (invalidKeys.length > 0) {
++  if (message?.data?.paired !== true || message?.data?.phase !== "paired") {
+     state.ledOff.ready = false;
+-    state.running = false;
+-    state.acquisitionPhase = "idle";
+-    sendCommandBatch(["STOP", "STATUS"]);
+-    updateLedOffUi(`Failed · ${invalidKeys.length} missing`);
+-    setLiveState("idle", "I_LED_OFF FAILED");
+-    elements.displayNotice.textContent = "I_LED_OFF profile failed · check UNDER-K / CRC diagnostics";
+-    elements.captureLedOffButton.disabled = !state.deviceOnline;
+-    elements.startPauseButton.disabled = false;
+-    logLine(`I_LED_OFF profile failed: ${invalidKeys.length} measurement keys lacked valid samples`);
++    updateLedOffUi("Protocol mismatch");
+     return;
+   }
+ 
+-  state.ledOff.references = references;
+   state.ledOff.ready = true;
++  state.ledOff.count += 1;
+   state.ledOff.capturedAt = Date.now();
+-  updateLedOffUi("Ready");
+-  logLine(`I_LED_OFF profile ready: ${Object.keys(references).length} wavelength-specific measurements`);
+-
+-  if (state.desiredMode === "DARK") {
+-    state.running = false;
+-    state.acquisitionPhase = "idle";
+-    sendCommandBatch(["STOP", "STATUS"]);
+-    setLiveState("idle", "I_LED_OFF READY");
+-    elements.displayNotice.textContent = "I_LED_OFF profile captured";
+-    elements.startPauseText.textContent = "Start acquisition";
+-    elements.startPauseIcon.textContent = "▶";
+-    elements.captureLedOffButton.disabled = !state.deviceOnline;
+-    elements.startPauseButton.disabled = false;
+-    return;
+-  }
+-
+-  state.acquisitionPhase = "transition";
+-  elements.startPauseButton.disabled = true;
+-  setLiveState("idle", "SWITCHING");
+-  elements.displayNotice.textContent = `Switching to ${state.desiredMode}`;
+-  sendCommandBatch([
+-    "STOP",
+-    `MODE ${state.desiredMode}`,
+-    `CURRENT 735 ${state.config.current735}`,
+-    `CURRENT 850 ${state.config.current850}`,
+-    "START",
+-    "STATUS",
+-  ]);
+-
+-  clearTimeout(state.transitionTimer);
+-  state.transitionTimer = setTimeout(() => {
+-    if (!state.running) return;
+-    state.acquisitionPhase = "baseline";
+-    elements.startPauseButton.disabled = false;
+-    elements.captureLedOffButton.disabled = !state.deviceOnline;
+-    resetBaseline("Collecting I_LED_OFF-corrected baseline");
+-  }, 950);
+-}
+-
+-function startLedOffCapture() {
+-  clearTimeout(state.transitionTimer);
+-  state.desiredMode = state.config.mode;
+-  resetLedOffProfile("Collecting");
+-  updateLedOffUi(`0.0 / ${state.config.ledOffDuration}s`);
+-  state.running = true;
+-  state.acquisitionPhase = "led_off_capture";
+-  state.baseline.ready = false;
+-  elements.captureLedOffButton.disabled = true;
+-  elements.startPauseButton.disabled = false;
+-  state.latestSamples.clear();
+-  clearAllSweeps("Collecting I_LED_OFF profile");
+-  setLiveState("ledoff", "I_LED_OFF");
+-  elements.baselineStatusValue.textContent = "Waiting for I_LED_OFF";
+-  elements.startPauseText.textContent = "Pause acquisition";
+-  elements.startPauseIcon.textContent = "Ⅱ";
+-  sendCommandBatch([
+-    "STOP",
+-    "MODE DARK",
+-    `CURRENT 735 ${state.config.current735}`,
+-    `CURRENT 850 ${state.config.current850}`,
+-    "START",
+-    "STATUS",
+-  ]);
++  const valid = Number(message.data.validSlotCount ?? 0);
++  const underKOn = Number(message.data.underKOnSlotCount ?? 0);
++  const underKOff = Number(message.data.underKOffSlotCount ?? 0);
++  updateLedOffUi(`Paired ${valid}/20 · UK ${underKOn}/${underKOff}`);
+ }
+ 
+ function applyLedOffCorrection(rawNamed) {
+   const output = {};
+   for (const key of intensityMeasurementKeys()) {
+-    const ledOn = rawNamed[key];
+-    const valid = rawNamed[`${key}_VALID`] === true && Number.isFinite(ledOn);
+-    const ledOff = state.config.ledOffCorrection ? state.ledOff.references[key] : 0;
+-    const corrected = valid && Number.isFinite(ledOff)
+-      ? (state.config.ledOffCorrection ? ledOffCorrectIntensity(ledOn, ledOff) : (ledOn > 0 ? ledOn : null))
+-      : null;
++    const paired = rawNamed[`${key}_PAIRED`] === true;
++    const sourceValid = rawNamed[`${key}_VALID`] === true;
++    const ledOn = rawNamed[`${key}_LED_ON`];
++    const ledOff = rawNamed[`${key}_LED_OFF`];
++
++    let corrected = null;
++    if (state.config.ledOffCorrection) {
++      // In paired protocol v2, rawNamed[key] is already computed from the ON
++      // and OFF phase records carrying the same session/frame ID. Never fall
++      // back to a stale standalone DARK profile.
++      if (paired && sourceValid && Number.isFinite(rawNamed[key])) corrected = Number(rawNamed[key]);
++    } else if (sourceValid && Number.isFinite(ledOn) && ledOn > 0) {
++      corrected = Number(ledOn);
++    }
++
+     output[key] = corrected;
+     output[`${key}_VALID`] = Number.isFinite(corrected) && corrected > 0;
+-    output[`${key}_LED_ON`] = valid ? ledOn : null;
+-    output[`${key}_LED_OFF`] = Number.isFinite(ledOff) ? ledOff : null;
++    output[`${key}_LED_ON`] = sourceValid && Number.isFinite(ledOn) ? Number(ledOn) : null;
++    output[`${key}_LED_OFF`] = paired && sourceValid && Number.isFinite(ledOff) ? Number(ledOff) : null;
++    output[`${key}_PAIRED`] = paired;
+   }
+   return output;
+ }
+@@ -774,8 +688,8 @@
+ 
+   if (!sample) {
+     [elements.selectedHbO, elements.selectedHbR, elements.selectedHbT, elements.selectedI735, elements.selectedI850, elements.selectedOD735, elements.selectedOD850, elements.selectedBeta735, elements.selectedBeta850].forEach((element) => { element.textContent = "—"; });
+-    elements.selectedQualityText.textContent = state.acquisitionPhase === "led_off_capture"
+-      ? "I_LED_OFF capture"
++    elements.selectedQualityText.textContent = state.acquisitionPhase === "dark_diagnostic"
++      ? "DARK diagnostic"
+       : (state.baseline.ready ? "Waiting" : "Baseline required");
+     elements.qualityMeterFill.style.width = "0%";
+     return;
+@@ -837,8 +751,6 @@
+   elements.baselineDurationInput.value = c.baselineDuration;
+   elements.baselineEstimatorSelect.value = c.baselineEstimator;
+   elements.ledOffCorrectionInput.checked = c.ledOffCorrection !== false;
+-  elements.ledOffDurationInput.value = c.ledOffDuration;
+-  elements.ledOffDurationInput.disabled = !elements.ledOffCorrectionInput.checked;
+   elements.dpf735Input.value = c.dpf735;
+   elements.dpf850Input.value = c.dpf850;
+   elements.ageYearsInput.value = c.ageYears;
+@@ -865,7 +777,6 @@
+     baselineDuration: Math.max(3, Math.min(60, Number(elements.baselineDurationInput.value))),
+     baselineEstimator: elements.baselineEstimatorSelect.value,
+     ledOffCorrection: elements.ledOffCorrectionInput.checked,
+-    ledOffDuration: Math.max(3, Math.min(30, Number(elements.ledOffDurationInput.value))),
+     dpfMode: document.querySelector('input[name="dpfMode"]:checked')?.value ?? "manual",
+     dpf735: Math.max(.1, Number(elements.dpf735Input.value)),
+     dpf850: Math.max(.1, Number(elements.dpf850Input.value)),
+@@ -917,7 +828,6 @@
+   elements.liveDpf735Input.value = state.dpf.dpf735.toFixed(2);
+   elements.liveDpf850Input.value = state.dpf.dpf850.toFixed(2);
+   elements.liveBaselineDurationInput.value = state.config.baselineDuration;
+-  elements.liveLedOffDurationInput.value = state.config.ledOffDuration;
+   clearAllSweeps("Display ready");
+   resetRegressors();
+   updateSidebarConnection();
+@@ -927,7 +837,7 @@
+     elements.startPauseText.textContent = "Start acquisition";
+     elements.startPauseIcon.textContent = "▶";
+     elements.baselineStatusValue.textContent = "Not set";
+-    resetLedOffProfile();
++    resetLedOffProfile("Waiting for paired frames");
+   }
+ }
+ 
+@@ -1036,7 +946,7 @@
+   elements.setupDeviceBadge.textContent = state.deviceOnline ? "Online" : "Offline";
+   elements.setupDeviceBadge.className = `status-badge ${state.deviceOnline ? "online" : "offline"}`;
+   elements.diagDeviceValue.textContent = state.deviceOnline ? "Online" : "Offline";
+-  elements.captureLedOffButton.disabled = !state.deviceOnline || state.acquisitionPhase === "led_off_capture" || state.acquisitionPhase === "transition";
++  elements.captureLedOffButton.disabled = !state.deviceOnline || state.acquisitionPhase === "transition";
+   updateSidebarConnection();
+ }
+ 
+@@ -1055,15 +965,26 @@
+   state.frameCount += 1;
+   state.frameRateHz = Number(message.stream?.frameRateHz ?? state.frameRateHz) || state.frameRateHz;
+   state.sessionId = String(message.udp?.sessionId ?? state.sessionId);
+-  state.lastFrameQuality = `${message.data.validSlotCount ?? "—"}/20 valid`;
++  const valid = Number(message.data.validSlotCount ?? 0);
++  const underKOn = Number(message.data.underKOnSlotCount ?? 0);
++  const underKOff = Number(message.data.underKOffSlotCount ?? 0);
++  state.lastFrameQuality = message.data.paired
++    ? `${valid}/20 paired · UK ${underKOn}/${underKOff}`
++    : `${valid}/20 legacy`;
+   elements.diagFrameQualityValue.textContent = state.lastFrameQuality;
+   elements.diagSessionValue.textContent = state.sessionId;
++  updatePairedLedOffStatus(message);
++
+   if (!state.running || state.demo) return;
+-  if (state.acquisitionPhase === "led_off_capture") {
+-    collectLedOffFrame(message);
++  if (state.acquisitionPhase === "transition" || state.acquisitionPhase === "idle") return;
++  if (state.acquisitionPhase === "dark_diagnostic") {
++    elements.displayNotice.textContent = "DARK diagnostic · LEDs intentionally remain off";
++    return;
++  }
++  if (state.config.ledOffCorrection && message.data.paired !== true) {
++    elements.displayNotice.textContent = "Paired LED-OFF protocol v2 required · update firmware and bridge together";
+     return;
+   }
+-  if (state.acquisitionPhase === "transition" || state.acquisitionPhase === "idle") return;
+   processLiveFrame(message);
+ }
+ 
+@@ -1074,17 +995,27 @@
+   state.sessionStartedAt = Date.now();
+   state.frameCount = 0;
+   resolveCurrentDpf();
++  resetLedOffProfile(state.config.ledOffCorrection ? "Waiting for paired frames" : "Disabled");
+   elements.startPauseText.textContent = "Pause acquisition";
+   elements.startPauseIcon.textContent = "Ⅱ";
+ 
+-  if (state.config.mode === "DARK" || (state.config.ledOffCorrection && !state.ledOff.ready)) {
+-    startLedOffCapture();
+-    return;
++  if (state.config.mode === "DARK") {
++    state.acquisitionPhase = "dark_diagnostic";
++    elements.baselineStatusValue.textContent = "Not used in DARK mode";
++    clearAllSweeps("DARK diagnostic · LEDs intentionally remain off");
++    setLiveState("ledoff", "DARK DIAGNOSTIC");
++  } else {
++    state.acquisitionPhase = "baseline";
++    resetBaseline(state.config.ledOffCorrection
++      ? "Collecting paired I_LED_OFF-corrected baseline"
++      : "Collecting LED-ON baseline");
+   }
+ 
+-  state.acquisitionPhase = "baseline";
+-  resetBaseline(state.config.ledOffCorrection ? "Collecting I_LED_OFF-corrected baseline" : "Collecting baseline");
++  // STOP first guarantees that MODE/current changes are accepted even after a
++  // previous interrupted run. SCAN and SINGLE now light LEDs immediately; no
++  // standalone five-second DARK capture is performed.
+   sendCommandBatch([
++    "STOP",
+     `MODE ${state.config.mode}`,
+     `CURRENT 735 ${state.config.current735}`,
+     `CURRENT 850 ${state.config.current850}`,
+@@ -1168,7 +1099,6 @@
+   state.config.dpf735 = Math.max(.1, Number(elements.liveDpf735Input.value));
+   state.config.dpf850 = Math.max(.1, Number(elements.liveDpf850Input.value));
+   state.config.baselineDuration = Math.max(3, Math.min(60, Number(elements.liveBaselineDurationInput.value)));
+-  state.config.ledOffDuration = Math.max(3, Math.min(30, Number(elements.liveLedOffDurationInput.value)));
+   resolveCurrentDpf();
+   saveConfig();
+   elements.settingsDialog.close();
+@@ -1211,9 +1141,6 @@
+ $$(".step").forEach((button, index) => button.addEventListener("click", () => showSetupStep(index)));
+ $$('input[name="dpfMode"], input[name="scrMode"]').forEach((input) => input.addEventListener("change", updateChoiceCards));
+ elements.ageYearsInput.addEventListener("input", updateAgeDpfPreview);
+-elements.ledOffCorrectionInput.addEventListener("change", () => {
+-  elements.ledOffDurationInput.disabled = !elements.ledOffCorrectionInput.checked;
+-});
+ 
+ elements.homeButton.addEventListener("click", returnHome);
+ elements.stopSessionButton.addEventListener("click", () => {
+@@ -1228,16 +1155,18 @@
+ elements.clearSweepsButton.addEventListener("click", () => clearAllSweeps());
+ elements.resetBaselineButton.addEventListener("click", () => {
+   if (state.demo) clearAllSweeps("Demo sweeps reset");
+-  else if (state.config.ledOffCorrection && !state.ledOff.ready) elements.displayNotice.textContent = "Capture I_LED_OFF before baseline";
+-  else resetBaseline(state.config.ledOffCorrection ? "Collecting I_LED_OFF-corrected baseline" : "Collecting baseline");
++  else resetBaseline(state.config.ledOffCorrection
++    ? "Collecting paired I_LED_OFF-corrected baseline"
++    : "Collecting LED-ON baseline");
+ });
+ elements.captureLedOffButton.addEventListener("click", () => {
+   if (state.demo) {
+-    elements.displayNotice.textContent = "I_LED_OFF capture is unavailable in demo mode";
++    elements.displayNotice.textContent = "Paired LED-OFF status is unavailable in demo mode";
+     return;
+   }
+-  if (!state.sessionStartedAt) state.sessionStartedAt = Date.now();
+-  startLedOffCapture();
++  resetLedOffProfile("Waiting for next paired frame");
++  elements.displayNotice.textContent = "Paired LED-OFF status reset · acquisition continues";
++  sendCommand("STATUS");
+ });
+ elements.windowSelect.addEventListener("change", () => clearAllSweeps("Sweep window changed"));
+ elements.scaleSelect.addEventListener("change", () => clearAllSweeps("Vertical scale changed"));
+@@ -1253,7 +1182,6 @@
+   elements.liveDpf735Input.value = state.dpf.dpf735.toFixed(2);
+   elements.liveDpf850Input.value = state.dpf.dpf850.toFixed(2);
+   elements.liveBaselineDurationInput.value = state.config.baselineDuration;
+-  elements.liveLedOffDurationInput.value = state.config.ledOffDuration;
+   elements.settingsDialog.showModal();
+ });
+ elements.applyLiveSettingsButton.addEventListener("click", applyLiveSettings);
+diff -ruN old/software/public/index.html new/software/public/index.html
+--- old/software/public/index.html	2026-07-16 12:44:36.000000000 +0000
++++ new/software/public/index.html	2026-07-17 05:10:07.381534568 +0000
+@@ -79,7 +79,7 @@
+         <span><small>Frame rate</small><strong id="frameRateValue">0.0 Hz</strong></span>
+         <span><small>Frames</small><strong id="frameCountValue">0</strong></span>
+         <span><small>Drops</small><strong id="packetLossValue">0</strong></span>
+-        <span><small>I<sub>LED OFF</sub></small><strong id="ledOffStatusValue">Not set</strong></span>
++        <span><small>I<sub>LED OFF</sub></small><strong id="ledOffStatusValue">Waiting</strong></span>
+         <span><small>Baseline</small><strong id="baselineStatusValue">Not set</strong></span>
+       </div>
+ 
+@@ -135,7 +135,7 @@
+           <div class="info-row"><span>DPF 850</span><strong id="sidebarDpf850">6.00</strong></div>
+           <div class="info-row"><span>Short separation</span><strong id="sidebarScrMode">Off</strong></div>
+           <div class="info-row"><span>Regression</span><strong id="sidebarRegression">—</strong></div>
+-          <button id="captureLedOffButton" class="button ghost full" type="button">Recapture I<sub>LED OFF</sub></button>
++          <button id="captureLedOffButton" class="button ghost full" type="button">Reset paired I<sub>LED OFF</sub> status</button>
+         </section>
+ 
+         <section class="sidebar-section compact">
+@@ -229,15 +229,14 @@
+           <div class="pane-heading"><div><h3>Device and acquisition</h3><p>Configure the bridge, LED currents, and baseline window.</p></div><span id="setupDeviceBadge" class="status-badge offline">Offline</span></div>
+           <div class="form-grid two">
+             <label>Device IP<input id="deviceIpInput" type="text" value="192.168.4.1" spellcheck="false"></label>
+-            <label>Acquisition mode<select id="modeSelect"><option value="SCAN" selected>SCAN · all sources</option><option value="SINGLE">SINGLE · validation</option><option value="DARK">DARK · I_LED_OFF profile</option></select></label>
++            <label>Acquisition mode<select id="modeSelect"><option value="SCAN" selected>SCAN · all sources</option><option value="SINGLE">SINGLE · validation</option><option value="DARK">DARK · LED-off diagnostic</option></select></label>
+             <label>735 nm current<div class="unit-input"><input id="current735Input" type="number" min="0" max="50" value="15"><span>mA</span></div></label>
+             <label>850 nm current<div class="unit-input"><input id="current850Input" type="number" min="0" max="50" value="40"><span>mA</span></div></label>
+             <label>Baseline duration<div class="unit-input"><input id="baselineDurationInput" type="number" min="3" max="60" value="10"><span>s</span></div></label>
+             <label>Baseline estimator<select id="baselineEstimatorSelect"><option value="median" selected>Median</option><option value="mean">Mean</option></select></label>
+             <label class="checkbox-field"><input id="ledOffCorrectionInput" type="checkbox" checked><span>Use I<sub>LED OFF</sub> correction</span></label>
+-            <label>I<sub>LED OFF</sub> capture duration<div class="unit-input"><input id="ledOffDurationInput" type="number" min="3" max="30" value="5"><span>s</span></div></label>
+           </div>
+-          <div class="inline-notice"><i>i</i><span>Before SCAN or SINGLE acquisition, the live view automatically records an LED-off profile in DARK mode, then applies I<sub>corrected</sub> = I<sub>LED ON</sub> − I<sub>LED OFF</sub> before baseline, OD, short-separation regression, and MBLL.</span></div>
++          <div class="inline-notice"><i>i</i><span>Paired protocol v2 measures a local I<sub>LED OFF</sub> reference inside every 5 ms optical slot and pairs it with the corresponding I<sub>LED ON</sub> record. The bridge accepts only matching session/frame IDs, then computes I<sub>corrected</sub> = I<sub>LED ON</sub> − I<sub>LED OFF</sub> before baseline, OD, short-separation regression, and MBLL.</span></div>
+         </section>
+ 
+         <section class="setup-pane" data-pane="mbll">
+@@ -299,7 +298,6 @@
+         <label>DPF 735<input id="liveDpf735Input" type="number" min="0.1" step="0.01"></label>
+         <label>DPF 850<input id="liveDpf850Input" type="number" min="0.1" step="0.01"></label>
+         <label>Baseline duration<div class="unit-input"><input id="liveBaselineDurationInput" type="number" min="3" max="60"><span>s</span></div></label>
+-        <label>I<sub>LED OFF</sub> capture duration<div class="unit-input"><input id="liveLedOffDurationInput" type="number" min="3" max="30"><span>s</span></div></label>
+         <div class="inline-notice"><i>!</i><span>Changing processing parameters resets the live baseline and rolling short-separation models.</span></div>
+       </div>
+       <div class="modal-footer"><span></span><button id="applyLiveSettingsButton" type="button" class="button primary">Apply and reset baseline</button></div>
+@@ -310,7 +308,7 @@
+     <div class="modal-card diagnostics-card">
+       <div class="modal-header"><div><span class="section-kicker">Device diagnostics</span><h2>Stream and control log</h2></div><button class="close-button" onclick="this.closest('dialog').close()">×</button></div>
+       <div class="diagnostic-grid">
+-        <div><span>WebSocket</span><strong id="diagWsValue">Connecting</strong></div><div><span>Device</span><strong id="diagDeviceValue">Offline</strong></div><div><span>Session</span><strong id="diagSessionValue">—</strong></div><div><span>Last frame</span><strong id="diagLastFrameValue">—</strong></div><div><span>UDP / stream CRC</span><strong id="diagCrcValue">0 / 0</strong></div><div><span>Frame quality</span><strong id="diagFrameQualityValue">—</strong></div><div><span>I_LED_OFF profile</span><strong id="diagLedOffValue">Not set</strong></div>
++        <div><span>WebSocket</span><strong id="diagWsValue">Connecting</strong></div><div><span>Device</span><strong id="diagDeviceValue">Offline</strong></div><div><span>Session</span><strong id="diagSessionValue">—</strong></div><div><span>Last frame</span><strong id="diagLastFrameValue">—</strong></div><div><span>UDP / stream CRC</span><strong id="diagCrcValue">0 / 0</strong></div><div><span>Frame quality</span><strong id="diagFrameQualityValue">—</strong></div><div><span>Paired I_LED_OFF</span><strong id="diagLedOffValue">Waiting</strong></div>
+       </div>
+       <pre id="deviceLog" class="device-log" aria-live="polite"></pre>
+       <div class="modal-footer"><button id="clearLogButton" class="button secondary">Clear log</button><button id="requestStatusButton" class="button primary">Request status</button></div>
+diff -ruN old/software/public/lib/fnirs-geometry.js new/software/public/lib/fnirs-geometry.js
+--- old/software/public/lib/fnirs-geometry.js	2026-07-16 12:44:36.000000000 +0000
++++ new/software/public/lib/fnirs-geometry.js	2026-07-17 04:51:02.487521787 +0000
+@@ -140,18 +140,39 @@
+   return shortChannelsForMode(longChannel.hemisphere, mode).map((entry) => entry.id);
+ }
+ 
+-function unwrapSlots(frame) {
+-  const slots = frame?.slots ?? frame?.data?.slots;
++function unwrapFrame(frame) {
++  const data = frame?.data ?? frame;
++  const slots = data?.correctedSlots ?? data?.slots;
+   if (!Array.isArray(slots)) throw new TypeError("frame must contain a slots array");
+-  return slots;
++  return { data, slots };
++}
++
++function slotValue(slot, detectorIndex) {
++  const value = slot?.averages?.[detectorIndex];
++  return Number.isFinite(Number(value)) ? Number(value) : null;
++}
++
++function slotIsStrictlyValid(slot) {
++  return Boolean(slot)
++    && slot.valid !== false
++    && slot.underK !== true
++    && slot.crcDropped !== true;
+ }
+ 
+ /**
+- * Extract wavelength-specific raw intensities from one decoded fNIRS frame.
+- * Output names follow the agreed convention, e.g. CH1_I735 and CH1_I850.
++ * Extract wavelength-specific intensities from one decoded fNIRS frame.
++ *
++ * Paired v2 frames expose all three quantities:
++ *   CHx_I735          = I_corrected = I_LED_ON - I_LED_OFF
++ *   CHx_I735_LED_ON   = paired LED-on intensity
++ *   CHx_I735_LED_OFF  = paired LED-off intensity
++ *
++ * Legacy v1 frames retain their historical behavior: CHx_I735 is the single
++ * raw phase value and LED_OFF is null.
+  */
+ export function extractNamedIntensities(frame, { includeShort = true, includeLong = true } = {}) {
+-  const slots = unwrapSlots(frame);
++  const { data, slots } = unwrapFrame(frame);
++  const paired = data?.paired === true && Array.isArray(data?.ledOnSlots) && Array.isArray(data?.ledOffSlots);
+   const selected = [
+     ...(includeShort ? SHORT_CHANNELS : []),
+     ...(includeLong ? LONG_CHANNELS : []),
+@@ -161,16 +182,29 @@
+   for (const channelEntry of selected) {
+     for (const wavelengthNm of WAVELENGTHS_NM) {
+       const slotIndex = slotIndexFor(channelEntry.sourceId, wavelengthNm);
+-      const slot = slots[slotIndex];
+-      const valid = Boolean(slot)
+-        && slot.valid !== false
+-        && slot.underK !== true
+-        && slot.crcDropped !== true
+-        && Array.isArray(slot.averages)
+-        && Number.isFinite(Number(slot.averages[channelEntry.detectorIndex]));
++      const correctedSlot = slots[slotIndex];
++      const onSlot = paired ? data.ledOnSlots[slotIndex] : correctedSlot;
++      const offSlot = paired ? data.ledOffSlots[slotIndex] : null;
++      const detector = channelEntry.detectorIndex;
++
++      const corrected = slotValue(correctedSlot, detector);
++      const ledOn = slotValue(onSlot, detector);
++      const ledOff = slotValue(offSlot, detector);
++      const valid = slotIsStrictlyValid(correctedSlot)
++        && slotIsStrictlyValid(onSlot)
++        && (!paired || slotIsStrictlyValid(offSlot))
++        && Number.isFinite(corrected)
++        && Number.isFinite(ledOn)
++        && (!paired || Number.isFinite(ledOff));
++
+       const key = measurementName(channelEntry.id, "I", wavelengthNm);
+-      output[key] = valid ? Number(slot.averages[channelEntry.detectorIndex]) : null;
++      output[key] = valid ? corrected : null;
+       output[`${key}_VALID`] = valid;
++      output[`${key}_PAIRED`] = paired;
++      output[`${key}_LED_ON`] = valid ? ledOn : null;
++      output[`${key}_LED_OFF`] = valid && paired ? ledOff : null;
++      output[`${key}_N_ON`] = Number(onSlot?.nUsed ?? onSlot?.nUsedOn ?? 0);
++      output[`${key}_N_OFF`] = paired ? Number(offSlot?.nUsed ?? correctedSlot?.nUsedOff ?? 0) : null;
+     }
+   }
+ 
+diff -ruN old/software/simulator.js new/software/simulator.js
+--- old/software/simulator.js	2026-07-14 04:11:58.000000000 +0000
++++ new/software/simulator.js	2026-07-17 05:04:40.317920409 +0000
+@@ -44,8 +44,8 @@
+ function statusText() {
+   return `FNIRS STATUS running=${state.running ? 1 : 0} mode=${state.mode} slot=${state.selectedSlot} ` +
+     `current735=${state.current735} current850=${state.current850} frames=${state.frames} partial=${state.partial} ` +
+-    `underk_slots=${state.underKSlots} adc_ok=${state.frames * 200} adc_err=0 crc_bad=0 ` +
+-    `led_err=0 stream_err=0 drops=0 session=${state.sessionId}`;
++    `underk_on=${state.underKSlots} underk_off=${state.underKSlots} adc_ok=${state.frames * 400} adc_err=0 crc_bad=0 ` +
++    `led_err=0 stream_err=0 drops=0 adc_sps=4000 k_on=5 k_off=5 protocol=paired_v2 session=${state.sessionId}`;
+ }
+ 
+ function sendRecord(type, payload, relativeTimeUs = 0) {
+@@ -75,16 +75,19 @@
+ }
+ 
+ function configPayload() {
+-  const payload = Buffer.alloc(12);
+-  payload.writeUInt8(1, 0);
++  const payload = Buffer.alloc(16);
++  payload.writeUInt8(2, 0);
+   payload.writeUInt8(0, 1);
+   payload.writeUInt8(10, 2);
+   payload.writeUInt8(20, 3);
+-  payload.writeUInt8(3, 4);
+-  payload.writeUInt8(state.current735, 5);
+-  payload.writeUInt8(state.current850, 6);
+-  payload.writeUInt16LE(200, 8);
+-  payload.writeUInt16LE(3200, 10);
++  payload.writeUInt8(5, 4);
++  payload.writeUInt8(5, 5);
++  payload.writeUInt8(state.current735, 6);
++  payload.writeUInt8(state.current850, 7);
++  payload.writeUInt16LE(1000, 8);
++  payload.writeUInt16LE(1400, 10);
++  payload.writeUInt16LE(1000, 12);
++  payload.writeUInt16LE(5000, 14);
+   return payload;
+ }
+ 
+@@ -105,10 +108,11 @@
+   return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2) * scale;
+ }
+ 
+-function framePayload() {
++function framePayload(phase) {
+   const payload = Buffer.alloc(NOCTI.FNIRS_FRAME_PAYLOAD_BYTES);
+-  payload.writeUInt8(1, 0);
+-  payload.writeUInt8(0, 1);
++  const ledOffPhase = phase === "led_off";
++  payload.writeUInt8(2, 0);
++  payload.writeUInt8(0x04 | (ledOffPhase ? 0x02 : 0x00), 1);
+   payload.writeUInt16LE(state.frameId & 0xffff, 2);
+   const validMask = 0x000fffff;
+   payload.writeUInt32LE(validMask, 4);
+@@ -126,16 +130,18 @@
+     const current = wavelength === 735 ? state.current735 : state.current850;
+ 
+     for (let pd = 0; pd < 4; pd += 1) {
+-      const baseline = 120000 + pd * 17000 + source * 900;
++      const ledOff = 4200 + pd * 170 + source * 23
++        + 90 * Math.sin(2 * Math.PI * 0.03 * timeSeconds + pd * 0.4);
+       const coupling = Math.max(0.18, 1 - Math.abs(pd - (source % 4)) * 0.21);
+-      const optical = active ? current * 1250 * coupling : 0;
++      const optical = active ? (90000 + current * 1250 * coupling + source * 900) : 0;
+       const physiology = active
+         ? 1500 * Math.sin(2 * Math.PI * (0.08 + pd * 0.01) * timeSeconds + source * 0.25)
+         : 0;
+-      const value = Math.round(baseline + optical + physiology + gaussianNoise(180));
++      const phaseValue = ledOffPhase ? ledOff : ledOff + optical + physiology;
++      const value = Math.round(phaseValue + gaussianNoise(ledOffPhase ? 35 : 120));
+       payload.writeInt32LE(value, averagesOffset + (slot * 4 + pd) * 4);
+     }
+-    payload.writeUInt8(3, nUsedOffset + slot);
++    payload.writeUInt8(5, nUsedOffset + slot);
+   }
+   return payload;
+ }
+@@ -171,9 +177,9 @@
+ 
+   if (command === "HELLO") return sendText("NOCTI HELLO OK", remoteInfo);
+   if (command === "PING") return sendText("PONG", remoteInfo);
+-  if (command === "INFO") return sendText("NOCTI FNIRS_TEST ctrl=3333 stream=3334 modes=DARK,SINGLE,SCAN", remoteInfo);
++  if (command === "INFO") return sendText("NOCTI FNIRS_TEST ctrl=3333 stream=3334 modes=DARK,SINGLE,SCAN protocol=paired_v2", remoteInfo);
+   if (command === "STATUS") return sendText(statusText(), remoteInfo);
+-  if (command === "REGS") return sendText("FNIRS REGS MODE=0x0000 CLOCK=0x0F02 GAIN=0x0000 DRDY=2000", remoteInfo);
++  if (command === "REGS") return sendText("FNIRS REGS MODE=0x0000 CLOCK=0x0F0E GAIN=0x0000 DRDY=4000", remoteInfo);
+   if (command === "START") return startAcquisition(remoteInfo);
+   if (command === "STOP") return stopAcquisition(remoteInfo);
+ 
+@@ -217,7 +223,8 @@
+ const frameTimer = setInterval(() => {
+   if (!state.running) return;
+   const relativeTimeUs = Number(nowUs() - state.startedAtUs) >>> 0;
+-  sendRecord(NOCTI.REC_FNIRS_FRAME, framePayload(), relativeTimeUs);
++  sendRecord(NOCTI.REC_FNIRS_FRAME, framePayload("led_on"), relativeTimeUs);
++  sendRecord(NOCTI.REC_FNIRS_FRAME, framePayload("led_off"), relativeTimeUs);
+   state.frameId = (state.frameId + 1) & 0xffff;
+   state.frames += 1;
+ }, 100);
+diff -ruN old/software/tests/fnirs-processing.test.js new/software/tests/fnirs-processing.test.js
+--- old/software/tests/fnirs-processing.test.js	2026-07-16 12:44:36.000000000 +0000
++++ new/software/tests/fnirs-processing.test.js	2026-07-17 05:10:44.021534542 +0000
+@@ -21,6 +21,10 @@
+   mbllWithShortSeparation,
+   regressShortSeparation,
+ } from "../public/lib/fnirs-short-separation.js";
++import {
++  PairedFrameAssembler,
++  buildPairedFrame,
++} from "../paired-frame.js";
+ 
+ function almostEqual(actual, expected, tolerance = 1e-9) {
+   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
+@@ -57,6 +61,87 @@
+ assert.equal(namedUnderK.CH1_I735_VALID, false);
+ slots[2].underK = false;
+ 
++
++// Paired v2 frame assembly is strict: same frame ID, both phases, K=5, no CRC.
++function phaseFrame(phase, frameId, offset) {
++  return {
++    kind: "fnirs_frame",
++    version: 2,
++    paired: true,
++    phase,
++    frameId,
++    partial: false,
++    slots: Array.from({ length: 20 }, (_, slotIndex) => ({
++      slotIndex,
++      sourceId: Math.floor(slotIndex / 2),
++      wavelengthNm: (slotIndex & 1) === 0 ? 735 : 850,
++      valid: true,
++      underK: false,
++      crcDropped: false,
++      nUsed: 5,
++      averages: [0, 1, 2, 3].map((pd) => offset + slotIndex * 100 + pd),
++    })),
++  };
++}
++
++const onPhase = phaseFrame("led_on", 77, 10000);
++const offPhase = phaseFrame("led_off", 77, 1000);
++const paired = buildPairedFrame(onPhase, offPhase, { kOn: 5, kOff: 5 });
++assert.equal(paired.phase, "paired");
++assert.equal(paired.validSlotCount, 20);
++assert.equal(paired.underKOnSlotCount, 0);
++assert.equal(paired.underKOffSlotCount, 0);
++assert.deepEqual(paired.slots[2].averages, [9000, 9000, 9000, 9000]);
++
++const pairedNamed = extractNamedIntensities(paired);
++assert.equal(pairedNamed.CH1_I735, 9000);
++assert.equal(pairedNamed.CH1_I735_LED_ON, 10203);
++assert.equal(pairedNamed.CH1_I735_LED_OFF, 1203);
++assert.equal(pairedNamed.CH1_I735_PAIRED, true);
++
++const assembler = new PairedFrameAssembler({ timeoutMs: 1000, maxPending: 8 });
++let assembly = assembler.push({ sessionId: 9, frame: offPhase, envelope: { udp: { sequence: 2 } }, now: 100 });
++assert.equal(assembly.complete, null);
++assembly = assembler.push({ sessionId: 9, frame: onPhase, envelope: { udp: { sequence: 1 } }, now: 101 });
++assert.equal(assembly.complete.frame.validSlotCount, 20);
++assert.equal(assembly.complete.onEnvelope.udp.sequence, 1);
++assert.equal(assembly.complete.offEnvelope.udp.sequence, 2);
++
++const badOff = phaseFrame("led_off", 78, 1000);
++badOff.slots[2].nUsed = 4;
++badOff.slots[2].underK = true;
++const badOn = phaseFrame("led_on", 78, 10000);
++const badPair = buildPairedFrame(badOn, badOff, { kOn: 5, kOff: 5 });
++assert.equal(badPair.partial, true);
++assert.equal(badPair.validSlotCount, 19);
++assert.equal(badPair.underKOffSlotCount, 1);
++assert.equal(extractNamedIntensities(badPair).CH1_I735, null);
++
++// Config metadata may arrive after the first UDP frame. In that brief window,
++// firmware under-K flags remain authoritative but ON/OFF counts must balance.
++const noConfigPair = buildPairedFrame(
++  phaseFrame("led_on", 79, 10000),
++  phaseFrame("led_off", 79, 1000),
++);
++assert.equal(noConfigPair.validSlotCount, 20);
++const noConfigUnbalancedOn = phaseFrame("led_on", 80, 10000);
++const noConfigUnbalancedOff = phaseFrame("led_off", 80, 1000);
++noConfigUnbalancedOff.slots[0].nUsed = 4;
++const noConfigUnbalancedPair = buildPairedFrame(noConfigUnbalancedOn, noConfigUnbalancedOff);
++assert.equal(noConfigUnbalancedPair.validSlotCount, 19);
++assert.equal(noConfigUnbalancedPair.slots[0].valid, false);
++
++const crcOn = phaseFrame("led_on", 81, 10000);
++const crcOff = phaseFrame("led_off", 81, 1000);
++crcOn.slots[0].crcDropped = true;
++const crcPair = buildPairedFrame(crcOn, crcOff, { kOn: 5, kOff: 5 });
++assert.equal(crcPair.validSlotCount, 19);
++assert.equal(crcPair.crcSlotCount, 1);
++assert.throws(
++  () => buildPairedFrame(phaseFrame("led_on", 82, 0), phaseFrame("led_off", 83, 0)),
++  /frame_id mismatch/,
++);
++
+ assert.equal(ledOffCorrectIntensity(1250, 250), 1000);
+ assert.equal(ledOffCorrectIntensity(250, 250), null);
+ assert.equal(ledOffCorrectIntensity(200, 250), null);

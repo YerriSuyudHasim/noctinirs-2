@@ -1,0 +1,28 @@
+NoctiNIRS firmware v15 source validation
+=========================================
+Date: 2026-07-27
+
+[PASS] ADS131M04 DRDY uses a static SPSC event ring
+[PASS] One event is paired with one complete 18-byte SPI frame
+[PASS] Permanent ADC consumer replaces per-sample wait_task registration
+[PASS] DRDY ISR timestamp is captured from the master GPTimer
+[PASS] Event backlog greater than the ADS131 FIFO depth of two triggers SYNC recovery
+[PASS] IRQ/timestamp discontinuity triggers pre-read SYNC recovery
+[PASS] SPI failure triggers FIFO-epoch SYNC recovery
+[PASS] DRDY pulse, push-pull output, 24-bit words, CCITT, and CRC-IN off are enforced
+[PASS] ADS131 writable registers are read back after write
+[PASS] Debug RREG/WREG is blocked during acquisition
+[PASS] GPIO ISR service and GPTimer are allocated from acquisition core 1
+[PASS] ADC task and optical scheduler are pinned to core 1 and report observed cores
+[PASS] fNIRS processing and Wi-Fi tasks remain on core 0
+[PASS] PCA9956B asynchronous I2C init/callback allocation is executed from core 1
+[PASS] STATUS exposes observed task/ISR core IDs and latency/recovery counters
+[PASS] Legacy wait_task/last-timestamp/DRDY-level wait paths are absent
+[PASS] Modified C/H delimiters and lexical states are balanced
+[PASS] No duplicate function definitions were detected
+[PASS] Modified printf-family format/argument counts are consistent
+
+Build status
+------------
+ESP-IDF 5.5.1 and the Xtensa compiler are not installed in this environment.
+Run `idf.py fullclean` and `idf.py build` locally before flashing.

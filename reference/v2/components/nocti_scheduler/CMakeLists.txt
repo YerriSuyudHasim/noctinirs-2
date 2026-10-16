@@ -1,0 +1,13 @@
+idf_component_register(
+    SRCS
+        "nocti_scheduler.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        nocti_timebase
+        log
+        nocti_common
+        esp_common
+    PRIV_REQUIRES
+        freertos
+)

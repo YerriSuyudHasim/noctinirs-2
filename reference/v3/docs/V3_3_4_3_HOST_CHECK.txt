@@ -1,0 +1,18 @@
+NoctiNIRSv3 3.4.3 host validation
+================================
+
+Source comparison:
+- V2(16) .c log calls: 164 total, 21 Wi-Fi
+- V3.4.2 .c log calls: 36 total, 7 Wi-Fi
+- V3.4.3 .c log calls: 84 total, 39 Wi-Fi
+
+Checks:
+- tools/host_static_check.sh: PASS, 11/11 translation units
+- tools/run_host_logic_tests.sh: PASS stream-v1 CRC/layout/sequence
+- tools/check_logging_config.py sdkconfig: PASS
+- quiet helper/state search: absent from source (historical docs excepted)
+- unconditional printf/fflush serial probe: absent
+
+Not performed:
+- ESP-IDF 5.5.1 target compile/link (idf.py/toolchain unavailable)
+- hardware flash/serial verification

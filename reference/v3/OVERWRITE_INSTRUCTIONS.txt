@@ -1,0 +1,12 @@
+NoctiNIRSv3 3.4.6 ADS SYNC STATUS FIX
+
+1. Close serial monitor and stop the running firmware.
+2. Back up the current NoctiNIRSv3 folder.
+3. Copy this package over the NoctiNIRSv3 project root, preserving paths.
+4. Run: idf.py fullclean
+5. Run: idf.py build flash monitor
+6. Confirm banner: firmware=3.4.6 phase=P5_ADS_SYNC_STATUS_FIX
+7. Confirm ADS startup log contains sync_discard=3, resync_ack=0 or 1, status_err=0, spi_err=0.
+8. Confirm INIT[3/8] reports ADS131M04 path OK / startup validation OK.
+
+The I2C/PCA9956B V2-derived sync-init/async-runtime implementation is unchanged.

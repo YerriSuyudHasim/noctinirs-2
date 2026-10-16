@@ -1,0 +1,9 @@
+NoctiNIRSv3 Prompt 3 target-build environment check
+
+idf.py: not found
+IDF_PATH: not set
+xtensa-esp32s3-elf-gcc: not found
+physical target: unavailable
+
+Result: ESP-IDF 5.5.1 clean build/link/flash was not run and is not claimed.
+Host Clang static review is recorded separately and is not a target build.

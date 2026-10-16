@@ -1,0 +1,31 @@
+NoctiNIRSv3 Prompt 2 host static syntax/interface check
+UTC: 2026-07-27T10:12:02Z
+Compiler: clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)
+Flags: -std=gnu11 -Wall -Wextra -Werror -Wformat=2 -fsyntax-only
+External narrow ESP-IDF-shaped stubs: /mnt/data/work_p2/stubs (not included in archive)
+
+CHECK components/nocti_v3_adc/nocti_v3_adc.c
+PASS  components/nocti_v3_adc/nocti_v3_adc.c
+CHECK components/nocti_v3_adc/nocti_v3_ads131m04.c
+PASS  components/nocti_v3_adc/nocti_v3_ads131m04.c
+CHECK components/nocti_v3_board/nocti_v3_board.c
+PASS  components/nocti_v3_board/nocti_v3_board.c
+CHECK components/nocti_v3_common/nocti_v3_common.c
+PASS  components/nocti_v3_common/nocti_v3_common.c
+CHECK components/nocti_v3_health/nocti_v3_health.c
+PASS  components/nocti_v3_health/nocti_v3_health.c
+CHECK components/nocti_v3_led/nocti_v3_led.c
+PASS  components/nocti_v3_led/nocti_v3_led.c
+CHECK components/nocti_v3_optical/nocti_v3_optical.c
+PASS  components/nocti_v3_optical/nocti_v3_optical.c
+CHECK components/nocti_v3_stream/nocti_v3_stream.c
+PASS  components/nocti_v3_stream/nocti_v3_stream.c
+CHECK components/nocti_v3_timebase/nocti_v3_timebase.c
+PASS  components/nocti_v3_timebase/nocti_v3_timebase.c
+CHECK components/nocti_v3_wifi/nocti_v3_wifi.c
+PASS  components/nocti_v3_wifi/nocti_v3_wifi.c
+CHECK main/app_main.c
+PASS  main/app_main.c
+
+RESULT: PASS — 11/11 translation units accepted by host Clang.
+LIMIT: This is not an ESP-IDF target compile or link.

@@ -1,0 +1,399 @@
+--- a/components/nocti_fnirs/include/nocti_fnirs.h
++++ b/components/nocti_fnirs/include/nocti_fnirs.h
+@@ -110,6 +110,11 @@
+ esp_err_t nocti_fnirs_init(const nocti_fnirs_cfg_t *cfg);
+ esp_err_t nocti_fnirs_deinit(void);
+ 
++// Re-synchronize the ADS131M04 digital filters and clear its two-deep data
++// FIFO after a pause in data collection. The pulse is intentionally shorter
++// than the reset threshold, so register configuration is retained.
++esp_err_t nocti_fnirs_sync_conversions(void);
++
+ // slash: optional output queue (kalau queue_len > 0)
+ QueueHandle_t nocti_fnirs_get_queue(void);
+ 
+--- a/components/nocti_fnirs/nocti_fnirs.c
++++ b/components/nocti_fnirs/nocti_fnirs.c
+@@ -46,6 +46,17 @@
+ #define ADS131_MODE_TIMEOUT_BIT   (1u << 4)   // slash: TIMEOUT enable
+ #define ADS131_MODE_WLENGTH_SHIFT 8u          // slash: WLENGTH[1:0] ada di bit 9:8
+ 
++// A full SPI frame deasserts level-format DRDY. Give the pin a very short
++// propagation allowance, but never stall for a substantial part of a 250-us
++// sample period. If a second FIFO sample is already pending, DRDY may remain
++// low and the next read must consume it immediately.
++#define ADS131_DRDY_DEASSERT_GUARD_US  (20u)
++
++// 5 us is >1 CLKIN period and far below the 2048-CLKIN reset threshold for
++// the expected 8.192-MHz master clock. It therefore performs synchronization
++// without resetting the register map.
++#define ADS131_SYNC_PULSE_US           (5u)
++
+ // ============================================================
+ // Internal context
+ // ============================================================
+@@ -400,6 +411,24 @@
+     delay_us(20u);
+ }
+ 
++static esp_err_t do_sync_pulse(void)
++{
++    const int pin_sr = pick_sync_reset_pin();
++    if (pin_sr < 0) {
++        return ESP_ERR_NOT_SUPPORTED;
++    }
++
++    // The producer must be stopped before this API is called. Clear any stale
++    // task waiter defensively, then strobe SYNC/RESET low for a non-reset pulse.
++    wait_task_clear();
++    gpio_set_level(pin_sr, 0);
++    delay_us(ADS131_SYNC_PULSE_US);
++    gpio_set_level(pin_sr, 1);
++
++    // Conversions restart automatically. The next read waits for the next DRDY.
++    return ESP_OK;
++}
++
+ // ============================================================
+ // Public API
+ // ============================================================
+@@ -561,6 +590,12 @@
+     return ESP_OK;
+ }
+ 
++esp_err_t nocti_fnirs_sync_conversions(void)
++{
++    if (!s.inited) return ESP_ERR_INVALID_STATE;
++    return do_sync_pulse();
++}
++
+ QueueHandle_t nocti_fnirs_get_queue(void)
+ {
+     return s.q;
+@@ -621,7 +656,7 @@
+         if (err != ESP_OK) return err;
+ 
+         // slash: tunggu DRDY balik high (indikator shift-out selesai)
+-        (void)wait_drdy_high(500u);
++        (void)wait_drdy_high(ADS131_DRDY_DEASSERT_GUARD_US);
+ 
+         // slash: parse 6 word
+         rec.status24 = unpack_u24(&s.rx[0]);
+@@ -698,7 +733,7 @@
+         if (err != ESP_OK) return err;
+ 
+         // slash: tunggu DRDY balik high (indikator shift-out selesai)
+-        (void)wait_drdy_high(500u);
++        (void)wait_drdy_high(ADS131_DRDY_DEASSERT_GUARD_US);
+ 
+         rec.status24 = unpack_u24(&s.rx[0]);
+ 
+--- a/main/app_main_fnirs_test.c
++++ b/main/app_main_fnirs_test.c
+@@ -108,6 +108,8 @@
+ #define ADS131_CLOCK_4000_SPS           (0x0F0Eu)
+ #define ADS131_SAMPLE_RATE_HZ           (4000u)
+ #define ADS131_EXPECTED_PERIOD_US        (250u)
++#define ADS131_RATE_VALIDATION_FRAMES    (512u)
++#define ADS131_RATE_TOLERANCE_PERCENT    (5u)
+ #define FNIRS_WINDOW_NOMINAL_SAMPLES    \
+     ((FNIRS_WINDOW_US * ADS131_SAMPLE_RATE_HZ) / 1000000u)
+ 
+@@ -196,6 +198,9 @@
+ static volatile uint32_t g_adc_max_gap_us = 0u;
+ static volatile uint32_t g_adc_missed_drdy_count = 0u;
+ static volatile uint32_t g_adc_max_sequence_gap = 0u;
++static volatile uint32_t g_adc_validated_sps = 0u;
++static volatile uint32_t g_adc_validation_min_period_us = 0u;
++static volatile uint32_t g_adc_validation_max_period_us = 0u;
+ static nocti_time_us_t g_adc_last_ts_us = 0;
+ static uint32_t g_adc_last_drdy_sequence = 0u;
+ static volatile uint32_t g_led_err_cnt = 0u;
+@@ -586,28 +591,122 @@
+ 
+ static esp_err_t validate_drdy_rate_once(void)
+ {
+-    const uint32_t before = nocti_fnirs_dbg_drdy_count();
+-    vTaskDelay(pdMS_TO_TICKS(1000u));
+-    const uint32_t after = nocti_fnirs_dbg_drdy_count();
+-    const uint32_t delta = after - before;
+-    const uint32_t minimum = (ADS131_SAMPLE_RATE_HZ * 95u) / 100u;
+-    const uint32_t maximum = (ADS131_SAMPLE_RATE_HZ * 105u) / 100u;
++    // DRDY cannot be validated by passively counting falling edges while the
++    // ADC data are not read. ADS131M04 has a two-deep output FIFO and changes
++    // DRDY behavior after a pause. Re-synchronize first, then continuously read
++    // complete frames and calculate rate from ISR timestamps.
++    esp_err_t err = nocti_fnirs_sync_conversions();
++    if (err != ESP_OK) {
++        NOCTI_LOGE(TAG, "ADS131 SYNC before rate validation failed: %s",
++                   esp_err_to_name(err));
++        return err;
++    }
++
++    nocti_fnirs_frame_t frame;
++    memset(&frame, 0, sizeof(frame));
++
++    nocti_time_us_t first_ts_us = 0;
++    nocti_time_us_t last_ts_us = 0;
++    nocti_time_us_t previous_ts_us = 0;
++    uint32_t previous_sequence = 0u;
++    uint32_t sequence_gaps = 0u;
++    uint32_t duplicate_sequences = 0u;
++    uint32_t crc_bad = 0u;
++    uint32_t min_period_us = UINT32_MAX;
++    uint32_t max_period_us = 0u;
++
++    for (uint32_t i = 0u; i < ADS131_RATE_VALIDATION_FRAMES; i++) {
++        err = nocti_fnirs_read_frame(&frame);
++        if (err != ESP_OK) {
++            NOCTI_LOGE(TAG,
++                       "ADS131 active-read validation stopped at frame %lu: %s",
++                       (unsigned long)i,
++                       esp_err_to_name(err));
++            return err;
++        }
++
++        if (!frame.crc_ok) {
++            crc_bad++;
++        }
++
++        if (i == 0u) {
++            first_ts_us = frame.timestamp_us;
++        } else {
++            if (frame.timestamp_us > previous_ts_us) {
++                const nocti_time_us_t period =
++                    frame.timestamp_us - previous_ts_us;
++                const uint32_t period32 =
++                    (period > (nocti_time_us_t)UINT32_MAX) ?
++                    UINT32_MAX : (uint32_t)period;
++                if (period32 < min_period_us) min_period_us = period32;
++                if (period32 > max_period_us) max_period_us = period32;
++            }
++
++            const uint32_t seq_delta = frame.drdy_sequence - previous_sequence;
++            if (seq_delta == 0u) {
++                duplicate_sequences++;
++            } else if (seq_delta > 1u) {
++                sequence_gaps += seq_delta - 1u;
++            }
++        }
++
++        previous_ts_us = frame.timestamp_us;
++        previous_sequence = frame.drdy_sequence;
++        last_ts_us = frame.timestamp_us;
++    }
++
++    if (last_ts_us <= first_ts_us) {
++        NOCTI_LOGE(TAG, "ADS131 active-read validation has invalid timestamps");
++        return ESP_ERR_INVALID_STATE;
++    }
++
++    const uint64_t elapsed_us = (uint64_t)(last_ts_us - first_ts_us);
++    const uint32_t measured_sps = (uint32_t)(
++        (((uint64_t)ADS131_RATE_VALIDATION_FRAMES - 1ull) * 1000000ull +
++         (elapsed_us / 2ull)) / elapsed_us);
++    const uint32_t minimum =
++        (ADS131_SAMPLE_RATE_HZ * (100u - ADS131_RATE_TOLERANCE_PERCENT)) / 100u;
++    const uint32_t maximum =
++        (ADS131_SAMPLE_RATE_HZ * (100u + ADS131_RATE_TOLERANCE_PERCENT)) / 100u;
++    const uint64_t inferred_clkin_hz =
++        (uint64_t)measured_sps * 2ull * 1024ull;
++
++    g_adc_validated_sps = measured_sps;
++    g_adc_validation_min_period_us =
++        (min_period_us == UINT32_MAX) ? 0u : min_period_us;
++    g_adc_validation_max_period_us = max_period_us;
+ 
+     NOCTI_LOGI(TAG,
+-               "ADS131 DRDY count over 1 second: %lu (required %u..%u)",
+-               (unsigned long)delta,
++               "ADS131 active-read validation: frames=%u elapsed=%llu us "
++               "rate=%lu SPS required=%u..%u period=%lu..%lu us "
++               "seq_gap=%lu seq_dup=%lu crc_bad=%lu inferred_CLKIN=%llu Hz",
++               (unsigned)ADS131_RATE_VALIDATION_FRAMES,
++               (unsigned long long)elapsed_us,
++               (unsigned long)measured_sps,
+                (unsigned)minimum,
+-               (unsigned)maximum);
++               (unsigned)maximum,
++               (unsigned long)((min_period_us == UINT32_MAX) ? 0u : min_period_us),
++               (unsigned long)max_period_us,
++               (unsigned long)sequence_gaps,
++               (unsigned long)duplicate_sequences,
++               (unsigned long)crc_bad,
++               (unsigned long long)inferred_clkin_hz);
+ 
+-    if (delta < minimum || delta > maximum) {
++    if (measured_sps < minimum || measured_sps > maximum ||
++        sequence_gaps != 0u || duplicate_sequences != 0u || crc_bad != 0u) {
+         NOCTI_LOGE(TAG,
+-                   "ADS131 data-rate validation failed; refusing acquisition "
+-                   "because paired K=%u/%u assumes 4 kSPS",
++                   "ADS131 active-read validation failed; paired K=%u/%u "
++                   "requires a clean 4-kSPS stream. If rate remains near "
++                   "1230 SPS, measure ADS131 CLKIN; 1230 SPS at OSR=1024 "
++                   "implies approximately 2.52 MHz CLKIN.",
+                    (unsigned)FNIRS_K_ON_FIXED,
+                    (unsigned)FNIRS_K_OFF_FIXED);
+         return ESP_ERR_INVALID_STATE;
+     }
+-    return ESP_OK;
++
++    // Validation itself is a finite read burst. Re-synchronize once more so the
++    // later acquisition task starts from an empty FIFO and a clean DRDY epoch.
++    return nocti_fnirs_sync_conversions();
+ }
+ 
+ // ============================================================
+@@ -1202,6 +1301,17 @@
+     }
+     g_led_off_ready_us = nocti_timebase_now_us();
+ 
++    // STOP leaves ADS131 converting while the host is no longer reading. Its
++    // two-deep FIFO therefore fills. Always clear/re-align it before enabling
++    // the continuous producer; otherwise DRDY can remain low and throughput
++    // collapses well below the configured data rate.
++    err = nocti_fnirs_sync_conversions();
++    if (err != ESP_OK) {
++        NOCTI_LOGE(TAG, "ADS131 SYNC before START failed: %s",
++                   esp_err_to_name(err));
++        return err;
++    }
++
+     g_fnirs_adc_run = true;
+     if (g_fnirs_adc_task) {
+         xTaskNotifyGive(g_fnirs_adc_task);
+@@ -1298,7 +1408,8 @@
+         "led_state_known=%u led_ready=%u led_fatal=%u "
+         "sched_missed=%lu sched_late=%lu sched_late_max_us=%lu "
+         "sched_abort=%lu sched_overrun=%lu stream_err=%lu drops=%lu "
+-        "adc_sps=%u k_on=%u k_off=%u min_n_on=%u min_n_off=%u "
++        "adc_sps=%u adc_sps_validated=%lu adc_validation_period_us=%lu..%lu "
++        "k_on=%u k_off=%u min_n_on=%u min_n_off=%u "
+         "on_us=%u off_us=%u off_settle_us=%u off_dark_min_us=%lu "
+         "i2c_hz=%u protocol=paired_v2 session=%lu\n",
+         g_run ? 1u : 0u,
+@@ -1334,6 +1445,9 @@
+         (unsigned long)g_stream_err_cnt,
+         (unsigned long)nocti_stream_drop_fnirs(&g_stream),
+         (unsigned)ADS131_SAMPLE_RATE_HZ,
++        (unsigned long)g_adc_validated_sps,
++        (unsigned long)g_adc_validation_min_period_us,
++        (unsigned long)g_adc_validation_max_period_us,
+         (unsigned)FNIRS_K_ON_FIXED,
+         (unsigned)FNIRS_K_OFF_FIXED,
+         (unsigned)((g_on_min_n_used == UINT8_MAX) ? 0u : g_on_min_n_used),
+--- a/README.md
++++ b/README.md
+@@ -60,7 +60,7 @@
+ At boot:
+ 
+ ```text
+-ADS131 DRDY count over 1 second: 3800..4200
++ADS131 active-read validation: rate=3800..4200 SPS, seq_gap=0, seq_dup=0, crc_bad=0
+ ADS131=4000 SPS
+ paired K(on/off)=5/5
+ ```
+--- a/SOURCE_VALIDATION.txt
++++ b/SOURCE_VALIDATION.txt
+@@ -1,23 +1,16 @@
+-NoctiNIRS timing revision source validation
+-============================================
++NoctiNIRS paired v2.1 DRDY/FIFO source validation
++==================================================
+ 
+-[PASS] I2C clock is 400 kHz
+-[PASS] Old 1 MHz application override removed
+-[PASS] PCA OFFSET register defined as 0x3A
+-[PASS] PCA OFFSET initialized to zero
+-[PASS] Misleading on_time_us field removed
+-[PASS] Scheduler END uses settle + sample window
+-[PASS] Slot END timestamp is LED-off timestamp
+-[PASS] Application derives LED OFF from settle + window
+-[PASS] Application derives OFF gap from tick remainder
+-[PASS] 20 slots still map to 100 ms frame — 20 × 5000 us = 100000 us
+-[PASS] Configured LED OFF timestamp is 3400 us — 200 + 3200 = 3400 us
+-[PASS] Configured OFF gap is 1600 us — 5000 - 3400 = 1600 us
+-[PASS] Balanced braces: main/app_main_fnirs_test.c — balance=0
+-[PASS] Balanced braces: components/nocti_scheduler/nocti_scheduler.c — balance=0
+-[PASS] Balanced braces: components/nocti_scheduler/include/nocti_scheduler.h — balance=0
+-[PASS] Balanced braces: components/nocti_led_driver/nocti_led_driver.c — balance=0
++[PASS] Passive one-second DRDY edge counter removed
++[PASS] Active validation reads 512 complete ADS131M04 frames
++[PASS] Active validation computes rate from ISR timestamps
++[PASS] Active validation checks CRC, DRDY gaps, and duplicate sequences
++[PASS] Non-reset 5-us SYNC pulse API added
++[PASS] ADS131 FIFO is synchronized before every acquisition START
++[PASS] Post-frame DRDY-high guard reduced from 500 us to 20 us
++[PASS] CLOCK readback remains strict at 0x0F0E
++[PASS] Paired K_ON=5 and K_OFF=5 remain unchanged
++[PASS] No live-view protocol or software change required
+ 
+-Note: This environment does not include the ESP-IDF 5.5.1 toolchain,
+-so a real idf.py build/flash was not executed here. Run idf.py fullclean
+-and idf.py build locally before flashing.
++Note: This environment does not include ESP-IDF 5.5.1, so run
++`idf.py fullclean` and `idf.py build` locally before flashing.
+--- a/VALIDATION_REPORT.md
++++ b/VALIDATION_REPORT.md
+@@ -60,7 +60,7 @@
+ ## Firmware protections
+ 
+ - ADS131M04 CLOCK register is checked against the expected 4 kSPS configuration.
+-- A one-second DRDY-rate measurement must fall between 3800 and 4200 samples/s before normal operation is accepted.
++- A 512-frame active-read validation synchronizes and drains the ADS131M04 continuously; the measured rate must be 3800–4200 SPS with zero CRC failures, sequence gaps, or duplicate DRDY sequences.
+ - The collector uses only one contiguous block of the newest K samples.
+ - A CRC failure or DRDY sequence gap terminates the candidate block; older samples are not used to fill the window.
+ - Any missing, UNDER-K, CRC-affected, scheduler-aborted, or phase-incomplete slot marks both records partial.
+--- a/NoctiNIRS_Paired_LED_OFF_v2_VALIDATION.md
++++ b/NoctiNIRS_Paired_LED_OFF_v2_VALIDATION.md
+@@ -60,7 +60,7 @@
+ ## Firmware protections
+ 
+ - ADS131M04 CLOCK register is checked against the expected 4 kSPS configuration.
+-- A one-second DRDY-rate measurement must fall between 3800 and 4200 samples/s before normal operation is accepted.
++- A 512-frame active-read validation synchronizes and drains the ADS131M04 continuously; the measured rate must be 3800–4200 SPS with zero CRC failures, sequence gaps, or duplicate DRDY sequences.
+ - The collector uses only one contiguous block of the newest K samples.
+ - A CRC failure or DRDY sequence gap terminates the candidate block; older samples are not used to fill the window.
+ - Any missing, UNDER-K, CRC-affected, scheduler-aborted, or phase-incomplete slot marks both records partial.
+--- /dev/null
++++ b/DRDY_FIFO_FIX_v2_1.md
+@@ -0,0 +1,38 @@
++# NoctiNIRS paired v2.1 — ADS131M04 DRDY/FIFO fix
++
++## Root cause
++
++The previous startup test counted GPIO falling edges for one second while no
++ADS131M04 frames were read. This is not a valid sample-rate test because the
++ADS131M04 output path contains a two-deep FIFO and DRDY behavior changes after
++a pause in host reads. The pause also left the FIFO full before acquisition.
++
++The frame reader then waited up to 500 us for DRDY to return high after every
++SPI frame. When a second FIFO sample was pending, DRDY legitimately remained
++low; the 500-us wait prevented the host from draining the FIFO and reduced the
++observed throughput to about 1230 frames/s.
++
++## Changes
++
++- Added `nocti_fnirs_sync_conversions()` using a 5-us SYNC/RESET pulse.
++- Synchronize before active-rate validation and before every acquisition START.
++- Replaced passive edge counting with 512 complete, continuous frame reads.
++- Rate is calculated from ISR timestamps and reports period range, sequence
++  gaps, duplicate sequences, CRC failures, and inferred CLKIN.
++- Reduced the post-frame DRDY-high guard from 500 us to 20 us. A pending FIFO
++  sample is consumed immediately instead of waiting.
++- Precision remains strict: firmware refuses paired K=5/5 acquisition unless
++  the actively read stream is 3800..4200 SPS with no CRC or sequence faults.
++
++## Expected healthy boot log
++
++```text
++ADS131 readback MODE=... CLOCK=0x0F0E GAIN=...
++ADS131 active-read validation: frames=512 elapsed~127750 us rate~4000 SPS
++period~250..250 us seq_gap=0 seq_dup=0 crc_bad=0 inferred_CLKIN~8192000 Hz
++```
++
++If the active-read result still remains close to 1230 SPS, the result is no
++longer caused by passive DRDY counting or the 500-us FIFO stall. At OSR 1024,
++1230 SPS implies an ADS131M04 CLKIN near 2.52 MHz and the physical clock source
++should be measured at the CLKIN pin.

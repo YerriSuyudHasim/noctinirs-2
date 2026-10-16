@@ -1,0 +1,9 @@
+NoctiNIRSv3 P5 target build attempt
+date_utc=2026-07-28T05:15:18Z
+pwd=/mnt/data/p5_work/NoctiNIRSv3
+IDF_PATH=<not set>
+idf.py=NOT FOUND
+idf_version_exit=127
+idf_build_exit=127
+xtensa-esp32s3-elf-gcc=NOT FOUND
+RESULT: target build not verified in this environment

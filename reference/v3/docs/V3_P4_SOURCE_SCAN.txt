@@ -1,0 +1,34 @@
+NoctiNIRSv3 Prompt 4 source-policy scan
+RESULT: PASS
+
+Arduino API occurrences: 0
+Explicit application heap calls malloc/calloc/realloc/free: 0
+Legacy driver/i2c.h includes: 0
+New driver/i2c_master.h includes: 2
+Normal-path fixed-delay calls outside recovery: 0
+Recovery-task vTaskDelay calls: 1 (reviewed cooldown only)
+MBLL/SSR/bandpass/baseline algorithm symbols: 0 (words occur only in deferred-scope messages)
+Pseudocode/TODO/FIXME markers in active source: 0
+ISR/callback forbidden-operation hits: 0
+
+Reviewed callbacks:
+  PASS components/nocti_v3_timebase/nocti_v3_timebase.c: on_alarm; compact static record + ISR-safe notify only
+  PASS components/nocti_v3_adc/nocti_v3_adc.c: drdy_isr; compact static record + ISR-safe notify only
+  PASS components/nocti_v3_led/nocti_v3_led.c: i2c_done_callback; compact static record + ISR-safe notify only
+
+Raw-ring consumer call sites:
+/mnt/data/p4_work/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_adc.c:1027:bool nocti_v3_adc_pop_raw_sample(nocti_v3_adc_t *adc, nocti_v3_raw_sample_t *out_sample)
+/mnt/data/p4_work/NoctiNIRSv3/components/nocti_v3_adc/include/nocti_v3_adc.h:100:bool nocti_v3_adc_pop_raw_sample(nocti_v3_adc_t *adc,
+/mnt/data/p4_work/NoctiNIRSv3/components/nocti_v3_optical/nocti_v3_optical.c:1284:            while (nocti_v3_adc_pop_raw_sample(runtime->adc, &sample)) {
+  ADC diagnostic consumer owns DARK; optical processing pop loop is gated by mode==SCAN.
+
+Ownership/lifecycle checks:
+  PASS slot timing SPSC release/acquire
+  PASS completed frame SPSC release/acquire
+  PASS processing reset acknowledgement
+  PASS frame-sink reset acknowledgement
+  PASS stopped-only RESET_COUNTERS
+  PASS session+config latest-frame filter
+  PASS half-open ON boundary
+  PASS half-open I_LED_OFF boundary
+  PASS latest contiguous no-backfill break

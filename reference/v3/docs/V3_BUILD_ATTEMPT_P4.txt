@@ -1,0 +1,8 @@
+NoctiNIRSv3 Prompt 4 target-build attempt
+Required: ESP-IDF v5.5.1, target esp32s3
+
+idf.py: NOT FOUND
+IDF_PATH: NOT SET
+xtensa-esp32s3-elf-gcc: NOT FOUND
+idf.py --version exit=127
+idf.py fullclean build exit=127

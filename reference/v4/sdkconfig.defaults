@@ -1,0 +1,54 @@
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_IN_IRAM=y
+CONFIG_LIBC_NEWLIB=y
+
+# V4-7.2 real-time ownership: app_main creates the initial/diagnostic PCA bus
+# and the CPU1 LED owner performs async enter/exit recreation. Every PCA I2C
+# interrupt is therefore allocated/freed on CPU1, while Wi-Fi/lwIP stay on
+# CPU0. Scheduler->LED completion is a static nonblocking task handoff.
+# CONFIG_ESP_MAIN_TASK_AFFINITY_CPU0 is not set
+CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1=y
+# CONFIG_ESP_MAIN_TASK_AFFINITY_NO_AFFINITY is not set
+CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0=y
+
+# V4-7 includes Wi-Fi through the explicit network component. BLE and PSRAM are
+# absent from this minimal component graph; no unknown legacy Kconfig symbols are
+# written here merely to express that exclusion.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_INFO=y
+CONFIG_LOG_DYNAMIC_LEVEL_CONTROL=y
+
+# The common timestamp source and V4-5+ absolute optical scheduler use GPTimer.
+CONFIG_GPTIMER_CTRL_FUNC_IN_IRAM=y
+CONFIG_GPTIMER_ISR_CACHE_SAFE=y
+CONFIG_GPTIMER_OBJ_CACHE_SAFE=y
+CONFIG_SPI_MASTER_ISR_IN_IRAM=y
+# ESP-IDF 5.5.1 otherwise defers I2C completion interrupts while flash cache is
+# disabled. The V4 callback and its complete call graph are IRAM/DRAM audited.
+CONFIG_I2C_ISR_IRAM_SAFE=y
+
+# V4-7 SoftAP transports about 20 kB/s to one station. Bound Wi-Fi/lwIP memory
+# to that contract; acquisition drops only at the separate network boundary.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_MGMT_SBUF_NUM=6
+# CONFIG_ESP_WIFI_AMPDU_TX_ENABLED is not set
+# CONFIG_ESP_WIFI_AMPDU_RX_ENABLED is not set
+# CONFIG_ESP_WIFI_ENABLE_WPA3_SAE is not set
+# CONFIG_ESP_WIFI_ENABLE_SAE_PK is not set
+# CONFIG_ESP_WIFI_ENABLE_SAE_H2E is not set
+# CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT is not set
+# CONFIG_ESP_WIFI_ENABLE_WPA3_OWE_STA is not set
+# CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT is not set
+CONFIG_LWIP_MAX_SOCKETS=4
+CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=8
+CONFIG_LWIP_MAX_UDP_PCBS=4
+# CONFIG_LWIP_TCPIP_TASK_AFFINITY_NO_AFFINITY is not set
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+# CONFIG_LWIP_IPV6 is not set

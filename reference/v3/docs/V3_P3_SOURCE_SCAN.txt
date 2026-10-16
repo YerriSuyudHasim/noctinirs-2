@@ -1,0 +1,13 @@
+NoctiNIRSv3 Prompt 3 source scan
+RESULT: PASS
+
+Arduino API: 0 hit(s)
+explicit heap allocation: 0 hit(s)
+legacy I2C driver include: 0 hit(s)
+per-sample log marker: 0 hit(s)
+
+DRDY ISR forbidden-operation scan: PASS
+I2C callback forbidden-operation scan: PASS
+I2C callback update_max_u32 helper IRAM annotation: PASS
+Application persistent payload/ring/queue storage is static: REVIEWED
+Note: driver-internal behavior is not proven by this source scan.

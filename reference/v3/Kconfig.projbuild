@@ -1,0 +1,18 @@
+menu "NoctiNIRSv3 validation profile"
+
+choice NOCTI_V3_I2C_PROFILE
+    prompt "PCA9956B I2C clock profile"
+    default NOCTI_V3_I2C_PROFILE_400KHZ
+    help
+        Keep 400 kHz as the validation default. The 1 MHz profile is only for
+        controlled comparison with logic-analyzer evidence and must not be
+        promoted to the default based on a successful build alone.
+
+    config NOCTI_V3_I2C_PROFILE_400KHZ
+        bool "400 kHz (default validation profile)"
+
+    config NOCTI_V3_I2C_PROFILE_1MHZ_EXPERIMENT
+        bool "1 MHz (experimental; waveform and error-rate validation required)"
+endchoice
+
+endmenu

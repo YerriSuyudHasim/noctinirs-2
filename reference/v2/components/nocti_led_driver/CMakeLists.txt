@@ -1,0 +1,15 @@
+idf_component_register(
+    SRCS
+        "nocti_led_driver.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        esp_common
+        nocti_hal_i2c
+        nocti_scheduler
+        nocti_common
+    PRIV_REQUIRES
+        log
+        driver
+        esp_rom
+)

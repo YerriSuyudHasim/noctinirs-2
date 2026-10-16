@@ -1,0 +1,11 @@
+NoctiNIRSv3 3.4.4 USB Serial/JTAG console fix
+Static validation performed in the artifact environment:
+
+PASS tools/check_logging_config.py sdkconfig
+PASS host_static_check.sh: translation_units=11 passed=11 failed=0
+PASS run_host_logic_tests.sh: stream-v1 CRC/layout/sequence
+
+ESP-IDF 5.5.1 target toolchain was not available in this environment, so no new
+ESP32-S3 target binary is included and no target build success is claimed.
+Run idf.py fullclean, set-target, build, flash and monitor on the user's ESP-IDF
+5.5.1 environment.

@@ -1,0 +1,128 @@
+NoctiNIRSv3 Prompt 2 source-policy scan
+UTC: 2026-07-27T10:12:36Z
+
+C translation units: 11
+Headers: 13
+Component CMakeLists: 9
+
+[PASS] Arduino API: none
+[PASS] direct application malloc/calloc/realloc/free: none
+[PASS] vTaskDelay/vTaskDelayUntil lifecycle barriers: none
+[PASS] PCA/I2C runtime register transactions: none
+[PASS] optical scheduler/MBLL/SSR implementation: none
+[PASS] per-sample ADC logging: none
+
+[REVIEW] protocol timing delays (not lifecycle barriers):
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_ads131m04.c:240:    esp_rom_delay_us(300u);
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_ads131m04.c:243:    esp_rom_delay_us(20u);
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_ads131m04.c:265:    esp_rom_delay_us(5u);
+
+[PASS] static event/raw rings and publication sites:
+92:    drdy_event_t event_ring[NOCTI_V3_DRDY_EVENT_RING_CAPACITY];
+96:    nocti_v3_raw_sample_t raw_ring[NOCTI_V3_RAW_RING_CAPACITY];
+122:    uint32_t current = __atomic_load_n(value, __ATOMIC_RELAXED);
+135:    uint32_t current = __atomic_load_n(value, __ATOMIC_RELAXED);
+148:    const uint32_t head = __atomic_load_n(&runtime->event_head, __ATOMIC_ACQUIRE);
+149:    const uint32_t tail = __atomic_load_n(&runtime->event_tail, __ATOMIC_ACQUIRE);
+155:    const uint32_t head = __atomic_load_n(&runtime->raw_head, __ATOMIC_ACQUIRE);
+156:    const uint32_t tail = __atomic_load_n(&runtime->raw_tail, __ATOMIC_ACQUIRE);
+162:    const uint32_t head = __atomic_load_n(&runtime->event_head, __ATOMIC_ACQUIRE);
+163:    __atomic_store_n(&runtime->event_tail, head, __ATOMIC_RELEASE);
+168:    const uint32_t head = __atomic_load_n(&runtime->raw_head, __ATOMIC_ACQUIRE);
+169:    __atomic_store_n(&runtime->raw_tail, head, __ATOMIC_RELEASE);
+174:    const uint32_t tail = __atomic_load_n(&runtime->event_tail, __ATOMIC_RELAXED);
+175:    const uint32_t head = __atomic_load_n(&runtime->event_head, __ATOMIC_ACQUIRE);
+177:    *out_event = runtime->event_ring[tail & EVENT_RING_MASK];
+178:    __atomic_store_n(&runtime->event_tail, tail + 1u, __ATOMIC_RELEASE);
+184:    const uint32_t head = __atomic_load_n(&runtime->raw_head, __ATOMIC_RELAXED);
+185:    const uint32_t tail = __atomic_load_n(&runtime->raw_tail, __ATOMIC_ACQUIRE);
+188:    runtime->raw_ring[head & RAW_RING_MASK] = *sample;
+189:    __atomic_store_n(&runtime->raw_head, head + 1u, __ATOMIC_RELEASE);
+196:    const uint32_t tail = __atomic_load_n(&runtime->raw_tail, __ATOMIC_RELAXED);
+197:    const uint32_t head = __atomic_load_n(&runtime->raw_head, __ATOMIC_ACQUIRE);
+199:    *out_sample = runtime->raw_ring[tail & RAW_RING_MASK];
+200:    __atomic_store_n(&runtime->raw_tail, tail + 1u, __ATOMIC_RELEASE);
+207:    __atomic_store_n(&runtime->gpio_isr_callback_core,
+210:    if (!__atomic_load_n(&runtime->capture_enabled, __ATOMIC_RELAXED)) return;
+217:        __atomic_store_n(&runtime->drdy_overflow_pending, true, __ATOMIC_RELEASE);
+218:        __atomic_store_n(&runtime->session_integrity_fault, true, __ATOMIC_RELEASE);
+227:    const uint32_t head = __atomic_load_n(&runtime->event_head, __ATOMIC_RELAXED);
+228:    const uint32_t tail = __atomic_load_n(&runtime->event_tail, __ATOMIC_ACQUIRE);
+234:        __atomic_store_n(&runtime->drdy_overflow_pending, true, __ATOMIC_RELEASE);
+235:        __atomic_store_n(&runtime->session_integrity_fault, true, __ATOMIC_RELEASE);
+237:        runtime->event_ring[head & EVENT_RING_MASK] = (drdy_event_t) {
+241:        __atomic_store_n(&runtime->event_head, head + 1u, __ATOMIC_RELEASE);
+243:        const uint32_t current_max = __atomic_load_n(
+246:            __atomic_store_n(&runtime->event_ring_depth_max_isr,
+316:        __atomic_store_n(&runtime->session_integrity_fault, true, __ATOMIC_RELEASE);
+325:        __atomic_store_n(&runtime->session_integrity_fault, true, __ATOMIC_RELEASE);
+347:        __atomic_store_n(&runtime->session_integrity_fault, true, __ATOMIC_RELEASE);
+350:        __atomic_store_n(&runtime->session_integrity_fault, true, __ATOMIC_RELEASE);
+353:        __atomic_store_n(&runtime->session_integrity_fault, true, __ATOMIC_RELEASE);
+385:    __atomic_store_n(&runtime->capture_enabled, false, __ATOMIC_RELEASE);
+389:    __atomic_store_n(&runtime->drdy_sequence, 0u, __ATOMIC_RELEASE);
+390:    __atomic_store_n(&runtime->capture_enabled, true, __ATOMIC_RELEASE);
+458:                                  __atomic_load_n(
+482:    __atomic_store_n(&runtime->capture_enabled, false, __ATOMIC_RELEASE);
+492:    __atomic_store_n(&runtime->session_integrity_fault, true, __ATOMIC_RELEASE);
+494:    __atomic_store_n(&runtime->running, false, __ATOMIC_RELEASE);
+495:    __atomic_store_n(&runtime->public_adc->acquisition_running,
+499:    __atomic_store_n(&runtime->capture_enabled, false, __ATOMIC_RELEASE);
+518:    __atomic_store_n(&runtime->capture_enabled, false, __ATOMIC_RELEASE);
+521:    __atomic_store_n(&runtime->session_integrity_fault, false, __ATOMIC_RELEASE);
+522:    __atomic_store_n(&runtime->drdy_overflow_pending, false, __ATOMIC_RELEASE);
+526:    __atomic_store_n(&runtime->drdy_sequence, 0u, __ATOMIC_RELEASE);
+538:        __atomic_store_n(&runtime->drdy_sequence, 0u, __ATOMIC_RELEASE);
+540:        __atomic_store_n(&runtime->capture_enabled, true, __ATOMIC_RELEASE);
+545:        __atomic_store_n(&runtime->capture_enabled, false, __ATOMIC_RELEASE);
+551:    __atomic_store_n(&runtime->running, true, __ATOMIC_RELEASE);
+552:    __atomic_store_n(&runtime->public_adc->acquisition_running,
+561:             (unsigned long)__atomic_load_n(&runtime->session_epoch, __ATOMIC_ACQUIRE),
+576:    __atomic_store_n(&runtime->capture_enabled, false, __ATOMIC_RELEASE);
+578:    __atomic_store_n(&runtime->running, false, __ATOMIC_RELEASE);
+579:    __atomic_store_n(&runtime->public_adc->acquisition_running,
+586:        __atomic_store_n(&runtime->drain_requested, true, __ATOMIC_RELEASE);
+610:             (unsigned long)__atomic_load_n(&runtime->session_epoch, __ATOMIC_ACQUIRE),
+611:             __atomic_load_n(&runtime->gpio_isr_callback_core, __ATOMIC_ACQUIRE));
+617:    if (__atomic_exchange_n(&runtime->drdy_overflow_pending,
+628:    while (__atomic_load_n(&runtime->running, __ATOMIC_ACQUIRE) &&
+640:            __atomic_load_n(&runtime->session_integrity_fault, __ATOMIC_ACQUIRE)) {
+661:    __atomic_store_n(&runtime->diagnostic_task_core,
+672:        if (__atomic_load_n(&runtime->drain_requested, __ATOMIC_ACQUIRE) &&
+674:            __atomic_store_n(&runtime->drain_requested, false, __ATOMIC_RELEASE);
+680:        if (__atomic_load_n(&runtime->running, __ATOMIC_ACQUIRE) &&
+684:            __atomic_store_n(&runtime->diagnostic_stack_watermark_bytes,
+687:            __atomic_store_n(&runtime->adc_stack_watermark_bytes,
+740:    __atomic_store_n(&runtime->gpio_isr_callback_core,
+817:        if (__atomic_load_n(&runtime->running, __ATOMIC_ACQUIRE)) {
+820:        __atomic_store_n(&runtime->adc_stack_watermark_bytes,
+823:        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(__atomic_load_n(&runtime->running, __ATOMIC_ACQUIRE) ? 10u : 100u));
+875:    __atomic_store_n(&runtime->gpio_isr_callback_core,
+929:           __atomic_load_n(&adc->acquisition_running, __ATOMIC_ACQUIRE);
+939:    out_snapshot->name = __atomic_load_n(&runtime->counters.name, __ATOMIC_ACQUIRE)
+953:    out_snapshot->event_ring_depth_max = __atomic_load_n(
+956:    out_snapshot->drdy_event_overflow = __atomic_load_n(
+958:    out_snapshot->adc_task_stack_watermark_bytes = __atomic_load_n(
+960:    out_snapshot->diagnostic_task_stack_watermark_bytes = __atomic_load_n(
+963:    out_snapshot->session_epoch = __atomic_load_n(
+970:    out_snapshot->diagnostic_task_core = __atomic_load_n(
+973:    out_snapshot->gpio_isr_callback_core = __atomic_load_n(
+976:    out_snapshot->acquisition_running = __atomic_load_n(
+979:    out_snapshot->session_integrity_fault = __atomic_load_n(
+1004:    if (__atomic_load_n(&runtime->running, __ATOMIC_ACQUIRE)) {
+1007:#define RESET_COUNTER(name) __atomic_store_n(&runtime->counters.name, 0, __ATOMIC_RELEASE)
+1022:    __atomic_store_n(&runtime->event_ring_depth_max_isr, 0u, __ATOMIC_RELEASE);
+1023:    __atomic_store_n(&runtime->drdy_event_overflow_isr, 0u, __ATOMIC_RELEASE);
+1024:    __atomic_store_n(&runtime->drdy_overflow_pending, false, __ATOMIC_RELEASE);
+1025:    __atomic_store_n(&runtime->session_integrity_fault, false, __ATOMIC_RELEASE);
+
+[PASS] DRDY ISR has compact timestamp/ring/notify calls; SPI polling is task-only:
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_ads131m04.c:91:    return spi_device_polling_transmit(ads->device, &ads->transaction);
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_timebase/nocti_v3_timebase.c:97:esp_err_t IRAM_ATTR nocti_v3_timebase_now_us_isr(
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_adc.c:204:static void IRAM_ATTR drdy_isr(void *argument)
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_adc.c:213:    if (nocti_v3_timebase_now_us_isr(runtime->timebase, &timestamp_us) != ESP_OK) {
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_adc.c:220:        vTaskNotifyGiveFromISR(runtime->adc_task, &high_priority_woken);
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_adc.c:253:    vTaskNotifyGiveFromISR(runtime->adc_task, &high_priority_woken);
+/mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_timebase/include/nocti_v3_timebase.h:44:esp_err_t nocti_v3_timebase_now_us_isr(const nocti_v3_timebase_t *timebase,
+
+RESULT: Source policy scan PASS with three intentional ADS protocol delays (reset low, reset recovery, sync pulse).

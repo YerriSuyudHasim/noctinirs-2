@@ -1,0 +1,16 @@
+NoctiNIRS paired v2.1 DRDY/FIFO source validation
+==================================================
+
+[PASS] Passive one-second DRDY edge counter removed
+[PASS] Active validation reads 512 complete ADS131M04 frames
+[PASS] Active validation computes rate from ISR timestamps
+[PASS] Active validation checks CRC, DRDY gaps, and duplicate sequences
+[PASS] Non-reset 5-us SYNC pulse API added
+[PASS] ADS131 FIFO is synchronized before every acquisition START
+[PASS] Post-frame DRDY-high guard reduced from 500 us to 20 us
+[PASS] CLOCK readback remains strict at 0x0F0E
+[PASS] Paired K_ON=5 and K_OFF=5 remain unchanged
+[PASS] No live-view protocol or software change required
+
+Note: This environment does not include ESP-IDF 5.5.1, so run
+`idf.py fullclean` and `idf.py build` locally before flashing.

@@ -1,0 +1,10 @@
+NoctiNIRSv3 3.4.1 host validation
+
+Command: tools/host_static_check.sh
+Result: PASS 11/11 translation units
+
+Command: tools/run_host_logic_tests.sh
+Result: PASS stream-v1 CRC/layout/sequence
+
+ESP-IDF 5.5.1 cross-build: NOT RUN (toolchain unavailable in this environment)
+Hardware flash/runtime test: NOT RUN

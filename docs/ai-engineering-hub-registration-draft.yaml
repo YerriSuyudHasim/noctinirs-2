@@ -1,0 +1,36 @@
+schema_version: 1
+status: pending-verification
+project:
+  name: NoctiNIRS 2
+  repository_url: null
+  visibility: private
+  type: esp32-s3-firmware
+  default_branch: main
+  initial_firmware_version: 0.1.0
+  framework:
+    name: ESP-IDF
+    version: "6.1"
+  rtos: FreeRTOS
+  target: esp32s3
+  project_policy: AGENTS.md
+  human_owner: null
+  backup_owner: null
+  risk_class: pending-human-classification
+  protected_assets:
+    - default branch
+    - releases
+    - signing material
+    - reference snapshots
+  required_checks:
+    - reference-integrity
+    - firmware-build
+  required_reviews:
+    - independent-review
+    - human-merge-approval
+  allowed_integrations: []
+  google_drive_folder: null
+  evidence_retention: pending-human-decision
+  incident_contact: null
+notes:
+  - Replace null and pending values only with verified human-approved data.
+  - Copy this record into ai-engineering-hub/projects/registry.yaml through its reviewed workflow.

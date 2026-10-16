@@ -1,0 +1,47 @@
+# ESP-IDF build outputs
+/build/
+**/build/
+/sdkconfig
+sdkconfig.old
+managed_components/
+.espressif/
+
+# Compiled artifacts
+*.bin
+*.elf
+*.map
+*.o
+*.a
+
+# Python and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.*
+secrets.*
+
+# Local logs and scratch files
+*.log
+*.tmp
+*.bak

@@ -1,0 +1,7 @@
+attempt: idf.py --version
+exit_code=127
+bash: line 3: idf.py: command not found
+
+attempt: idf.py fullclean build
+bash: line 8: idf.py: command not found
+exit_code=127

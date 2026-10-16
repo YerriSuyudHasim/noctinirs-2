@@ -1,0 +1,38 @@
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/README.md and /mnt/data/work_p2/p2/NoctiNIRSv3/README.md differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_adc/CMakeLists.txt and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/CMakeLists.txt differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_adc/include/nocti_v3_adc.h and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/include/nocti_v3_adc.h differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_adc.c and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc/nocti_v3_adc.c differ
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc: nocti_v3_ads131m04.c
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_adc: nocti_v3_ads131m04.h
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_board/include/nocti_v3_board.h and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_board/include/nocti_v3_board.h differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_board/nocti_v3_board.c and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_board/nocti_v3_board.c differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_common/include/nocti_v3_common.h and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_common/include/nocti_v3_common.h differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_common/include/nocti_v3_config.h and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_common/include/nocti_v3_config.h differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_common/include/nocti_v3_version.h and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_common/include/nocti_v3_version.h differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_common/nocti_v3_common.c and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_common/nocti_v3_common.c differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_optical/CMakeLists.txt and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_optical/CMakeLists.txt differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_optical/include/nocti_v3_optical.h and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_optical/include/nocti_v3_optical.h differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_optical/nocti_v3_optical.c and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_optical/nocti_v3_optical.c differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_stream/CMakeLists.txt and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_stream/CMakeLists.txt differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_stream/include/nocti_v3_stream.h and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_stream/include/nocti_v3_stream.h differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_stream/include/nocti_v3_stream_compat.h and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_stream/include/nocti_v3_stream_compat.h differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_stream/nocti_v3_stream.c and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_stream/nocti_v3_stream.c differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_timebase/CMakeLists.txt and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_timebase/CMakeLists.txt differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_timebase/include/nocti_v3_timebase.h and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_timebase/include/nocti_v3_timebase.h differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/components/nocti_v3_timebase/nocti_v3_timebase.c and /mnt/data/work_p2/p2/NoctiNIRSv3/components/nocti_v3_timebase/nocti_v3_timebase.c differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/docs/V3_ARCHITECTURE_CONTRACT.md and /mnt/data/work_p2/p2/NoctiNIRSv3/docs/V3_ARCHITECTURE_CONTRACT.md differ
+Only in /mnt/data/work_p2/p1/NoctiNIRSv3/docs: V3_BUILD_ATTEMPT.txt
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/docs: V3_BUILD_ATTEMPT_P1.txt
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/docs: V3_BUILD_ATTEMPT_P2.txt
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/docs/V3_BUILD_NOTES.md and /mnt/data/work_p2/p2/NoctiNIRSv3/docs/V3_BUILD_NOTES.md differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/docs/V3_MIGRATION_MAP.md and /mnt/data/work_p2/p2/NoctiNIRSv3/docs/V3_MIGRATION_MAP.md differ
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/docs: V3_P2_DIFF_FROM_P1.txt
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/docs: V3_P2_HARDWARE_TEST.md
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/docs: V3_P2_LOGIC_CHECK.txt
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/docs: V3_P2_REALTIME_REVIEW.md
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/docs: V3_P2_SOURCE_SCAN.txt
+Only in /mnt/data/work_p2/p2/NoctiNIRSv3/docs: V3_P2_STATIC_CHECK.txt
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/docs/V3_PROGRESS.md and /mnt/data/work_p2/p2/NoctiNIRSv3/docs/V3_PROGRESS.md differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/docs/V3_STATIC_REVIEW.md and /mnt/data/work_p2/p2/NoctiNIRSv3/docs/V3_STATIC_REVIEW.md differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/main/app_main.c and /mnt/data/work_p2/p2/NoctiNIRSv3/main/app_main.c differ
+Files /mnt/data/work_p2/p1/NoctiNIRSv3/sdkconfig.defaults and /mnt/data/work_p2/p2/NoctiNIRSv3/sdkconfig.defaults differ

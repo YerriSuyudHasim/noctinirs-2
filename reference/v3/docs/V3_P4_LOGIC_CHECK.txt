@@ -1,0 +1,7 @@
+PASS half_open_boundaries=15
+PASS representative=mean_latest_contiguous_up_to_K no_backfill=1 integrity_breaks=crc/spi/status/gap
+PASS slot_validity target/minimum/partial/invalid=1
+PASS frame_validity valid/partial/invalid/missing_pair=1
+PASS corrected_saturation=1
+PASS wavelength_pairing sources=10 slots=20
+PASS session_config_generation_filter=1

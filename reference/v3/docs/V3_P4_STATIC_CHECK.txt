@@ -1,0 +1,25 @@
+NoctiNIRSv3 Prompt 4 host static check
+Compiler: clang
+Flags: -std=gnu11 -Wall -Wextra -Werror -Wformat=2 -fsyntax-only
+External API model: narrow ESP-IDF/FreeRTOS stubs; not a target build
+
+PASS components/nocti_v3_adc/nocti_v3_adc.c
+PASS components/nocti_v3_adc/nocti_v3_ads131m04.c
+PASS components/nocti_v3_board/nocti_v3_board.c
+PASS components/nocti_v3_common/nocti_v3_common.c
+PASS components/nocti_v3_health/nocti_v3_health.c
+PASS components/nocti_v3_led/nocti_v3_led.c
+PASS components/nocti_v3_optical/nocti_v3_optical.c
+PASS components/nocti_v3_stream/nocti_v3_stream.c
+PASS components/nocti_v3_timebase/nocti_v3_timebase.c
+PASS components/nocti_v3_wifi/nocti_v3_wifi.c
+PASS main/app_main.c
+
+SUMMARY translation_units=11 passed=11 failed=0
+raw_sample=64
+slot_descriptor=40
+slot_timing=200
+slot_result=76
+wavelength_pair=52
+completed_frame=2144
+optical_health=312

@@ -1,0 +1,32 @@
+NoctiNIRSv3 final checks
+date_utc=2026-07-28T05:18:24Z
+firmware_expected=3.4.0
+#define NOCTI_V3_FW_VERSION_MAJOR     3
+#define NOCTI_V3_FW_VERSION_MINOR     4
+#define NOCTI_V3_FW_VERSION_PATCH     0
+#define NOCTI_V3_BUILD_PHASE          "P5_FINAL_INTEGRATION"
+    NOCTI_V3_STR(NOCTI_V3_FW_VERSION_MAJOR) "." \
+    NOCTI_V3_STR(NOCTI_V3_FW_VERSION_MINOR) "." \
+    NOCTI_V3_STR(NOCTI_V3_FW_VERSION_PATCH)
+
+PASS components/nocti_v3_adc/nocti_v3_adc.c
+PASS components/nocti_v3_adc/nocti_v3_ads131m04.c
+PASS components/nocti_v3_board/nocti_v3_board.c
+PASS components/nocti_v3_common/nocti_v3_common.c
+PASS components/nocti_v3_health/nocti_v3_health.c
+PASS components/nocti_v3_led/nocti_v3_led.c
+PASS components/nocti_v3_optical/nocti_v3_optical.c
+PASS components/nocti_v3_stream/nocti_v3_stream.c
+PASS components/nocti_v3_timebase/nocti_v3_timebase.c
+PASS components/nocti_v3_wifi/nocti_v3_wifi.c
+PASS main/app_main.c
+SUMMARY translation_units=11 passed=11 failed=0
+PASS stream-v1 CRC/layout/sequence
+python_tools_compile=PASS
+arduino_matches=0
+legacy_i2c_matches=0
+application_no_affinity_matches=0
+required_final_docs=OK
+target_build_verified=NO
+hardware_test_partially_verified=NO
+acceptance_verified=NO

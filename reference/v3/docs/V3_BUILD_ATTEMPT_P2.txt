@@ -1,0 +1,30 @@
+NoctiNIRSv3 Prompt 2 target build attempt
+UTC: 2026-07-27T10:02:32Z
+
+Environment
+PATH=/opt/apply_patch/bin:/opt/imagemagick/bin:/opt/pyvenv/bin:/usr/local/swift/usr/bin:/usr/local/go/bin:/opt/nvm/versions/node/v22.16.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.sdkman/candidates/kotlin/current/bin
+IDF_PATH=<not set>
+
+$ command -v idf.py
+exit=1
+
+$ command -v xtensa-esp32s3-elf-gcc
+exit=1
+
+$ idf.py --version
+bash: line 21: idf.py: command not found
+exit=127
+
+$ idf.py set-target esp32s3
+bash: line 26: idf.py: command not found
+exit=127
+
+$ idf.py fullclean
+bash: line 30: idf.py: command not found
+exit=127
+
+$ idf.py build
+bash: line 34: idf.py: command not found
+exit=127
+
+RESULT: ESP-IDF target build NOT PERFORMED because the toolchain is unavailable in this environment.
