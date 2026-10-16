@@ -5,7 +5,7 @@
 | ID | ADR-0001 |
 | Title | Clean architecture layer boundaries (Core / Application / Ports / Adapters) |
 | Status | **Proposed** (not approved; not implemented) |
-| Date | 2026-10-16 |
+| Date | 2026-10-16 (rev 1, see Revision history) |
 | Issue | #3 (M0.3 — Clean Architecture ADR) |
 | Author role | Architect (draft) |
 | Independent reviewer | TBD (must not be the author) |
@@ -52,8 +52,8 @@ Owner decisions (OWNER-M0-A1-001):
 |---|---|
 | C-1 | Human owner `YerriSuyudHasim`; backup owner unassigned; merge only by Owner. |
 | C-2 | Risk class `non-clinical-research-prototype`; no clinical, diagnostic, or patient-safety claims. |
-| C-3 | Language: **C11**. |
-| C-4 | Layer naming: **Core / Application / Ports / Adapters**. |
+| C-3 | Language: **C11**. Inner layers (Core, Application, Ports) compile with `-std=c11` (see 3.4). |
+| C-4 | Layer naming: **Core / Application / Ports / Adapters** (Owner decision OWNER-M0-A1-001 r1.1). |
 | C-5 | Target ESP32-S3; ESP-IDF 6.1 line, exact version pending verification in Issue #2. |
 | C-6 | Baseline version 0.1.0. |
 
@@ -115,10 +115,28 @@ Rows depend on columns (✔ allowed, ✘ forbidden).
 
 ```text
 esp_*        freertos/*    driver/*    lwip/*
-hal/*        soc/*         sdkconfig.h
+hal/*        soc/*         rom/*       esp_private/*
+sdkconfig.h
+nimble/*     host/ble_*    bt_*                         # BLE / Bluetooth
+nvs.h        nvs_flash.h   nvs_*.h                      # NVS
+FreeRTOS.h   task.h        queue.h     semphr.h         # unprefixed FreeRTOS
+timers.h     event_groups.h
+nn2_adapter_*  nn2_adapters_*                           # any adapter header
 ```
 
-Also forbidden in these layers: `rom/*`, `nvs*`, `esp_private/*`, Wi-Fi/BLE headers, and any `nn2_adapter_*` header. Allowed standard headers in Core: `<stdint.h>`, `<stdbool.h>`, `<stddef.h>`, `<string.h>`, `<limits.h>`, `<stdatomic.h>` (only if RTOS review accepts it), and `<assert.h>` (static assertions).
+FreeRTOS headers are forbidden both with the `freertos/` prefix (e.g. `freertos/FreeRTOS.h`, `freertos/task.h`) and unprefixed (`FreeRTOS.h`, `task.h`, `queue.h`, `semphr.h`, `timers.h`, `event_groups.h`). Wi-Fi headers are covered by `esp_*` (e.g. `esp_wifi.h`).
+
+**Cross-layer edge patterns** (machine-checkable, Class S FAIL on match):
+
+| Including layer (path) | Forbidden include pattern |
+|---|---|
+| Core (`components/nn2_core`) | `nn2_app_*`, `nn2_port_*`, `nn2_adapter_*`, `nn2_adapters_*` |
+| Ports (`components/nn2_ports`) | `nn2_app_*`, `nn2_adapter_*`, `nn2_adapters_*` |
+| Application (`components/nn2_app`) | `nn2_adapter_*`, `nn2_adapters_*` |
+
+Allowed standard headers in Core: `<stdint.h>`, `<stdbool.h>`, `<stddef.h>`, `<string.h>`, `<limits.h>`, and `<assert.h>` (static assertions). `<stdatomic.h>` is **not** machine-checked by Class S: whether it is acceptable depends on RTOS review, so any use is a **review-only (Class S manual)** item and is not counted as automated evidence.
+
+**Not detectable by include grep** (deferred): forbidden dependencies reached through macros that expand to includes or platform calls (G3), transitive includes via an allowed header (G4), and generated headers (G5). These are tracked as follow-ups G3/G4/G5; until they are closed, a Class S grep pass does not prove their absence.
 
 Short examples:
 
@@ -132,6 +150,7 @@ Short examples:
 | Topic | Rule (proposed) |
 |---|---|
 | Prefixes | `nn2_core_*`, `nn2_app_*`, `nn2_port_*`, `nn2_adapter_*`; macros `NN2_*`; file names match prefixes. |
+| Language standard | Inner layers (`nn2_core`, `nn2_app`, `nn2_ports`) compile with `-std=c11` in both host (Class U) and target (Class B) builds. Agreement of Firmware and RTOS Specialists on this flag is an open question (Q-10). |
 | Opaque handles | Modules expose `typedef struct nn2_x nn2_x_t;` with storage supplied by the caller (static allocation helpers or `NN2_X_STORAGE_SIZE`) to avoid heap. |
 | Errors | Functions return `nn2_status_t` (a Core-defined enum, `NN2_OK = 0`); outputs go through pointer parameters. Adapters translate `esp_err_t` at the boundary; `esp_err_t` never crosses into Ports/Application/Core. |
 | Memory | No dynamic allocation after init. Init-time allocation is allowed only in Adapters/composition root and must be documented; Core and Application do not call `malloc`/`free`. |
@@ -141,7 +160,7 @@ Short examples:
 | Concurrency | Core is single-threaded and reentrant by construction (no globals with mutable state). Application state shared across contexts requires a documented synchronization strategy approved by RTOS Specialist. |
 | Const / types | Fixed-width integers; `const` for inputs; no implicit platform `int` size assumptions in wire formats. |
 
-### 3.5 Proposed component layout (proposed, NOT implemented)
+### 3.5 Component layout and normative layer paths (NOT implemented)
 
 ```text
 components/
@@ -154,7 +173,26 @@ main/                       # composition root; wires adapters into app
 test/host/                  # Unity host tests with fake ports (proposed)
 ```
 
-ESP-IDF `idf_component_register(... REQUIRES ...)` lists for `nn2_core`, `nn2_ports`, and `nn2_app` must contain only allow-listed project components (no IDF components). Exact names and the split of adapter components are to be decided in the implementation issue.
+**Normative inner-layer paths.** The following are the normative layer paths for the inner layers:
+
+| Path | Layer |
+|---|---|
+| `components/nn2_core` | Core |
+| `components/nn2_app` | Application |
+| `components/nn2_ports` | Ports |
+
+- Until `tools/layers.yaml` exists (to be introduced after this ADR is accepted), **this ADR is the source of truth for layer paths**. The Architect owns the layer map; CI consumes it and must not maintain an independent list.
+- Any `components/nn2_*` directory that is not in this table is a layer-map violation (**CI FAIL**), until the map is amended by a revision of this ADR (or, after acceptance, `tools/layers.yaml`). Adapter components (`nn2_adapters_<area>`) must be added to the map by name when introduced.
+
+**`REQUIRES` / `PRIV_REQUIRES` allow-list** (derived from the layout above; no ESP-IDF components permitted):
+
+| Component | Allowed in `REQUIRES` / `PRIV_REQUIRES` |
+|---|---|
+| `nn2_core` | *(none)* |
+| `nn2_ports` | `nn2_core` |
+| `nn2_app` | `nn2_core`, `nn2_ports` |
+
+Any other entry is a Class S FAIL. Exact names and the split of adapter components are to be decided in the implementation issue.
 
 ### 3.6 Candidate ports (proposed)
 
@@ -180,7 +218,7 @@ The acquisition path (sample-ready event → sample capture → classification �
 3. **Mitigation B: static binding.** For hot-path ports, allow link-time binding (single implementation selected by build) while keeping the same header contract, so host tests can link fakes.
 4. **Mitigation C: real-time island exception.** A narrowly scoped Adapter-side component may implement a hard-real-time loop directly on ESP-IDF/FreeRTOS, producing Core data types into a port. This exception must be recorded in its own ADR, with scope, justification, measurement, and RTOS Specialist review. Core rules never relax.
 
-No timing, latency, jitter, or throughput claim is made by this ADR. All three mitigations require RTOS Specialist input and on-target measurement (Class B / on-target evidence) before adoption.
+No timing, latency, jitter, or throughput claim is made by this ADR. All three mitigations require RTOS Specialist input and on-target measurement (Class H, hardware/on-target evidence) before adoption. Class B (build) is not sufficient for any timing claim.
 
 ### 3.8 Error propagation and recovery
 
@@ -194,12 +232,31 @@ No timing, latency, jitter, or throughput claim is made by this ADR. All three m
 
 | Class | Check | Scope | Notes |
 |---|---|---|---|
-| **S** (Static) | Include grep: fail on forbidden patterns (Section 3.3) in `components/nn2_core`, `nn2_ports`, `nn2_app`. | Layer rule | Fast; no toolchain required. |
-| **S** (Static) | `REQUIRES`/`PRIV_REQUIRES` audit of `CMakeLists.txt` against an allow-list per layer. | Layer rule | Catches dependencies grep misses. |
+| **S** (Static) | Include grep: fail on forbidden patterns and cross-layer edges (Section 3.3) in the normative paths (Section 3.5). | Layer rule | Fast; no toolchain required. Macro/transitive/generated cases deferred (G3/G4/G5). |
+| **S** (Static) | `REQUIRES`/`PRIV_REQUIRES` audit of `CMakeLists.txt` against the allow-list (Section 3.5). | Layer rule | Catches dependencies grep misses. |
+| **S** (manual) | Review-only items (e.g. `<stdatomic.h>` use). | Layer rule | Reviewer record; not automated evidence. |
 | **U** (Host/unit) | Unity tests built with host compiler, linking Core/Application against fake ports. | Logic | No hardware or timing claims. |
 | **B** (Build) | `idf.py set-target esp32s3 && idf.py build` with the ESP-IDF version pinned by Issue #2. | Compile/link | Not hardware validation. |
+| **H** (Hardware/on-target) | Measurement on ESP32-S3 hardware. | Timing, behavior | Required for any timing/latency/jitter claim. Out of scope for this ADR. |
 
 These run as **separate CI jobs** so that a failure is attributable to one class. Job definitions, runner images, and the ESP-IDF pin are coordinated with the Verifier under Issue #2. This ADR does not add CI.
+
+**Result semantics (normative):**
+
+- A **NOT APPLICABLE** or vacuous result (e.g. a grep over zero files, a skipped job) is **not evidence** and must never be reported as green/pass.
+- A skipped gate is recorded as **NOT APPLICABLE (not evidence)**.
+- Tool errors are **FAIL**, not pass (e.g. `grep` exit status >= 2, unreadable `CMakeLists.txt`, parse error).
+- If any normative path (Section 3.5) exists, the Class S gate **must run and succeed**; a skipped or non-successful gate in that state is FAIL.
+
+**Acceptance criteria per class:**
+
+| Class | Pass requires |
+|---|---|
+| S (include grep) | Gate ran over every existing normative path; zero matches; no tool error. |
+| S (`REQUIRES` audit) | Every `CMakeLists.txt` under the normative paths parsed; every `REQUIRES`/`PRIV_REQUIRES` entry within the allow-list; any entry outside it = FAIL; parse failure = FAIL. |
+| U (host unit) | Core and Application built with the host compiler (`-std=c11`) against fake ports; tests actually executed (non-zero test count); all pass; logs retained as CI artifacts with run ID. |
+| B (build) | As defined under Issue #2. |
+| H (on-target) | Defined per measurement issue; not claimed by this ADR. |
 
 ## 5. Alternatives considered
 
@@ -253,11 +310,21 @@ Acceptance requires an independent reviewer and Owner acknowledgment. Code confo
 | Q-7 | Host test framework (Unity) as a dependency: provenance/licence review. | Owner / Verifier |
 | Q-8 | Branch protection on `main` is reported unavailable/disabled (`protected: false`); merge discipline relies on process. | Owner (Issue #1 follow-up) |
 | Q-9 | Backup owner unassigned. | Owner |
+| Q-10 | Agreement on `-std=c11` for inner layers (strict vs. GNU extensions, compatibility with ESP-IDF headers used by Adapters). | Firmware + RTOS Specialist |
+| Q-11 | Include checks not detectable by grep: macros (G3), transitive includes (G4), generated headers (G5). | Verifier (follow-ups) |
 
 ## 10. References
 
 - Issues: #1 (M0.1 Governance), #2 (M0.2 Reproducible ESP-IDF build), #3 (this ADR), #4 (M0.4 Historical reference assessment).
+- Owner decision OWNER-M0-A1-001 r1.1 (Core / Application / Ports / Adapters naming; C11).
 - PR #5 (M0.1 governance fields, OWNER-M0-A1-001), merged as `52d9f85d6ce454b7e1ef97cc7908bbae92b49d4f`.
 - `AGENTS.md`, `project.yaml`, `README.md`, `CMakeLists.txt`, `main/app_main.c`, `main/CMakeLists.txt`, `sdkconfig.defaults` @ `52d9f85`.
 - `ai-engineering-hub` `AGENTS.md` and `projects/noctinirs-2/project.yaml` @ `e645829a726b1008c46373d7ef2b25929988d7f1`.
 - Evidence only (not requirements), @ `b1c48083c90368aed126b447eea3a89a29ecad73`: `reference/v3/docs/V3_ARCHITECTURE_CONTRACT.md`, `reference/v3/docs/V3_P5_ARCHITECTURE.md`, `reference/v3/README.md`, `reference/v2/README.md`, `reference/v4/.github/copilot-instructions.md`.
+
+## 11. Revision history
+
+| Rev | Date | Change | Status |
+|---|---|---|---|
+| 0 | 2026-10-16 | Initial draft (`c5667a46`). | Proposed |
+| 1 | 2026-10-16 | Revision following the PR #6 architecture review (head `690deff`) and the Orchestrator decision in the team room: normative layer paths (3.5); NOT APPLICABLE is not evidence (4); `-std=c11` for inner layers; explicit FreeRTOS/BLE/NVS include patterns and cross-layer edges (3.3); `<stdatomic.h>` restated as review-only; `REQUIRES` allow-list; Class U and `REQUIRES` audit acceptance criteria; Class H for on-target claims (3.7); OWNER-M0-A1-001 r1.1 cited. | **Proposed** (unchanged) |
