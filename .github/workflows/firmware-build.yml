@@ -6,7 +6,7 @@ name: Firmware build
 #   esp-idf-build          -> Class B (build) only
 # A successful build is NOT hardware validation, NOT unit/integration evidence,
 # and says nothing about timing, electrical behaviour, safety, or clinical validity.
-# No Class U job exists yet: no tests are present in the repository.
+#   host-unit-tests        -> Class U (host unit) only; Core + Application with mock ports
 
 on:
   push:
@@ -241,3 +241,37 @@ jobs:
             echo "### Class S invariant: FAIL (present=$PRESENT, gate=$GATE_RESULT)" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
+
+  host-unit-tests:
+    # Class U (host unit) only: Core + Application against mock ports. No hardware/timing claims.
+    name: class-u-host-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Build and run host tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-u
+          if [ ! -f test/host/CMakeLists.txt ]; then
+            echo "::error title=Class U::test/host/CMakeLists.txt missing"; exit 1
+          fi
+          { echo "SOURCE_SHA=$SOURCE_SHA"; gcc --version | head -n1; cmake --version | head -n1; } | tee evidence-u/toolchain.txt
+          cmake -S test/host -B build-host 2>&1 | tee evidence-u/configure.log
+          cmake --build build-host 2>&1 | tee evidence-u/build.log
+          ./build-host/nn2_host_tests 2>&1 | tee evidence-u/tests.log
+          grep -E '^TESTS RUN: [1-9][0-9]*, FAILED: 0$' evidence-u/tests.log
+          { echo "### Class U host tests"; echo '```'; cat evidence-u/tests.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload host test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: class-u-host-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          if-no-files-found: error
+          path: evidence-u/
