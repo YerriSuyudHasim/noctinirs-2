@@ -13,7 +13,7 @@ USB Serial/JTAG console, one shot, writes an application NVS namespace, then the
 7. A `RECONNECT_DUE` that is still queued after `LINK_UP` is safe. `reconnect_now` samples the driver, sees the link up, and returns `NN2_OK` without calling `esp_wifi_connect`. The failure reschedule runs only when `reconnect_now` is not `NN2_OK`. An attempt that is still in flight is left alone the same way.
 8. Link up and link down are visible through `nn2_port_wifi_station` (`get_status` and `wait_event`). `get_status` samples the driver from `nn2_net`, so a dropped event is still visible. That report is the hook a later issue can use.
 
-Reconnect delays, from `NN2_WIFI_BACKOFF_FIRST_MS` and `NN2_WIFI_BACKOFF_MAX_MS` (Kconfig on target, the same defaults in `nn2_wifi_limits.h` for host tests): 0 ms, then 500 ms, doubling, capped at 8000 ms. `FIRST_MS` is asserted `<= 1000` and `< 3000`. ADR-0003 optical numeric cells stay OPEN. The 3 s grace timer is not this backoff.
+Reconnect delays, from `NN2_WIFI_BACKOFF_FIRST_MS` and `NN2_WIFI_BACKOFF_MAX_MS` (Kconfig, passed into `nn2_core` by `target_compile_definitions`; host tests use the defaults in `nn2_wifi_limits.h`): 0 ms, then 500 ms, doubling, capped at 8000 ms. `FIRST_MS` is asserted `<= 1000` and `< 3000`. ADR-0003 optical numeric cells stay OPEN. The 3 s grace timer is not this backoff.
 
 ## Tasks
 

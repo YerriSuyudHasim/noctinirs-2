@@ -4,29 +4,45 @@
 #include <stdint.h>
 
 /* Bounds for the M2 STA credential path (issue #30).
-   On target, Kconfig (components/nn2_ad_wifi/Kconfig) supplies
-   CONFIG_NN2_WIFI_BACKOFF_FIRST_MS and CONFIG_NN2_WIFI_BACKOFF_MAX_MS
-   because the ESP-IDF build injects sdkconfig.h. Host tests use the
-   defaults below. The 3 s grace timer that moves the device to STOPPED
-   (issue #33 D1) is not implemented here. */
+   Target builds pass NN2_WIFI_BACKOFF_FIRST_MS, NN2_WIFI_BACKOFF_MAX_MS,
+   NN2_WIFI_BACKOFF_FACTOR, and NN2_WIFI_CONNECT_GUARD_MS from
+   nn2_core target_compile_definitions (Kconfig values for the two
+   backoff delays; the factor and connect guard are fixed policy).
+   This header does not include sdkconfig.h. Host tests leave
+   ESP_PLATFORM unset and take the defaults below. The 3 s grace timer
+   that moves the device to STOPPED (issue #33 D1) is not implemented. */
 
 #define NN2_WIFI_SSID_MAX 32u
 #define NN2_WIFI_PASS_MIN 8u
 #define NN2_WIFI_PASS_MAX 64u
 
-#if defined(CONFIG_NN2_WIFI_BACKOFF_FIRST_MS)
-#define NN2_WIFI_BACKOFF_FIRST_MS CONFIG_NN2_WIFI_BACKOFF_FIRST_MS
+#if defined(ESP_PLATFORM)
+#if !defined(NN2_WIFI_BACKOFF_FIRST_MS)
+#error "NN2_WIFI_BACKOFF_FIRST_MS is required on target"
+#endif
+#if !defined(NN2_WIFI_BACKOFF_MAX_MS)
+#error "NN2_WIFI_BACKOFF_MAX_MS is required on target"
+#endif
+#if !defined(NN2_WIFI_BACKOFF_FACTOR)
+#error "NN2_WIFI_BACKOFF_FACTOR is required on target"
+#endif
+#if !defined(NN2_WIFI_CONNECT_GUARD_MS)
+#error "NN2_WIFI_CONNECT_GUARD_MS is required on target"
+#endif
 #else
+#ifndef NN2_WIFI_BACKOFF_FIRST_MS
 #define NN2_WIFI_BACKOFF_FIRST_MS 500
 #endif
-
-#if defined(CONFIG_NN2_WIFI_BACKOFF_MAX_MS)
-#define NN2_WIFI_BACKOFF_MAX_MS CONFIG_NN2_WIFI_BACKOFF_MAX_MS
-#else
+#ifndef NN2_WIFI_BACKOFF_MAX_MS
 #define NN2_WIFI_BACKOFF_MAX_MS 8000
 #endif
-
-#define NN2_WIFI_BACKOFF_FACTOR 2u
+#ifndef NN2_WIFI_BACKOFF_FACTOR
+#define NN2_WIFI_BACKOFF_FACTOR 2
+#endif
+#ifndef NN2_WIFI_CONNECT_GUARD_MS
+#define NN2_WIFI_CONNECT_GUARD_MS 15000
+#endif
+#endif
 
 /* First backoff slot must sit inside the 3 s Wi-Fi-loss grace window and
    must be at most 1 s (RTOS note on #30). The immediate retry is 0 ms and
@@ -46,9 +62,9 @@ _Static_assert(NN2_WIFI_BACKOFF_MAX_MS >= NN2_WIFI_BACKOFF_FIRST_MS, "backoff ca
 #define NN2_WIFI_WAIT_CAP_MS 60000u
 
 /* A successful esp_wifi_connect stays in flight until LINK_UP, LINK_DOWN,
-   or this bound. The 1 s poll must not start another attempt before then.
-   The link reads DOWN for the whole association and DHCP interval. */
-#define NN2_WIFI_CONNECT_GUARD_MS 15000u
+   or NN2_WIFI_CONNECT_GUARD_MS. The 1 s poll must not start another
+   attempt before then. The link reads DOWN for the whole association
+   and DHCP interval. The guard value is injected above. */
 
 _Static_assert(NN2_WIFI_CONNECT_GUARD_MS > NN2_WIFI_EVENT_WAIT_MS,
                "connect guard must outlast one station poll");
