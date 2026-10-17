@@ -1,0 +1,22 @@
+menu "NoctiNIRS 2 Wi-Fi station"
+
+    config NN2_WIFI_BACKOFF_FIRST_MS
+        int "STA reconnect first backoff after the immediate retry (ms)"
+        default 500
+        range 1 1000
+        help
+            Delay before the second reconnect attempt. The first attempt
+            after WIFI_EVENT_STA_DISCONNECTED is immediate (0 ms) and is
+            posted to the station task. This value must be <= 1000 and
+            < 3000 so that retry can occur inside the 3 s Wi-Fi-loss grace
+            window. The grace timer itself is not implemented here.
+
+    config NN2_WIFI_BACKOFF_MAX_MS
+        int "STA reconnect backoff cap (ms)"
+        default 8000
+        range 1000 60000
+        help
+            Upper bound for the doubling reconnect delay. The sequence
+            after the immediate retry is FIRST, 2*FIRST, ... up to this cap.
+
+endmenu

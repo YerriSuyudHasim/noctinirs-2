@@ -2,3 +2,17 @@
 # Select the target explicitly with: idf.py set-target esp32s3
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# USB Serial/JTAG is the provisioning console (issue #30). No UART fallback.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# IDF Wi-Fi task stays on core 0. Station credentials live in the app
+# namespace, not in the Wi-Fi driver store. SoftAP is not part of this image.
+CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0=y
+# CONFIG_ESP_WIFI_NVS_ENABLED is not set
+# CONFIG_ESP_WIFI_SOFTAP_SUPPORT is not set
+
+# First reconnect after disconnect is immediate. This is the next delay.
+CONFIG_NN2_WIFI_BACKOFF_FIRST_MS=500
+CONFIG_NN2_WIFI_BACKOFF_MAX_MS=8000
