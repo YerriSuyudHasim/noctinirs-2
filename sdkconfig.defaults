@@ -22,3 +22,7 @@ CONFIG_ESP_TIMER_TASK_AFFINITY_CPU0=y
 # First reconnect after disconnect is immediate. This is the next delay.
 CONFIG_NN2_WIFI_BACKOFF_FIRST_MS=500
 CONFIG_NN2_WIFI_BACKOFF_MAX_MS=8000
+
+# PSRAM stays off (ESP-IDF v6.1 symbol CONFIG_SPIRAM). app_main fails the
+# build if a later sdkconfig turns it on.
+# CONFIG_SPIRAM is not set

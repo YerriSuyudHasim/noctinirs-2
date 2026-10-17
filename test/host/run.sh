@@ -122,3 +122,47 @@ gcc -std=c11 -Wall -Wextra -Werror -Werror=undef \
   -c "$OUT/ad_wifi_guard.c" \
   -o "$OUT/ad_wifi_injected.o"
 echo "PASS: ad_wifi_injected"
+
+STUB="$OUT/app-main-stubs"
+mkdir -p "$STUB"
+cat >"$STUB/esp_log.h" <<'EOF'
+#define ESP_LOGI(tag, fmt, ...) do { (void)(tag); } while (0)
+#define ESP_LOGW(tag, fmt, ...) do { (void)(tag); } while (0)
+#define ESP_LOGE(tag, fmt, ...) do { (void)(tag); } while (0)
+EOF
+APP_MAIN_INC=(
+  -I"$STUB"
+  -I"$ROOT/main"
+  -I"$ROOT/components/nn2_core/include"
+)
+expect_fail app_main_sdkconfig_not_seen "sdkconfig not seen" \
+  gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
+    -I"$EMPTY_SDK" \
+    "${APP_MAIN_INC[@]}" \
+    -c "$ROOT/main/app_main.c" \
+    -o "$OUT/app_main_missing_sdk.o"
+
+SPIRAM_SDK="$OUT/spiram-sdk"
+mkdir -p "$SPIRAM_SDK"
+cat >"$SPIRAM_SDK/sdkconfig.h" <<'EOF'
+#define CONFIG_IDF_TARGET "esp32s3"
+#define CONFIG_SPIRAM 1
+EOF
+expect_fail app_main_spiram_on "CONFIG_SPIRAM must stay disabled" \
+  gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
+    -I"$SPIRAM_SDK" \
+    "${APP_MAIN_INC[@]}" \
+    -c "$ROOT/main/app_main.c" \
+    -o "$OUT/app_main_spiram_on.o"
+
+OFF_SDK="$OUT/spiram-off-sdk"
+mkdir -p "$OFF_SDK"
+cat >"$OFF_SDK/sdkconfig.h" <<'EOF'
+#define CONFIG_IDF_TARGET "esp32s3"
+EOF
+gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
+  -I"$OFF_SDK" \
+  "${APP_MAIN_INC[@]}" \
+  -c "$ROOT/main/app_main.c" \
+  -o "$OUT/app_main_spiram_off.o"
+echo "PASS: app_main_spiram_off"
