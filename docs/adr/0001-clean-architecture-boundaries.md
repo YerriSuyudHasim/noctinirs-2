@@ -5,7 +5,7 @@
 | ID | ADR-0001 |
 | Title | Clean architecture layer boundaries (Core / Application / Ports / Adapters) |
 | Status | **Proposed** (not approved; not implemented) |
-| Date | 2026-10-16 (rev 1, see Revision history) |
+| Date | 2026-10-17 (rev 2, see Revision history) |
 | Issue | #3 (M0.3 — Clean Architecture ADR) |
 | Author role | Architect (draft) |
 | Independent reviewer | TBD (must not be the author) |
@@ -181,8 +181,17 @@ test/host/                  # Unity host tests with fake ports (proposed)
 | `components/nn2_app` | Application |
 | `components/nn2_ports` | Ports |
 
+Adapter components introduced with issue #30. They are not inner layers. The Class S include gate does not scan them. Each component name is at most 15 characters. ESP-IDF and FreeRTOS includes are allowed only in these components and in `main/`.
+
+| Path | Name length | Role |
+|---|---|---|
+| `components/nn2_rtos` | 8 | Single RTOS macro header `nn2_rtos_config.h` |
+| `components/nn2_ad_wifi` | 11 | Wi-Fi STA adapter (`nn2_port_wifi_station`) |
+| `components/nn2_ad_cred` | 11 | App NVS credential store (`nn2_port_wifi_cred_store`) |
+| `components/nn2_ad_prov` | 11 | USB Serial/JTAG provisioning console (`nn2_port_prov_console`) |
+
 - Until `tools/layers.yaml` exists (to be introduced after this ADR is accepted), **this ADR is the source of truth for layer paths**. The Architect owns the layer map; CI consumes it and must not maintain an independent list.
-- Any `components/nn2_*` directory that is not in this table is a layer-map violation (**CI FAIL**), until the map is amended by a revision of this ADR (or, after acceptance, `tools/layers.yaml`). Adapter components (`nn2_adapters_<area>`) must be added to the map by name when introduced.
+- Any `components/nn2_*` directory that is not in the inner-layer table or the adapter table above is a layer-map violation (**CI FAIL**), until the map is amended by a revision of this ADR (or, after acceptance, `tools/layers.yaml`). Adapter components must be added to the map by name when introduced. Issue #30 uses the short names above because `nn2_adapters_<area>` exceeds 15 characters.
 
 **`REQUIRES` / `PRIV_REQUIRES` allow-list** (derived from the layout above; no ESP-IDF components permitted):
 
@@ -328,3 +337,4 @@ Acceptance requires an independent reviewer and Owner acknowledgment. Code confo
 |---|---|---|---|
 | 0 | 2026-10-16 | Initial draft (`c5667a46`). | Proposed |
 | 1 | 2026-10-16 | Revision following the PR #6 architecture review (head `690deff`) and the Orchestrator decision in the team room: normative layer paths (3.5); NOT APPLICABLE is not evidence (4); `-std=c11` for inner layers; explicit FreeRTOS/BLE/NVS include patterns and cross-layer edges (3.3); `<stdatomic.h>` restated as review-only; `REQUIRES` allow-list; Class U and `REQUIRES` audit acceptance criteria; Class H for on-target claims (3.7); OWNER-M0-A1-001 r1.1 cited. | **Proposed** (unchanged) |
+| 2 | 2026-10-17 | Map amendment required by section 3.5 when adapter components are introduced under issue #30. Adds `nn2_rtos`, `nn2_ad_wifi`, `nn2_ad_cred`, and `nn2_ad_prov` (each name ≤ 15 characters). Status stays **Proposed**. This revision does not Accept the ADR. | **Proposed** (unchanged) |

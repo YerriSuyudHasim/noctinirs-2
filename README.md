@@ -1,12 +1,21 @@
 # NoctiNIRS 2
 
-NoctiNIRS 2 is a new clean-architecture ESP32-S3 firmware project starting at **v0.1.0**. It is governed by the separate private [`ai-engineering-hub`](https://github.com/YerriSuyudHasim/ai-engineering-hub) repository. The active firmware is intentionally a minimal scaffold; no NoctiNIRS V2, V3, or V4 implementation has been copied into it.
+NoctiNIRS 2 is a new clean-architecture ESP32-S3 firmware project starting at **v0.1.0**. It is governed by the separate private [`ai-engineering-hub`](https://github.com/YerriSuyudHasim/ai-engineering-hub) repository. Active firmware is the clean-architecture tree under `components/` and `main/`. No NoctiNIRS V2, V3, or V4 implementation has been copied into it.
 
 ## Repository layout
 
 ```text
 noctinirs-2/
-├── main/                         # Active v0.1.0 firmware
+├── components/
+│   ├── nn2_core/                 # Credential and backoff policy (no ESP-IDF)
+│   ├── nn2_ports/                # nn2_port_wifi_station / cred store / prov console
+│   ├── nn2_app/                  # Provision and link policy
+│   ├── nn2_rtos/                 # nn2_rtos_config.h (core 0 task macros)
+│   ├── nn2_ad_wifi/              # ESP-IDF STA adapter
+│   ├── nn2_ad_cred/              # App NVS namespace nn2_wifi
+│   └── nn2_ad_prov/              # USB Serial/JTAG one-shot console
+├── main/                         # Composition root (app_main)
+├── test/host/                    # Class U host tests (Unity)
 ├── reference/
 │   ├── v2/                       # Sanitized historical snapshot
 │   ├── v3/                       # Sanitized historical snapshot
@@ -14,6 +23,8 @@ noctinirs-2/
 │   ├── MANIFEST.sha256           # Tamper-detection hashes
 │   └── README.md                 # Reference policy and exclusions
 ├── docs/
+│   ├── adr/                      # ADR-0001 .. ADR-0003
+│   ├── m2-wifi-provisioning.md   # Issue #30 implementation note
 │   ├── ai-engineering-hub.md
 │   └── ai-engineering-hub-registration-draft.yaml
 ├── tools/verify-reference.ps1
@@ -24,7 +35,17 @@ noctinirs-2/
 └── VERSION
 ```
 
-Only the root build definition and `main/` form the active firmware. Files under `reference/` are evidence and design input, not build inputs.
+The root build definition, `components/`, and `main/` form the active firmware. Files under `reference/` are evidence and design input, not build inputs. Also add `docs/m2-wifi-provisioning.md` and `docs/adr/` to the layout tree? The docs folder listing is incomplete but was already incomplete (adr exists). I'll add a line for the provisioning doc under docs for accuracy.
+
+```
+├── docs/
+│   ├── adr/
+│   ├── m2-wifi-provisioning.md
+│   ├── ai-engineering-hub.md
+│   └── ai-engineering-hub-registration-draft.yaml
+```
+
+Let me update that.
 
 ## Toolchain baseline
 
@@ -40,7 +61,11 @@ idf.py set-target esp32s3
 idf.py build
 ```
 
-The current scaffold only logs its version and an explicit warning that hardware behavior is not implemented.
+The active image brings up a USB Serial/JTAG provisioning console, stores SSID and password in the application NVS namespace `nn2_wifi`, and runs a Wi-Fi station with bounded reconnect backoff. Optical acquisition, emitters, and clinical behavior are not implemented. See `docs/m2-wifi-provisioning.md`. Host unit tests:
+
+```bash
+bash test/host/run.sh
+```
 
 ## Historical references
 
@@ -62,8 +87,6 @@ The relationship to `ai-engineering-hub` is documentation and governance only—
 
 ## Current status
 
-- Local working tree prepared.
-- Private GitHub repository URL: verified from local `origin`.
-- Reciprocal hub registration: prepared in both repositories; human owner, backup owner, risk class, and evidence-retention fields remain unresolved.
-- ESP-IDF build: not run because ESP-IDF is not available in the current shell.
+- M2 provisioning path (issue #30) is implemented on an issue branch: USB console, app NVS namespace `nn2_wifi`, STA reconnect. Class H is NOT RUN. No flash is authorized by that work.
+- Reciprocal hub registration: prepared in both repositories; backup owner remains unassigned.
 - On-target and HIL testing: not run.

@@ -6,7 +6,7 @@ name: Firmware build
 #   esp-idf-build          -> Class B (build) only
 # A successful build is NOT hardware validation, NOT unit/integration evidence,
 # and says nothing about timing, electrical behaviour, safety, or clinical validity.
-# No Class U job exists yet: no tests are present in the repository.
+# class-u-host-tests       -> Class U (host/unit) only. Not hardware validation.
 
 on:
   push:
@@ -38,14 +38,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Normative inner-layer paths, ADR-0001 section 3.5 @ 880903832c8d8c6527ad2c42ec095f9e5a0d1560
+          # Normative inner-layer paths plus adapter components, ADR-0001 section 3.5
           # (docs/adr/0001-clean-architecture-boundaries.md). Change only together with an ADR revision.
+          # Adapter directories are known map entries. They are not inner layers and are not
+          # passed to the Class S include gate.
           normative=(components/nn2_core components/nn2_app components/nn2_ports)
+          adapters=(components/nn2_rtos components/nn2_ad_wifi components/nn2_ad_cred components/nn2_ad_prov)
           unknown=()
           if [ -d components ]; then
             while IFS= read -r d; do
               known=false
-              for n in "${normative[@]}"; do [ "$d" = "$n" ] && known=true; done
+              for n in "${normative[@]}" "${adapters[@]}"; do [ "$d" = "$n" ] && known=true; done
               [ "$known" = true ] || unknown+=("$d")
             done < <(find components -mindepth 1 -maxdepth 1 -type d -name 'nn2_*' | sort)
           fi
@@ -110,6 +113,25 @@ jobs:
       - name: Run gate fixtures
         shell: bash
         run: bash tools/class-s-gate-selftest.sh
+
+  class-u-host-tests:
+    name: class-u-host-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Run host unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash test/host/run.sh | tee host-tests.txt
+          echo "### Class U host tests: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat host-tests.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
   esp-idf-build:
     name: class-b-esp-idf-build
