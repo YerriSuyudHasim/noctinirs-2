@@ -4,12 +4,12 @@ import pathlib
 import os
 import re
 import sys
+import argparse
 
-LAYERS = {"nn2_core": set(), "nn2_ports": {"nn2_core"}, "nn2_app": {"nn2_core", "nn2_ports"}}
-SOURCE_EXT = {".c", ".h", ".cpp", ".hpp", ".cc", ".cxx", ".hh", ".hxx", ".c++", ".h++", ".s"}
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from layer_contract import MANIFEST, detect, load_contract
+
 INCLUDE = re.compile(r'^\s*(?:#|%:)\s*include\s*(?:<([^>\n]+)>|"([^"\n]+)")', re.M)
-PLATFORM = re.compile(r'^(?:esp_.*|freertos/.*|driver/.*|lwip/.*|hal/.*|soc/.*|rom/.*|esp32s3/rom/.*|xtensa/.*|esp_private/.*|sdkconfig\.h|nimble/.*|host/ble_.*|bt_.*|nvs(?:_.*)?\.h|FreeRTOS\.h|task\.h|queue\.h|semphr\.h|timers\.h|event_groups\.h|nn2_adapters?_.*)$')
-CROSS = {"nn2_core": ("nn2_app_", "nn2_port_"), "nn2_ports": ("nn2_app_",), "nn2_app": ()}
 
 
 def literal_includes(text):
@@ -56,7 +56,7 @@ def layer_files(directory):
     pending = [directory]
     while pending:
         with os.scandir(pending.pop()) as entries:
-            for entry in entries:
+            for entry in sorted(entries, key=lambda x: x.name):
                 path = pathlib.Path(entry.path)
                 if entry.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()):
                     raise ValueError('symlink/junction in layer: ' + str(path))
@@ -141,22 +141,16 @@ def cmake_dependencies(text):
     return deps
 
 
-def audit(root):
-    components = root / 'components'
-    if not root.is_dir():
-        raise ValueError('scan root is not a directory')
-    if components.is_symlink() or (hasattr(components, 'is_junction') and components.is_junction()):
-        return ['components is a symlink (unsupported)'], False
-    if components.exists() and not components.is_dir():
-        raise ValueError('components is not a directory')
-    dirs = [components / name for name in LAYERS]
-    unknown = [p for p in components.iterdir() if p.name.startswith('nn2_') and p.name not in LAYERS] if components.is_dir() else []
-    errors = ['unknown layer: ' + str(p.relative_to(root)) for p in unknown]
-    present = any(p.exists() or p.is_symlink() for p in dirs)
-    if not present and not unknown:
+def audit(root, manifest=MANIFEST):
+    policy = load_contract(manifest)  # Validate before any NOT APPLICABLE verdict.
+    rows = policy['layers']
+    if not detect(root, rows):
         return [], False
-    for name in LAYERS:
-        d = components / name
+    layers = {pathlib.Path(r['path']).name: set(r['requires']) for r in rows}
+    errors = []
+    for row in rows:
+        name = pathlib.Path(row['path']).name
+        d = root / row['path']
         if d.is_symlink() or (hasattr(d, 'is_junction') and d.is_junction()) or not d.is_dir():
             errors.append('missing or symlink layer: ' + name)
             continue
@@ -166,11 +160,14 @@ def audit(root):
                 errors.append('component-manager dependency manifest unsupported: ' + str(p.relative_to(root)))
             if p.name == 'CMakeLists.txt' and p.parent != d:
                 errors.append('nested CMakeLists.txt unsupported: ' + str(p.relative_to(root)))
-            if p.suffix.lower() in SOURCE_EXT:
+            if p.suffix.lower() in policy['source_extensions']:
                 sources.append(p)
         if not sources:
             errors.append('empty source/header layer: ' + name)
-        for p in sources:
+        forbidden_layers = set(layers) - layers[name] - {name}
+        cross = tuple(prefix for r in rows if pathlib.Path(r['path']).name in forbidden_layers
+                      for prefix in r['header_prefixes'])
+        for p in sorted(sources):
             try:
                 includes = literal_includes(p.read_text(encoding='utf-8'))
             except (OSError, UnicodeError, ValueError) as exc:
@@ -179,9 +176,8 @@ def audit(root):
             for inc in includes:
                 parts = pathlib.PurePosixPath(inc.replace('\\', '/')).parts
                 suffixes = ['/'.join(parts[i:]) for i in range(len(parts))]
-                forbidden_layers = set(LAYERS) - LAYERS[name] - {name}
-                if (any(PLATFORM.fullmatch(s) for s in suffixes)
-                        or any(part.startswith(CROSS[name]) for part in parts)
+                if (any(re.fullmatch(pattern, s) for pattern in policy['forbidden_include_regex'] for s in suffixes)
+                        or any(part.startswith(cross) for part in parts)
                         or forbidden_layers.intersection(parts)):
                     errors.append(f'{p.relative_to(root)}: forbidden include {inc}')
         cmake = d / 'CMakeLists.txt'
@@ -190,7 +186,7 @@ def audit(root):
         else:
             try:
                 for dep in cmake_dependencies(cmake.read_text(encoding='utf-8')):
-                    if dep not in LAYERS[name]:
+                    if dep not in layers[name]:
                         errors.append(f'{name}: forbidden CMake dependency {dep}')
             except (OSError, UnicodeError, ValueError) as exc:
                 errors.append(f'{name}: CMake scan error: {exc}')
@@ -198,9 +194,13 @@ def audit(root):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('root', nargs='?', default='.')
+    parser.add_argument('--manifest', type=pathlib.Path, default=MANIFEST)
+    args = parser.parse_args()
     try:
-        root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else '.').resolve()
-        errors, present = audit(root)
+        root = pathlib.Path(args.root).resolve()
+        errors, present = audit(root, args.manifest)
     except Exception as exc:
         print('FAIL: scanner error:', exc)
         return 1

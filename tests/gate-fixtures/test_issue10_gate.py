@@ -351,6 +351,8 @@ class WorkflowDetectionFixtures(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = pathlib.Path(self.tmp.name)
+        import shutil
+        shutil.copytree(GATE.parent, self.root / 'tools', ignore=shutil.ignore_patterns('__pycache__'))
         workflow = (GATE.parents[1] / '.github/workflows/firmware-build.yml').read_text()
         block = workflow.split('      - name: Detect layered components', 1)[1]
         self.script = textwrap.dedent(block.split('        run: |\n', 1)[1]
