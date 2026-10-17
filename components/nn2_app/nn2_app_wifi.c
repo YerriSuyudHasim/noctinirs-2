@@ -89,7 +89,40 @@ nn2_status_t nn2_app_wifi_on_link_event(const nn2_port_wifi_station_t *station,
     }
     if (link == NN2_WIFI_LINK_UP) {
         status_out->link = NN2_WIFI_LINK_UP;
+        if (station->on_link_up != NULL) {
+            return station->on_link_up(station->ctx);
+        }
         return NN2_OK;
     }
     return NN2_ERR_INVALID_ARG;
+}
+
+nn2_status_t nn2_app_wifi_on_wait_timeout(const nn2_port_wifi_station_t *station,
+                                         const nn2_wifi_sta_status_t *status)
+{
+    if (station == NULL || status == NULL) {
+        return NN2_ERR_INVALID_ARG;
+    }
+    if (status->link != NN2_WIFI_LINK_DOWN || !status->want_connected || status->reconnect_timer_armed) {
+        return NN2_OK;
+    }
+    if (station->schedule_reconnect == NULL) {
+        return NN2_ERR_INVALID_ARG;
+    }
+    return station->schedule_reconnect(station->ctx);
+}
+
+nn2_status_t nn2_app_wifi_on_reconnect_result(const nn2_port_wifi_station_t *station,
+                                             nn2_status_t reconnect_status)
+{
+    if (station == NULL) {
+        return NN2_ERR_INVALID_ARG;
+    }
+    if (reconnect_status == NN2_OK) {
+        return NN2_OK;
+    }
+    if (station->schedule_reconnect == NULL) {
+        return NN2_ERR_INVALID_ARG;
+    }
+    return station->schedule_reconnect(station->ctx);
 }

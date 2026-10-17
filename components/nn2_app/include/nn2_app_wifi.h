@@ -33,10 +33,21 @@ nn2_status_t nn2_app_wifi_connect_from_creds(const nn2_port_wifi_station_t *stat
 
 /* Record link up or down in status_out.
    LINK_DOWN calls schedule_reconnect and nothing else.
-   LINK_UP records the link and does not schedule a reconnect. */
+   LINK_UP records the link, calls on_link_up when the port provides it,
+   and does not schedule a reconnect. */
 nn2_status_t nn2_app_wifi_on_link_event(const nn2_port_wifi_station_t *station,
                                         nn2_wifi_link_t link,
                                         nn2_wifi_sta_status_t *status_out);
+
+/* One station-task poll timed out. Schedule a reconnect when the link is
+   down, a connection is still wanted, and the backoff timer is not armed.
+   That covers a LINK_DOWN or RECONNECT_DUE dropped by a full queue. */
+nn2_status_t nn2_app_wifi_on_wait_timeout(const nn2_port_wifi_station_t *station,
+                                         const nn2_wifi_sta_status_t *status);
+
+/* reconnect_now failed. Schedule the next backoff step. NN2_OK does not. */
+nn2_status_t nn2_app_wifi_on_reconnect_result(const nn2_port_wifi_station_t *station,
+                                             nn2_status_t reconnect_status);
 
 #ifdef __cplusplus
 }

@@ -4,6 +4,7 @@
 #include "nn2_wifi_backoff.h"
 #include "nn2_wifi_limits.h"
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -26,6 +27,8 @@ typedef struct {
 
 static nn2_wifi_backoff_t s_backoff;
 static nn2_wifi_sta_status_t s_status;
+static atomic_uint s_overflow;
+static esp_netif_t *s_sta_netif;
 static QueueHandle_t s_evt_q;
 static StaticQueue_t s_evt_q_buf;
 static nn2_ad_wifi_evt_t s_evt_q_items[NN2_WIFI_EVT_QUEUE_LEN];
@@ -79,11 +82,65 @@ static int is_auth_failure(uint8_t reason)
     }
 }
 
+static void note_overflow(void)
+{
+    atomic_fetch_add_explicit(&s_overflow, 1u, memory_order_relaxed);
+}
+
+static uint32_t load_overflow(void)
+{
+    return atomic_load_explicit(&s_overflow, memory_order_relaxed);
+}
+
+/* Event and timer callbacks may call this. It only posts. The overflow
+   counter is atomic because a full queue cannot carry the report. */
 static void enqueue_evt(const nn2_ad_wifi_evt_t *evt)
 {
     if (s_evt_q == NULL || xQueueSend(s_evt_q, evt, 0) != pdTRUE) {
-        s_status.event_overflow_count++;
+        note_overflow();
     }
+}
+
+/* nn2_net is the only writer of s_status. Call from that task. */
+static void refresh_link_from_driver(void)
+{
+    wifi_ap_record_t ap;
+    esp_netif_ip_info_t ip;
+    int associated;
+    int have_ip;
+
+    associated = (esp_wifi_sta_get_ap_info(&ap) == ESP_OK);
+    have_ip = 0;
+    memset(&ip, 0, sizeof(ip));
+    if (associated && s_sta_netif != NULL && esp_netif_get_ip_info(s_sta_netif, &ip) == ESP_OK && ip.ip.addr != 0u) {
+        have_ip = 1;
+    }
+    if (associated && have_ip) {
+        s_status.link = NN2_WIFI_LINK_UP;
+        s_status.ipv4_addr = ip.ip.addr;
+        s_status.auth_failed_last = false;
+        return;
+    }
+    s_status.link = NN2_WIFI_LINK_DOWN;
+    s_status.ipv4_addr = 0u;
+}
+
+static void apply_event_on_net(const nn2_ad_wifi_evt_t *raw)
+{
+    if (raw->kind == NN2_WIFI_STA_EVT_LINK_DOWN) {
+        s_status.link = NN2_WIFI_LINK_DOWN;
+        s_status.ipv4_addr = 0u;
+        s_status.disconnect_count++;
+        s_status.auth_failed_last = raw->auth_failed != 0u;
+        if (raw->auth_failed != 0u) {
+            s_status.auth_fail_count++;
+        }
+    } else if (raw->kind == NN2_WIFI_STA_EVT_LINK_UP) {
+        s_status.link = NN2_WIFI_LINK_UP;
+        s_status.ipv4_addr = raw->ipv4_addr;
+        s_status.auth_failed_last = false;
+    }
+    s_status.event_overflow_count = load_overflow();
 }
 
 static void backoff_timer_cb(void *arg)
@@ -93,7 +150,6 @@ static void backoff_timer_cb(void *arg)
     (void)arg;
     memset(&evt, 0, sizeof(evt));
     evt.kind = NN2_WIFI_STA_EVT_RECONNECT_DUE;
-    /* Timer task: one nonblocking enqueue. No storage commit and no loop. */
     enqueue_evt(&evt);
 }
 
@@ -109,14 +165,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
         evt.kind = NN2_WIFI_STA_EVT_LINK_DOWN;
         evt.reason = (disc != NULL) ? (uint8_t)disc->reason : 0u;
         evt.auth_failed = (uint8_t)is_auth_failure(evt.reason);
-        s_status.link = NN2_WIFI_LINK_DOWN;
-        s_status.ipv4_addr = 0u;
-        s_status.disconnect_count++;
-        s_status.auth_failed_last = evt.auth_failed != 0u;
-        if (evt.auth_failed) {
-            s_status.auth_fail_count++;
-        }
-        ESP_LOGI(TAG, "sta disconnected reason=%u", (unsigned)evt.reason);
         enqueue_evt(&evt);
         return;
     }
@@ -125,14 +173,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
 
         evt.kind = NN2_WIFI_STA_EVT_LINK_UP;
         evt.ipv4_addr = (got != NULL) ? got->ip_info.ip.addr : 0u;
-        s_status.link = NN2_WIFI_LINK_UP;
-        s_status.ipv4_addr = evt.ipv4_addr;
-        s_status.auth_failed_last = false;
-        nn2_wifi_backoff_reset(&s_backoff);
-        if (s_backoff_timer != NULL) {
-            (void)esp_timer_stop(s_backoff_timer);
-        }
-        ESP_LOGI(TAG, "sta link up");
         enqueue_evt(&evt);
     }
 }
@@ -216,6 +256,12 @@ static nn2_status_t ad_get_status(void *ctx, nn2_wifi_sta_status_t *out)
     if (!s_ready || out == NULL) {
         return NN2_ERR_INVALID_ARG;
     }
+    /* nn2_net only. Refresh the link from the driver so a dropped
+       LINK_DOWN or LINK_UP is still visible to the liveness poll. */
+    refresh_link_from_driver();
+    s_status.event_overflow_count = load_overflow();
+    s_status.want_connected = s_want_connected != 0;
+    s_status.reconnect_timer_armed = (s_backoff_timer != NULL) && esp_timer_is_active(s_backoff_timer);
     *out = s_status;
     return NN2_OK;
 }
@@ -243,7 +289,7 @@ static nn2_status_t ad_schedule_reconnect(void *ctx)
         memset(&evt, 0, sizeof(evt));
         evt.kind = NN2_WIFI_STA_EVT_RECONNECT_DUE;
         if (s_evt_q == NULL || xQueueSend(s_evt_q, &evt, 0) != pdTRUE) {
-            s_status.event_overflow_count++;
+            note_overflow();
             return NN2_ERR_OVERFLOW;
         }
         ESP_LOGI(TAG, "sta reconnect posted with no delay");
@@ -270,6 +316,7 @@ static nn2_status_t ad_reconnect_now(void *ctx)
     if (!s_ready) {
         return NN2_ERR_INVALID_ARG;
     }
+    refresh_link_from_driver();
     if (!s_want_connected || s_status.link == NN2_WIFI_LINK_UP) {
         return NN2_OK;
     }
@@ -306,7 +353,19 @@ static nn2_status_t ad_wait_event(void *ctx, nn2_wifi_sta_evt_t *evt, uint32_t t
     if (xQueueReceive(s_evt_q, &raw, ticks) != pdTRUE) {
         return NN2_ERR_TIMEOUT;
     }
+    apply_event_on_net(&raw);
     *evt = (nn2_wifi_sta_evt_t)raw.kind;
+    return NN2_OK;
+}
+
+static nn2_status_t ad_on_link_up(void *ctx)
+{
+    (void)ctx;
+    if (!s_ready || s_backoff_timer == NULL) {
+        return NN2_ERR_INVALID_ARG;
+    }
+    nn2_wifi_backoff_reset(&s_backoff);
+    (void)esp_timer_stop(s_backoff_timer);
     return NN2_OK;
 }
 
@@ -336,6 +395,7 @@ nn2_status_t nn2_ad_wifi_init(nn2_port_wifi_station_t *out)
     }
     memset(&s_status, 0, sizeof(s_status));
     s_status.link = NN2_WIFI_LINK_DOWN;
+    atomic_store_explicit(&s_overflow, 0u, memory_order_relaxed);
     s_evt_q = xQueueCreateStatic(NN2_WIFI_EVT_QUEUE_LEN,
                                  sizeof(nn2_ad_wifi_evt_t),
                                  (uint8_t *)s_evt_q_items,
@@ -355,7 +415,8 @@ nn2_status_t nn2_ad_wifi_init(nn2_port_wifi_station_t *out)
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         return map_esp(err);
     }
-    if (esp_netif_create_default_wifi_sta() == NULL) {
+    s_sta_netif = esp_netif_create_default_wifi_sta();
+    if (s_sta_netif == NULL) {
         return NN2_ERR_NO_MEM;
     }
     err = esp_wifi_init(&wifi_cfg);
@@ -386,6 +447,7 @@ nn2_status_t nn2_ad_wifi_init(nn2_port_wifi_station_t *out)
     out->schedule_reconnect = ad_schedule_reconnect;
     out->reconnect_now = ad_reconnect_now;
     out->wait_event = ad_wait_event;
+    out->on_link_up = ad_on_link_up;
     out->ctx = NULL;
     ESP_LOGI(TAG, "sta adapter ready");
     return NN2_OK;

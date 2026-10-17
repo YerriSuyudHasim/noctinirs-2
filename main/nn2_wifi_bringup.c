@@ -21,9 +21,9 @@ static nn2_port_wifi_station_t s_station;
 static nn2_wifi_credentials_t s_handoff;
 static TaskHandle_t s_net_task;
 static StaticTask_t s_net_tcb;
-static StackType_t s_net_stack[NN2_RTOS_STACK_NET_WORDS];
+static StackType_t s_net_stack[NN2_RTOS_STACK_NET_BYTES];
 static StaticTask_t s_prov_tcb;
-static StackType_t s_prov_stack[NN2_RTOS_STACK_PROV_WORDS];
+static StackType_t s_prov_stack[NN2_RTOS_STACK_PROV_BYTES];
 
 static void net_task(void *arg)
 {
@@ -48,6 +48,16 @@ static void net_task(void *arg)
 
         status = s_station.wait_event(s_station.ctx, &evt, NN2_WIFI_EVENT_WAIT_MS);
         if (status == NN2_ERR_TIMEOUT) {
+            nn2_wifi_sta_status_t link;
+
+            memset(&link, 0, sizeof(link));
+            if (s_station.get_status != NULL &&
+                s_station.get_status(s_station.ctx, &link) == NN2_OK) {
+                status = nn2_app_wifi_on_wait_timeout(&s_station, &link);
+                if (status != NN2_OK) {
+                    ESP_LOGW(TAG, "sta liveness schedule failed: %d", (int)status);
+                }
+            }
             continue;
         }
         if (status != NN2_OK) {
@@ -72,7 +82,13 @@ static void net_task(void *arg)
                 status = s_station.reconnect_now(s_station.ctx);
             }
             if (status != NN2_OK) {
+                nn2_status_t scheduled;
+
                 ESP_LOGW(TAG, "sta reconnect request failed: %d", (int)status);
+                scheduled = nn2_app_wifi_on_reconnect_result(&s_station, status);
+                if (scheduled != NN2_OK) {
+                    ESP_LOGW(TAG, "sta reconnect reschedule failed: %d", (int)scheduled);
+                }
             }
         }
     }
@@ -127,7 +143,7 @@ nn2_status_t nn2_wifi_bringup(void)
     }
     s_net_task = xTaskCreateStaticPinnedToCore(net_task,
                                                NN2_TASK_NAME_NET,
-                                               NN2_RTOS_STACK_NET_WORDS,
+                                               NN2_RTOS_STACK_NET_BYTES,
                                                NULL,
                                                NN2_RTOS_PRIO_NET,
                                                s_net_stack,
@@ -138,7 +154,7 @@ nn2_status_t nn2_wifi_bringup(void)
     }
     prov_task_handle = xTaskCreateStaticPinnedToCore(prov_task,
                                                      NN2_TASK_NAME_PROV,
-                                                     NN2_RTOS_STACK_PROV_WORDS,
+                                                     NN2_RTOS_STACK_PROV_BYTES,
                                                      NULL,
                                                      NN2_RTOS_PRIO_PROV,
                                                      s_prov_stack,

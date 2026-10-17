@@ -17,6 +17,8 @@ void test_valid_store_skips_console(void);
 void test_backoff_grows_then_caps(void);
 void test_backoff_rejects_bad_config(void);
 void test_sta_loss_schedules_reconnect_and_does_not_stop_or_command_emitters(void);
+void test_dropped_link_event_still_schedules_reconnect(void);
+void test_reconnect_failure_reschedules(void);
 void test_link_up_is_report_only(void);
 void test_rtos_config_pins_console_and_wifi_to_core_0(void);
 
@@ -32,6 +34,8 @@ int main(void)
     RUN_TEST(test_backoff_grows_then_caps);
     RUN_TEST(test_backoff_rejects_bad_config);
     RUN_TEST(test_sta_loss_schedules_reconnect_and_does_not_stop_or_command_emitters);
+    RUN_TEST(test_dropped_link_event_still_schedules_reconnect);
+    RUN_TEST(test_reconnect_failure_reschedules);
     RUN_TEST(test_link_up_is_report_only);
     RUN_TEST(test_rtos_config_pins_console_and_wifi_to_core_0);
     return UNITY_END();

@@ -51,6 +51,10 @@ typedef struct {
     uint32_t auth_fail_count;
     uint32_t event_overflow_count;
     bool auth_failed_last;
+    /* True after a successful connect request until disconnect. */
+    bool want_connected;
+    /* True while the one-shot reconnect timer is armed. */
+    bool reconnect_timer_armed;
 } nn2_wifi_sta_status_t;
 
 typedef struct nn2_port_wifi_station {
@@ -60,9 +64,12 @@ typedef struct nn2_port_wifi_station {
     /* Arm one bounded backoff interval. Does not wait and does not loop. */
     nn2_status_t (*schedule_reconnect)(void *ctx);
     /* Ask the driver to associate once. Called from the station task after
-       the backoff interval, not from the Wi-Fi event callback. */
+       the backoff interval, not from the Wi-Fi event callback. A failure is
+       returned to that task, which schedules the next backoff step. */
     nn2_status_t (*reconnect_now)(void *ctx);
     nn2_status_t (*wait_event)(void *ctx, nn2_wifi_sta_evt_t *evt, uint32_t timeout_ms);
+    /* Station task only, after LINK_UP. Reset backoff and stop the timer. */
+    nn2_status_t (*on_link_up)(void *ctx);
     void *ctx;
 } nn2_port_wifi_station_t;
 
