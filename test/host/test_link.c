@@ -1,4 +1,5 @@
 #include "nn2_app_wifi.h"
+#include "nn2_wifi_limits.h"
 #include "unity.h"
 
 #include <string.h>
@@ -146,6 +147,82 @@ void test_reconnect_failure_reschedules(void)
     TEST_ASSERT_EQUAL(1, g_schedule_calls);
 }
 
+void test_slow_attempt_does_not_reconnect_while_in_flight(void)
+{
+    nn2_port_wifi_station_t station;
+    nn2_wifi_sta_status_t status;
+
+    reset_spies();
+    bind_station(&station);
+    memset(&status, 0, sizeof(status));
+    status.link = NN2_WIFI_LINK_DOWN;
+    status.want_connected = true;
+    status.reconnect_timer_armed = false;
+    status.connect_in_flight = true;
+    status.connect_attempt_ms = NN2_WIFI_EVENT_WAIT_MS;
+
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(0, g_schedule_calls);
+
+    status.connect_attempt_ms = NN2_WIFI_CONNECT_GUARD_MS - 1u;
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(0, g_schedule_calls);
+    TEST_ASSERT_EQUAL(0, g_other_station_calls);
+    TEST_ASSERT_EQUAL(0, g_safe_off_calls);
+    TEST_ASSERT_EQUAL(0, g_stop_stream_calls);
+}
+
+void test_connect_guard_timeout_schedules_reconnect(void)
+{
+    nn2_port_wifi_station_t station;
+    nn2_wifi_sta_status_t status;
+
+    reset_spies();
+    bind_station(&station);
+    memset(&status, 0, sizeof(status));
+    status.link = NN2_WIFI_LINK_DOWN;
+    status.want_connected = true;
+    status.reconnect_timer_armed = false;
+    status.connect_in_flight = true;
+    status.connect_attempt_ms = NN2_WIFI_CONNECT_GUARD_MS;
+
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(1, g_schedule_calls);
+
+    reset_spies();
+    status.connect_attempt_ms = NN2_WIFI_CONNECT_GUARD_MS + NN2_WIFI_EVENT_WAIT_MS;
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(1, g_schedule_calls);
+    TEST_ASSERT_EQUAL(0, g_other_station_calls);
+    TEST_ASSERT_EQUAL(0, g_safe_off_calls);
+    TEST_ASSERT_EQUAL(0, g_stop_stream_calls);
+}
+
+void test_disconnect_clears_connect_in_flight(void)
+{
+    nn2_port_wifi_station_t station;
+    nn2_wifi_sta_status_t status;
+
+    reset_spies();
+    bind_station(&station);
+    memset(&status, 0, sizeof(status));
+    status.link = NN2_WIFI_LINK_UP;
+    status.ipv4_addr = 0x0100a8c0u;
+    status.want_connected = true;
+    status.connect_in_flight = true;
+    status.connect_attempt_ms = 4000u;
+
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_link_event(&station, NN2_WIFI_LINK_DOWN, &status));
+    TEST_ASSERT_FALSE(status.connect_in_flight);
+    TEST_ASSERT_EQUAL_UINT32(0u, status.connect_attempt_ms);
+    TEST_ASSERT_EQUAL(NN2_WIFI_LINK_DOWN, status.link);
+    TEST_ASSERT_EQUAL(1, g_schedule_calls);
+    TEST_ASSERT_EQUAL(0, g_other_station_calls);
+    TEST_ASSERT_EQUAL(0, g_safe_off_calls);
+    TEST_ASSERT_EQUAL(0, g_led_off_calls);
+    TEST_ASSERT_EQUAL(0, g_stop_stream_calls);
+}
+
 void test_link_up_is_report_only(void)
 {
     nn2_port_wifi_station_t station;
@@ -155,9 +232,13 @@ void test_link_up_is_report_only(void)
     bind_station(&station);
     memset(&status, 0, sizeof(status));
     status.link = NN2_WIFI_LINK_DOWN;
+    status.connect_in_flight = true;
+    status.connect_attempt_ms = 2000u;
 
     TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_link_event(&station, NN2_WIFI_LINK_UP, &status));
     TEST_ASSERT_EQUAL(NN2_WIFI_LINK_UP, status.link);
+    TEST_ASSERT_FALSE(status.connect_in_flight);
+    TEST_ASSERT_EQUAL_UINT32(0u, status.connect_attempt_ms);
     TEST_ASSERT_EQUAL(0, g_schedule_calls);
     TEST_ASSERT_EQUAL(0, g_other_station_calls);
     TEST_ASSERT_EQUAL(0, g_safe_off_calls);

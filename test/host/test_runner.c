@@ -19,6 +19,9 @@ void test_backoff_rejects_bad_config(void);
 void test_sta_loss_schedules_reconnect_and_does_not_stop_or_command_emitters(void);
 void test_dropped_link_event_still_schedules_reconnect(void);
 void test_reconnect_failure_reschedules(void);
+void test_slow_attempt_does_not_reconnect_while_in_flight(void);
+void test_connect_guard_timeout_schedules_reconnect(void);
+void test_disconnect_clears_connect_in_flight(void);
 void test_link_up_is_report_only(void);
 void test_rtos_config_pins_console_and_wifi_to_core_0(void);
 
@@ -36,6 +39,9 @@ int main(void)
     RUN_TEST(test_sta_loss_schedules_reconnect_and_does_not_stop_or_command_emitters);
     RUN_TEST(test_dropped_link_event_still_schedules_reconnect);
     RUN_TEST(test_reconnect_failure_reschedules);
+    RUN_TEST(test_slow_attempt_does_not_reconnect_while_in_flight);
+    RUN_TEST(test_connect_guard_timeout_schedules_reconnect);
+    RUN_TEST(test_disconnect_clears_connect_in_flight);
     RUN_TEST(test_link_up_is_report_only);
     RUN_TEST(test_rtos_config_pins_console_and_wifi_to_core_0);
     return UNITY_END();

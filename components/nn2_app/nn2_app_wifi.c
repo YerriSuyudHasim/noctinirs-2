@@ -1,5 +1,7 @@
 #include "nn2_app_wifi.h"
 
+#include "nn2_wifi_limits.h"
+
 #include <string.h>
 
 static int store_ready(const nn2_port_wifi_cred_store_t *store)
@@ -82,6 +84,8 @@ nn2_status_t nn2_app_wifi_on_link_event(const nn2_port_wifi_station_t *station,
     if (link == NN2_WIFI_LINK_DOWN) {
         status_out->link = NN2_WIFI_LINK_DOWN;
         status_out->ipv4_addr = 0u;
+        status_out->connect_in_flight = false;
+        status_out->connect_attempt_ms = 0u;
         if (station->schedule_reconnect == NULL) {
             return NN2_ERR_INVALID_ARG;
         }
@@ -89,6 +93,8 @@ nn2_status_t nn2_app_wifi_on_link_event(const nn2_port_wifi_station_t *station,
     }
     if (link == NN2_WIFI_LINK_UP) {
         status_out->link = NN2_WIFI_LINK_UP;
+        status_out->connect_in_flight = false;
+        status_out->connect_attempt_ms = 0u;
         if (station->on_link_up != NULL) {
             return station->on_link_up(station->ctx);
         }
@@ -102,6 +108,11 @@ nn2_status_t nn2_app_wifi_on_wait_timeout(const nn2_port_wifi_station_t *station
 {
     if (station == NULL || status == NULL) {
         return NN2_ERR_INVALID_ARG;
+    }
+    /* Association and DHCP keep the link down. Leave that attempt alone
+       until the guard expires, then take the next backoff step. */
+    if (status->connect_in_flight && status->connect_attempt_ms < NN2_WIFI_CONNECT_GUARD_MS) {
+        return NN2_OK;
     }
     if (status->link != NN2_WIFI_LINK_DOWN || !status->want_connected || status->reconnect_timer_armed) {
         return NN2_OK;

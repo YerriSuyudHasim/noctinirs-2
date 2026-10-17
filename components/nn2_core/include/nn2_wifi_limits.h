@@ -45,4 +45,14 @@ _Static_assert(NN2_WIFI_BACKOFF_MAX_MS >= NN2_WIFI_BACKOFF_FIRST_MS, "backoff ca
 #define NN2_WIFI_EVENT_WAIT_MS 1000u
 #define NN2_WIFI_WAIT_CAP_MS 60000u
 
+/* A successful esp_wifi_connect stays in flight until LINK_UP, LINK_DOWN,
+   or this bound. The 1 s poll must not start another attempt before then.
+   The link reads DOWN for the whole association and DHCP interval. */
+#define NN2_WIFI_CONNECT_GUARD_MS 15000u
+
+_Static_assert(NN2_WIFI_CONNECT_GUARD_MS > NN2_WIFI_EVENT_WAIT_MS,
+               "connect guard must outlast one station poll");
+_Static_assert(NN2_WIFI_CONNECT_GUARD_MS <= NN2_WIFI_WAIT_CAP_MS,
+               "connect guard must stay inside the wait cap");
+
 #endif /* NN2_WIFI_LIMITS_H */

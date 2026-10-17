@@ -6,6 +6,7 @@
 
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "esp_event.h"
@@ -17,6 +18,9 @@
 #include "freertos/queue.h"
 
 static const char *TAG = "nn2_wifi";
+
+/* Queued for nn2_net. Not a public station event. */
+#define NN2_AD_EVT_DISCONNECT_REQ 4u
 
 typedef struct {
     uint8_t kind;
@@ -35,7 +39,14 @@ static nn2_ad_wifi_evt_t s_evt_q_items[NN2_WIFI_EVT_QUEUE_LEN];
 static esp_timer_handle_t s_backoff_timer;
 static int s_ready;
 static int s_started;
+/* Written only on nn2_net. ad_connect sets it. A queued disconnect clears
+   it inside ad_wait_event. ad_disconnect only enqueues. */
 static int s_want_connected;
+/* Written only on nn2_net. Set when esp_wifi_connect returns OK.
+   Cleared on LINK_UP, LINK_DOWN, a queued disconnect, and when
+   schedule_reconnect takes the next backoff step. */
+static int s_connect_in_flight;
+static int64_t s_connect_started_us;
 
 static nn2_status_t map_esp(esp_err_t err)
 {
@@ -92,6 +103,43 @@ static uint32_t load_overflow(void)
     return atomic_load_explicit(&s_overflow, memory_order_relaxed);
 }
 
+static void mark_connect_in_flight(void)
+{
+    s_connect_in_flight = 1;
+    s_connect_started_us = esp_timer_get_time();
+    s_status.connect_in_flight = true;
+    s_status.connect_attempt_ms = 0u;
+}
+
+static void clear_connect_in_flight(void)
+{
+    s_connect_in_flight = 0;
+    s_connect_started_us = 0;
+    s_status.connect_in_flight = false;
+    s_status.connect_attempt_ms = 0u;
+}
+
+static uint32_t connect_attempt_ms(void)
+{
+    int64_t now;
+    int64_t elapsed_us;
+    uint64_t ms;
+
+    if (!s_connect_in_flight) {
+        return 0u;
+    }
+    now = esp_timer_get_time();
+    if (now < s_connect_started_us) {
+        return 0u;
+    }
+    elapsed_us = now - s_connect_started_us;
+    ms = (uint64_t)elapsed_us / 1000ull;
+    if (ms > 0xffffffffull) {
+        return 0xffffffffu;
+    }
+    return (uint32_t)ms;
+}
+
 /* Event and timer callbacks may call this. It only posts. The overflow
    counter is atomic because a full queue cannot carry the report. */
 static void enqueue_evt(const nn2_ad_wifi_evt_t *evt)
@@ -135,10 +183,12 @@ static void apply_event_on_net(const nn2_ad_wifi_evt_t *raw)
         if (raw->auth_failed != 0u) {
             s_status.auth_fail_count++;
         }
+        clear_connect_in_flight();
     } else if (raw->kind == NN2_WIFI_STA_EVT_LINK_UP) {
         s_status.link = NN2_WIFI_LINK_UP;
         s_status.ipv4_addr = raw->ipv4_addr;
         s_status.auth_failed_last = false;
+        clear_connect_in_flight();
     }
     s_status.event_overflow_count = load_overflow();
 }
@@ -226,28 +276,44 @@ static nn2_status_t ad_connect(void *ctx, const nn2_wifi_credentials_t *creds)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "connect request failed: %d", (int)err);
     } else {
+        mark_connect_in_flight();
         ESP_LOGI(TAG, "sta connect requested (ssid length %u)", (unsigned)creds->ssid_len);
     }
     return map_esp(err);
 }
 
-static nn2_status_t ad_disconnect(void *ctx)
+/* nn2_net only, from a queued disconnect request. */
+static void apply_disconnect_on_net(void)
 {
     esp_err_t err;
+
+    s_want_connected = 0;
+    clear_connect_in_flight();
+    if (s_backoff_timer != NULL) {
+        (void)esp_timer_stop(s_backoff_timer);
+    }
+    err = esp_wifi_disconnect();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_STARTED) {
+        ESP_LOGW(TAG, "disconnect request failed: %d", (int)err);
+    }
+}
+
+static nn2_status_t ad_disconnect(void *ctx)
+{
+    nn2_ad_wifi_evt_t evt;
 
     (void)ctx;
     if (!s_ready) {
         return NN2_ERR_INVALID_ARG;
     }
-    s_want_connected = 0;
-    if (s_backoff_timer != NULL) {
-        (void)esp_timer_stop(s_backoff_timer);
+    /* Another task may call this. It must not write s_want_connected. */
+    memset(&evt, 0, sizeof(evt));
+    evt.kind = NN2_AD_EVT_DISCONNECT_REQ;
+    if (s_evt_q == NULL || xQueueSend(s_evt_q, &evt, 0) != pdTRUE) {
+        note_overflow();
+        return NN2_ERR_OVERFLOW;
     }
-    err = esp_wifi_disconnect();
-    if (err == ESP_ERR_WIFI_NOT_STARTED) {
-        return NN2_OK;
-    }
-    return map_esp(err);
+    return NN2_OK;
 }
 
 static nn2_status_t ad_get_status(void *ctx, nn2_wifi_sta_status_t *out)
@@ -262,6 +328,8 @@ static nn2_status_t ad_get_status(void *ctx, nn2_wifi_sta_status_t *out)
     s_status.event_overflow_count = load_overflow();
     s_status.want_connected = s_want_connected != 0;
     s_status.reconnect_timer_armed = (s_backoff_timer != NULL) && esp_timer_is_active(s_backoff_timer);
+    s_status.connect_in_flight = s_connect_in_flight != 0;
+    s_status.connect_attempt_ms = connect_attempt_ms();
     *out = s_status;
     return NN2_OK;
 }
@@ -275,6 +343,9 @@ static nn2_status_t ad_schedule_reconnect(void *ctx)
     if (!s_ready || s_backoff_timer == NULL) {
         return NN2_ERR_INVALID_ARG;
     }
+    /* The in-flight attempt is over: either the link went down, or the
+       connect guard expired and nn2_net asked for the next backoff step. */
+    clear_connect_in_flight();
     if (!s_want_connected) {
         return NN2_OK;
     }
@@ -317,7 +388,10 @@ static nn2_status_t ad_reconnect_now(void *ctx)
         return NN2_ERR_INVALID_ARG;
     }
     refresh_link_from_driver();
-    if (!s_want_connected || s_status.link == NN2_WIFI_LINK_UP) {
+    /* LINK_UP already cleared a stale RECONNECT_DUE's reason to connect.
+       An attempt that is still in flight stays running until LINK_DOWN
+       or the connect guard. */
+    if (!s_want_connected || s_status.link == NN2_WIFI_LINK_UP || s_connect_in_flight) {
         return NN2_OK;
     }
     err = esp_wifi_connect();
@@ -330,6 +404,8 @@ static nn2_status_t ad_reconnect_now(void *ctx)
     }
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "reconnect request failed: %d", (int)err);
+    } else {
+        mark_connect_in_flight();
     }
     return map_esp(err);
 }
@@ -338,6 +414,8 @@ static nn2_status_t ad_wait_event(void *ctx, nn2_wifi_sta_evt_t *evt, uint32_t t
 {
     nn2_ad_wifi_evt_t raw;
     TickType_t ticks;
+    TickType_t start;
+    TickType_t budget;
 
     (void)ctx;
     if (!s_ready || evt == NULL || s_evt_q == NULL) {
@@ -350,12 +428,40 @@ static nn2_status_t ad_wait_event(void *ctx, nn2_wifi_sta_evt_t *evt, uint32_t t
     if (timeout_ms > 0u && ticks == 0) {
         ticks = 1;
     }
-    if (xQueueReceive(s_evt_q, &raw, ticks) != pdTRUE) {
-        return NN2_ERR_TIMEOUT;
+    start = xTaskGetTickCount();
+    budget = ticks;
+    for (;;) {
+        TickType_t wait;
+
+        if (timeout_ms == 0u) {
+            wait = 0;
+        } else if (budget == 0) {
+            return NN2_ERR_TIMEOUT;
+        } else {
+            wait = budget;
+        }
+        if (xQueueReceive(s_evt_q, &raw, wait) != pdTRUE) {
+            return NN2_ERR_TIMEOUT;
+        }
+        if (timeout_ms > 0u) {
+            TickType_t elapsed;
+
+            elapsed = xTaskGetTickCount() - start;
+            budget = (elapsed >= ticks) ? 0 : (ticks - elapsed);
+        }
+        if (raw.kind == NN2_AD_EVT_DISCONNECT_REQ) {
+            apply_disconnect_on_net();
+            continue;
+        }
+        if (raw.kind != NN2_WIFI_STA_EVT_LINK_DOWN &&
+            raw.kind != NN2_WIFI_STA_EVT_LINK_UP &&
+            raw.kind != NN2_WIFI_STA_EVT_RECONNECT_DUE) {
+            continue;
+        }
+        apply_event_on_net(&raw);
+        *evt = (nn2_wifi_sta_evt_t)raw.kind;
+        return NN2_OK;
     }
-    apply_event_on_net(&raw);
-    *evt = (nn2_wifi_sta_evt_t)raw.kind;
-    return NN2_OK;
 }
 
 static nn2_status_t ad_on_link_up(void *ctx)

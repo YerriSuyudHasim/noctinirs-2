@@ -77,6 +77,10 @@ static void net_task(void *arg)
             (void)nn2_app_wifi_on_link_event(&s_station, NN2_WIFI_LINK_UP, &link);
             ESP_LOGI(TAG, "sta link up");
         } else if (evt == NN2_WIFI_STA_EVT_RECONNECT_DUE) {
+            /* A RECONNECT_DUE still queued after LINK_UP is safe.
+               reconnect_now sees the link up and returns NN2_OK, so the
+               reschedule below does not run. An in-flight attempt is
+               left alone the same way. */
             status = NN2_ERR_INVALID_ARG;
             if (s_station.reconnect_now != NULL) {
                 status = s_station.reconnect_now(s_station.ctx);

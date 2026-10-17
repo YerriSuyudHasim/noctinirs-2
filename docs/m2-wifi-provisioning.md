@@ -8,9 +8,10 @@ USB Serial/JTAG console, one shot, writes an application NVS namespace, then the
 2. Missing, invalid, or corrupt records read SSID, then a masked password, from the USB Serial/JTAG console. Each line wait is finite (`NN2_WIFI_PROV_TIMEOUT_MS`). A failed attempt waits `NN2_WIFI_PROV_RETRY_MS` and tries again. There is no SoftAP and no BLE fallback.
 3. Valid input is committed from `nn2_prov` only. The password is not logged.
 4. `nn2_net` (core 0) connects as a station. The driver stores the config in RAM (`WIFI_STORAGE_RAM`), not in the Wi-Fi internal NVS namespace.
-5. Wi-Fi and IP callbacks only enqueue. `IP_EVENT_STA_GOT_IP` posts `LINK_UP` and nothing else. The timer callback only posts `RECONNECT_DUE`. `nn2_net` is the only writer of station status, and the only caller of `nn2_wifi_backoff_reset` and `esp_timer_stop`. A queue overflow increments a C11 atomic counter.
-6. On each 1 s receive timeout, if the link is down, a connection is still wanted, and the backoff timer is not armed, `nn2_net` schedules a reconnect. That covers a dropped `LINK_DOWN` or `RECONNECT_DUE`. If `esp_wifi_connect` fails inside `reconnect_now`, `nn2_net` schedules the next backoff step.
-7. Link up and link down are visible through `nn2_port_wifi_station` (`get_status` and `wait_event`). `get_status` samples the driver from `nn2_net`, so a dropped event is still visible. That report is the hook a later issue can use.
+5. Wi-Fi and IP callbacks only enqueue. `IP_EVENT_STA_GOT_IP` posts `LINK_UP` and nothing else. The timer callback only posts `RECONNECT_DUE`. `nn2_net` is the only writer of station status, `want_connected`, and `connect_in_flight`, and the only caller of `nn2_wifi_backoff_reset` and `esp_timer_stop`. `disconnect` only enqueues. `nn2_net` applies that request: it clears `want_connected` and `connect_in_flight`, stops the backoff timer, and calls the driver. A queue overflow increments a C11 atomic counter.
+6. `connect_in_flight` is set when `esp_wifi_connect` returns OK and cleared on `LINK_UP`, `LINK_DOWN`, a queued disconnect, or when the next backoff step is armed. On each 1 s receive timeout, if that flag is set and `connect_attempt_ms` is below `NN2_WIFI_CONNECT_GUARD_MS` (15000), the poll does not schedule. The link stays down until `GOT_IP`, so this stops a second `esp_wifi_connect` during association or DHCP. When the guard expires, `nn2_net` clears the flag and takes the next backoff step. Otherwise, if the link is down, a connection is still wanted, and the backoff timer is not armed, `nn2_net` schedules a reconnect. That covers a dropped `LINK_DOWN` or `RECONNECT_DUE`. If `esp_wifi_connect` fails inside `reconnect_now`, `nn2_net` schedules the next backoff step.
+7. A `RECONNECT_DUE` that is still queued after `LINK_UP` is safe. `reconnect_now` samples the driver, sees the link up, and returns `NN2_OK` without calling `esp_wifi_connect`. The failure reschedule runs only when `reconnect_now` is not `NN2_OK`. An attempt that is still in flight is left alone the same way.
+8. Link up and link down are visible through `nn2_port_wifi_station` (`get_status` and `wait_event`). `get_status` samples the driver from `nn2_net`, so a dropped event is still visible. That report is the hook a later issue can use.
 
 Reconnect delays, from `NN2_WIFI_BACKOFF_FIRST_MS` and `NN2_WIFI_BACKOFF_MAX_MS` (Kconfig on target, the same defaults in `nn2_wifi_limits.h` for host tests): 0 ms, then 500 ms, doubling, capped at 8000 ms. `FIRST_MS` is asserted `<= 1000` and `< 3000`. ADR-0003 optical numeric cells stay OPEN. The 3 s grace timer is not this backoff.
 
@@ -62,7 +63,7 @@ NVS init failure `ESP_ERR_NVS_NO_FREE_PAGES` or `ESP_ERR_NVS_NEW_VERSION_FOUND` 
 
 | Class | What it can show |
 |---|---|
-| U | Host tests of validation, the fake store, backoff, link-loss policy, a dropped link event, and a failed `reconnect_now`. Command: `bash test/host/run.sh` |
+| U | Host tests of validation, the fake store, backoff, link-loss policy, a dropped link event, a failed `reconnect_now`, an in-flight attempt inside `NN2_WIFI_CONNECT_GUARD_MS`, the guard expiry, and a disconnect that clears `connect_in_flight`. Command: `bash test/host/run.sh` |
 | S | `bash tools/class-s-gate.sh .` on `nn2_core`, `nn2_ports`, and `nn2_app` |
 | B | `idf.py set-target esp32s3 && idf.py build` (CI job `class-b-esp-idf-build`) |
 | H | NOT RUN |
