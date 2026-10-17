@@ -161,6 +161,10 @@ jobs:
           idf.py set-target esp32s3 2>&1 | tee evidence/set-target.log
           idf.py build 2>&1 | tee evidence/build.log
           idf.py size 2>&1 | tee evidence/size.txt
+          idf.py size-components 2>&1 | tee evidence/size-components.txt
+          idf.py size-files 2>&1 | tee evidence/size-files.txt
+          test -s build/noctinirs2.map
+          sha256sum build/noctinirs2.map | tee evidence/linker-map.sha256
 
       - name: Verify generated target
         run: |
@@ -186,7 +190,7 @@ jobs:
           {
             echo "## Class B build evidence (build only, not hardware validation)"
             echo "Source SHA: $SOURCE_SHA (event: $GITHUB_EVENT_NAME)"
-            for f in toolchain.txt target.txt SHA256SUMS size.txt warning-count.txt; do
+            for f in toolchain.txt target.txt SHA256SUMS size.txt linker-map.sha256 warning-count.txt; do
               [ -f "evidence/$f" ] && { echo "### $f"; echo '```'; cat "evidence/$f"; echo '```'; }
             done
             if [ -f evidence/build.log ]; then
