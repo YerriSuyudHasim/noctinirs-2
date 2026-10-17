@@ -119,6 +119,8 @@ def normalize(size, provenance, app_bytes, app_capacity):
 def validate(report):
     if not isinstance(report, dict) or report.get("schema_version") != 1:
         raise InvalidData("unsupported normalized schema")
+    if report.get("evidence_class") != "B-static-build":
+        raise InvalidData("missing static-build evidence class")
     p = report.get("provenance")
     if not isinstance(p, dict):
         raise InvalidData("missing provenance")
@@ -143,6 +145,14 @@ def validate(report):
     for key in ("iram_fixed", "diram", "flash_app"):
         if metrics[key]["capacity_bytes"] is None:
             raise InvalidData(f"{key}: missing capacity")
+    for key in set(METRICS) - {"iram_fixed", "diram", "flash_app"}:
+        if metrics[key]["capacity_bytes"] is not None:
+            raise InvalidData(f"{key}: capacity is unknown/shared and must be null")
+    integer(metrics["iram_fixed"]["used_bytes"], "fixed IRAM usage", positive=True)
+    integer(metrics["flash_app"]["used_bytes"], "app image usage", positive=True)
+    image = integer(report.get("image_size_from_report_bytes"), "image size", positive=True)
+    if image > metrics["flash_app"]["used_bytes"]:
+        raise InvalidData("image report exceeds app binary")
     m = {k: v["used_bytes"] for k, v in metrics.items()}
     if m["iram_placed"] != m["iram_fixed"] + m["iram_shared_text"]:
         raise InvalidData("inconsistent IRAM total")

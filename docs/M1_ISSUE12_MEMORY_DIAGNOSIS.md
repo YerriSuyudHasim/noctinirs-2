@@ -30,7 +30,8 @@ SDK/compiler identities agree with the pin already on main:
 - Existing OCI reference `espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c`.
 - Local measurement: Windows x86_64, SDK `C:/esp/v6.1/esp-idf`, Python 3.14.6,
   CMake 4.0.3, Ninja 1.12.1, esp-idf-size 2.3.2. SDK tracked tree clean.
-- CI: Linux amd64 in the existing pinned image. Each collected `metrics.json`
+- CI: Linux amd64/glibc 2.39 in the existing pinned image; Python 3.12.3,
+  CMake 4.0.3, Ninja 1.11.1, esp-idf-size 2.3.1. Each collected `metrics.json`
   records actual Python/platform, size-tool version, compiler, SDK, configuration
   hashes, UTC, source SHA and run URL; raw tool versions and command exits are retained.
 - Target `esp32s3`; firmware version 0.1.0; board/fixture not applicable to a host build.
@@ -236,7 +237,8 @@ python -m unittest discover -s tests/memory -v
 ```
 
 The collector refuses to overwrite an evidence directory, checks exact source
-and SDK SHAs, tracked cleanliness and compiler, and fails immediately on command
+and SDK SHAs, source cleanliness (including untracked inputs) and compiler,
+and fails immediately on command
 failure. Output includes all three text and JSON reports, map, ELF/BIN, generated
 config/linker scripts, partition CSV/bin, compile commands, project metadata,
 command statuses, actual environment and SHA-256 inventory. `failure.json` records
@@ -271,7 +273,38 @@ Preserve artifacts in approved storage before expiry if longer retention is need
 
 ## Validation, handoff and residual limitations
 
-Local `python -m unittest discover -s tests/memory -v`: **30/30 passed**, no skips
+Initial implementation CI at `df3ca7f1958c7f5c2052d8dcae5625cc9a4f3cbf`:
+
+| Check | Result | Run |
+|---|---|---|
+| Memory diagnostics: baseline + head clean builds, comparison | PASS, `OK`, every used delta 0 B | [39020072707](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39020072707) |
+| Host tool tests (initial 30 tests, before final added empty-image test) | PASS, no skips | same run |
+| Existing Class B, Class S selftest/invariant | PASS; dependency gate NOT APPLICABLE | [39020072642](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39020072642) |
+| Reference integrity | PASS, 319 files | [39020072708](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39020072708) |
+
+[Memory artifact 12095838823](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39020072707/artifacts/12095838823)
+ZIP SHA-256 `babae8369c7840cf196bbb3356cf974b1df4f70b900b3a89b16e446937103476`
+matches the GitHub API digest. All 33 files in each of the baseline/current
+inventories were rehashed after download (66 verified files). All recorded
+commands exited 0; both collection modes are `clean-build`. Both builds contain
+zero `warning:` lines. Baseline and head generated effective-config hashes match:
+`6585b44741b9d89db087604c7fdb670350a7526eb821ff9dc961804f386c0c00`.
+The raw config hash is `5c6b7e1073053eb0580faae611d4736d6d72424934035b865166f9659d0c626f`.
+Baseline map hash is `08fbdf0a0066429373058a919e6232517a17da91410348667155d9dd8f63df95`.
+Baseline measurement UTC: `2026-10-17T09:14:03.704911+00:00`.
+
+`docs/evidence/issue12-baseline.json` is copied from that verified **CI baseline**
+record, retaining its original measurement SHA/time/run. Summary, component and
+file JSON values match the local main build exactly despite the host size-tool
+patch version difference. Local-to-CI comparisons are nevertheless marked
+`NOT_COMPARABLE` by the conservative environment checks. CI compares two builds
+in the same environment. Final stricter source/input validation and the added
+empty-image test are checked again on the **final head**; the append-only
+[PR #41 handoff](https://github.com/YerriSuyudHasim/noctinirs-2/pull/41) records
+that SHA, all final run URLs and post-upload verification. Initial runs above
+are not presented as final-head evidence.
+
+Local `python -m unittest discover -s tests/memory -v`: **31/31 passed**, no skips
 (host-tool correctness only). Tests cover actual report fixtures, missing and
 malformed data, duplicate keys, increases/decreases, invalid capacities,
 different SHAs/environment, missing baselines, exact deltas, warning/critical
@@ -292,14 +325,14 @@ Acceptance matrix:
 
 | Criterion | Author-side status | Evidence / remaining action |
 |---|---|---|
-| Issue AC-1 full-SHA size reports and SDK identity | PASS when linked CI completes | Baseline + exact-head raw artifacts and normalized provenance |
+| Issue AC-1 full-SHA size reports and SDK identity | PASS | Baseline + exact-head raw artifacts and normalized provenance; CI above and final PR handoff |
 | Issue AC-2 evidence-backed root cause | PASS | Address split, map, SDK memory/section scripts, component/file reports |
 | Issue AC-3 budget reviewed by Group 2 Hardware Specialist | PARTIAL | Complete proposal/checklist supplied; independent verdict pending |
 | Issue AC-4 no config adoption without independent review/Owner | PASS | No production configuration changes; no merge |
-| Regression framework and automated failure tests | PASS | 30 host tests; CI report generated from actual builds |
-| Existing Class B/reference checks at final head | PARTIAL until CI finishes | Final-head run URLs/outcomes in PR handoff |
+| Regression framework and automated failure tests | PASS | 31 host tests; CI report generated from actual builds |
+| Existing Class B/reference checks | PASS | Initial CI above; exact final-head verification in PR handoff |
 | ISR placement implications | PASS for scaffold scope | No app ISR; mandatory feature-specific transitive audit remains later work |
-| Independent review handoff | PARTIAL until PR posted | Hub contract plus Group 2 checklist on exact final head |
+| Independent review handoff preparation | PASS | PR #41, hub contract plus Group 2 checklist on exact final head; independent verdict pending |
 
 Review checklist for Group 2 Hardware Specialist:
 

@@ -133,6 +133,17 @@ class MemoryTests(unittest.TestCase):
         with self.assertRaises(report.InvalidData):
             report.compare(bad, self.base, {})
 
+    def test_empty_image_or_missing_evidence_never_ok(self):
+        for key, value in (("image_size_from_report_bytes", 0), ("evidence_class", None)):
+            bad = copy.deepcopy(self.base)
+            bad[key] = value
+            with self.assertRaises(report.InvalidData):
+                report.compare(bad, self.base, {})
+        bad = copy.deepcopy(self.base)
+        bad["metrics"]["flash_app"] = report.metric(0, 1048576)
+        with self.assertRaises(report.InvalidData):
+            report.compare(bad, self.base, {})
+
     def test_changed_toolchain_or_config_not_comparable(self):
         for key in report.IDENTITY:
             current = copy.deepcopy(self.base)
@@ -245,11 +256,13 @@ class MemoryTests(unittest.TestCase):
 
     def test_failed_collection_keeps_failure_and_no_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
             out = Path(tmp) / "evidence"
             failed = subprocess.CompletedProcess(["git"], 7, stdout="injected failure\n")
             with patch.object(collector.subprocess, "run", return_value=failed):
                 with self.assertRaises(report.InvalidData):
-                    collector.collect(tmp, out, "a" * 40)
+                    collector.collect(project, out, "a" * 40)
             self.assertEqual(report.load(out / "failure.json")["status"], "INVALID")
             self.assertFalse((out / "metrics.json").exists())
             self.assertEqual(report.load(out / "commands.json")[0]["exit_code"], 7)
@@ -268,10 +281,12 @@ class MemoryTests(unittest.TestCase):
                 output, rc = "injected build failure", 7
             return subprocess.CompletedProcess(argv, rc, stdout=output)
         with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "project"
+            project.mkdir()
             out = Path(tmp) / "evidence"
             with patch.dict(collector.os.environ, {"IDF_PATH": tmp}), patch.object(collector.subprocess, "run", side_effect=fake_run):
                 with self.assertRaises(report.InvalidData):
-                    collector.collect(tmp, out, self.provenance["source_sha"])
+                    collector.collect(project, out, self.provenance["source_sha"])
             self.assertEqual(report.load(out / "commands.json")[-1]["exit_code"], 7)
             self.assertFalse(any("size" in argv for argv in calls))
             self.assertFalse((out / "metrics.json").exists())

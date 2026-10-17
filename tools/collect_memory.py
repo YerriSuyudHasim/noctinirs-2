@@ -66,6 +66,8 @@ def partition_capacity(text):
 
 def collect(project, out, expected_sha, reuse=False):
     project, out = Path(project).resolve(), Path(out).resolve()
+    if out.is_relative_to(project):
+        raise InvalidData("evidence output must be outside the source checkout")
     out.mkdir(parents=True, exist_ok=False)
     commands = []
     def run(args, log):
@@ -81,8 +83,8 @@ def collect(project, out, expected_sha, reuse=False):
         source = run(["git", "rev-parse", "HEAD"], "source-sha.txt")
         if source != expected_sha or not re.fullmatch(r"[0-9a-f]{40}", source):
             raise InvalidData("checkout SHA differs from expected full source SHA")
-        if run(["git", "status", "--porcelain", "--untracked-files=no"], "source-status.txt"):
-            raise InvalidData("tracked source changes present")
+        if run(["git", "status", "--porcelain", "--untracked-files=normal"], "source-status.txt"):
+            raise InvalidData("source changes or untracked inputs present")
         idf = Path(os.environ["IDF_PATH"]).resolve()
         if run(["git", "-C", idf, "rev-parse", "HEAD"], "idf-commit.txt") != EXPECTED_IDF:
             raise InvalidData("ESP-IDF commit differs from v6.1 pin")
