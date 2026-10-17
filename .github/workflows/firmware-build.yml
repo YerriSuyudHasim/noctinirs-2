@@ -6,7 +6,7 @@ name: Firmware build
 #   esp-idf-build          -> Class B (build) only
 # A successful build is NOT hardware validation, NOT unit/integration evidence,
 # and says nothing about timing, electrical behaviour, safety, or clinical validity.
-# No Class U job exists yet: no tests are present in the repository.
+# Gate fixtures verify scanner behavior; no firmware Class U job exists yet.
 
 on:
   push:
@@ -42,12 +42,20 @@ jobs:
           # (docs/adr/0001-clean-architecture-boundaries.md). Change only together with an ADR revision.
           normative=(components/nn2_core components/nn2_app components/nn2_ports)
           unknown=()
+          if [ -L components ] || { [ -e components ] && [ ! -d components ]; }; then
+            echo "::error::components must be a real directory, not a symlink or file"
+            exit 1
+          fi
           if [ -d components ]; then
+            # Include files and broken links: filtering only real directories lets
+            # malformed paths evade detection and incorrectly skip the gate.
+            candidates="$(find components -mindepth 1 -maxdepth 1 -name 'nn2_*' | sort)"
             while IFS= read -r d; do
+              [ -n "$d" ] || continue
               known=false
               for n in "${normative[@]}"; do [ "$d" = "$n" ] && known=true; done
               [ "$known" = true ] || unknown+=("$d")
-            done < <(find components -mindepth 1 -maxdepth 1 -type d -name 'nn2_*' | sort)
+            done <<< "$candidates"
           fi
           if [ "${#unknown[@]}" -gt 0 ]; then
             echo "::error title=Layer map violation::components/nn2_* not in ADR-0001 normative map: ${unknown[*]}"
@@ -56,6 +64,10 @@ jobs:
           fi
           dirs=()
           for d in "${normative[@]}"; do
+            if [ -L "$d" ] || { [ -e "$d" ] && [ ! -d "$d" ]; }; then
+              echo "::error::normative layer must be a real directory: $d"
+              exit 1
+            fi
             [ -d "$d" ] && dirs+=("$d")
           done
           if [ "${#dirs[@]}" -eq 0 ]; then
@@ -84,12 +96,12 @@ jobs:
 
       - name: Forbidden-include gate for layered components
         shell: bash
-        # Logic lives in tools/class-s-gate.sh (Refs #10): exit 0 PASS; 1 FAIL (violation,
-        # empty/missing layer folder, or grep rc>=2 scanner error). Only grep rc=1 (no match) passes.
+        # Logic lives in tools/class-s-gate.py via the shell wrapper (Refs #10):
+        # exit 0 PASS; 1 FAIL; 3 NOT APPLICABLE. A present hierarchy must return 0.
         run: |
           set -uo pipefail
           rc=0
-          VIOLATIONS_FILE=violations.txt bash tools/class-s-gate.sh . || rc=$?
+          bash tools/class-s-gate.sh . 2>&1 | tee violations.txt || rc=$?
           if [ "$rc" -eq 0 ]; then
             echo "### Class S dependency gate: PASS" >> "$GITHUB_STEP_SUMMARY"
           else

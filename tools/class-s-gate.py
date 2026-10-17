@@ -1,14 +1,71 @@
 #!/usr/bin/env python3
 """ADR-0001 rev1 Class S gate. Exit 0 PASS, 1 FAIL, 3 NOT APPLICABLE."""
 import pathlib
+import os
 import re
 import sys
 
 LAYERS = {"nn2_core": set(), "nn2_ports": {"nn2_core"}, "nn2_app": {"nn2_core", "nn2_ports"}}
-SOURCE_EXT = {".c", ".h", ".cpp", ".hpp"}
-INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]', re.M)
+SOURCE_EXT = {".c", ".h", ".cpp", ".hpp", ".cc", ".cxx", ".hh", ".hxx", ".c++", ".h++", ".s"}
+INCLUDE = re.compile(r'^\s*(?:#|%:)\s*include\s*(?:<([^>\n]+)>|"([^"\n]+)")', re.M)
 PLATFORM = re.compile(r'^(?:esp_.*|freertos/.*|driver/.*|lwip/.*|hal/.*|soc/.*|rom/.*|esp32s3/rom/.*|xtensa/.*|esp_private/.*|sdkconfig\.h|nimble/.*|host/ble_.*|bt_.*|nvs(?:_.*)?\.h|FreeRTOS\.h|task\.h|queue\.h|semphr\.h|timers\.h|event_groups\.h|nn2_adapters?_.*)$')
 CROSS = {"nn2_core": ("nn2_app_", "nn2_port_"), "nn2_ports": ("nn2_app_",), "nn2_app": ()}
+
+
+def literal_includes(text):
+    """Handle C line splicing and comments; macro/transitive/generated includes remain deferred."""
+    text = re.sub(r'\\\r?\n', '', text)
+    clean = []
+    line = ''
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if text.startswith('/*', i):
+            end = text.find('*/', i + 2)
+            if end < 0: raise ValueError('unterminated source comment')
+            value = ' ' + '\n' * text[i:end+2].count('\n')
+            i = end + 2
+        elif text.startswith('//', i):
+            end = text.find('\n', i + 2)
+            value = ' '
+            i = len(text) if end < 0 else end
+        elif c in ('"', "'"):
+            end = i + 1
+            while end < len(text) and text[end] != c:
+                if text[end] == '\\': end += 1
+                end += 1
+            if end >= len(text): raise ValueError('unterminated source string/character')
+            value = text[i:end+1]
+            i = end + 1
+        elif c == '<' and re.fullmatch(r'\s*(?:#|%:)\s*include\s*', line):
+            # Header names are tokens: // within <driver//gpio.h> is not a comment.
+            end = text.find('>', i + 1)
+            if end < 0 or '\n' in text[i:end]: raise ValueError('unterminated include header')
+            value = text[i:end+1]
+            i = end + 1
+        else:
+            value = c
+            i += 1
+        clean.append(value)
+        line = (line + value).rsplit('\n', 1)[-1]
+    return [a or b for a, b in INCLUDE.findall(''.join(clean))]
+
+
+def layer_files(directory):
+    """Enumerate explicitly: pathlib glob may suppress directory permission errors."""
+    pending = [directory]
+    while pending:
+        with os.scandir(pending.pop()) as entries:
+            for entry in entries:
+                path = pathlib.Path(entry.path)
+                if entry.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()):
+                    raise ValueError('symlink/junction in layer: ' + str(path))
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(path)
+                elif entry.is_file(follow_symlinks=False):
+                    yield path
+                else:
+                    raise ValueError('unsupported file type: ' + str(path))
 
 
 def cmake_dependencies(text):
@@ -24,8 +81,14 @@ def cmake_dependencies(text):
         if c.isspace():
             i += 1
         elif c == '#':
-            i = text.find('\n', i)
-            if i < 0: break
+            bracket = re.match(r'#\[(=*)\[', text[i:])
+            if bracket:
+                end = text.find(']' + bracket[1] + ']', i + len(bracket[0]))
+                if end < 0: raise ValueError('unterminated bracket comment')
+                i = end + len(bracket[1]) + 2
+            else:
+                i = text.find('\n', i)
+                if i < 0: break
         elif c == '"':
             j = i + 1
             while j < len(text) and text[j] != '"':
@@ -37,7 +100,7 @@ def cmake_dependencies(text):
         elif c in '()':
             tokens.append((c, c))
             i += 1
-        elif c == '[' and re.match(r'\[=+\[', text[i:]):
+        elif c == '[':
             raise ValueError('CMake bracket syntax unsupported')
         else:
             j = i
@@ -46,74 +109,80 @@ def cmake_dependencies(text):
             if j == i: raise ValueError('unsupported CMake syntax')
             tokens.append(('WORD', text[i:j]))
             i = j
-    if any('${' in value or '$<' in value or '$ENV{' in value or ';' in value for _, value in tokens):
-        raise ValueError('dynamic CMake expression or list unsupported')
-    calls = [i for i, tok in enumerate(tokens) if tok == ('WORD', 'idf_component_register')]
-    if len(calls) != 1: raise ValueError('expected exactly one idf_component_register')
-    start = calls[0]
-    if start+1 >= len(tokens) or tokens[start+1][0] != '(':
-        raise ValueError('invalid idf_component_register syntax')
-    depth = 1
-    args = []
-    j = start + 2
-    while j < len(tokens) and depth:
-        kind, value = tokens[j]
-        if kind == '(': depth += 1
-        elif kind == ')': depth -= 1
-        if depth and kind in ('WORD', 'STRING'): args.append((kind, value))
-        if depth and kind in ('(', ')'): raise ValueError('nested CMake expressions unsupported')
-        j += 1
-    if depth: raise ValueError('unbalanced idf_component_register')
+    if any(any(c in value for c in '$;\\[]\x00') for _, value in tokens):
+        raise ValueError('dynamic CMake expression, escape, list or bracket argument unsupported')
+    # Allow-list the whole script, rather than trying to enumerate every command
+    # that can mutate dependencies or indirectly invoke another registration.
+    if (len(tokens) < 3 or tokens[0][0] != 'WORD'
+            or tokens[0][1].lower() != 'idf_component_register'
+            or tokens[1][0] != '(' or tokens[-1][0] != ')'
+            or any(kind in ('(', ')') for kind, _ in tokens[2:-1])):
+        raise ValueError('expected only one literal idf_component_register command')
+    args = tokens[2:-1]
     keywords = {'SRCS', 'SRC_DIRS', 'EXCLUDE_SRCS', 'INCLUDE_DIRS', 'PRIV_INCLUDE_DIRS', 'REQUIRES', 'PRIV_REQUIRES', 'EMBED_FILES', 'EMBED_TXTFILES', 'WHOLE_ARCHIVE', 'LDFRAGMENTS'}
     deps = []
     mode = None
+    seen = set()
     for kind, value in args:
-        if kind == 'WORD' and value.upper() in keywords:
-            mode = value.upper()
+        # CMake keyword recognition depends on the value, including quoted values.
+        if value in keywords:
+            if value in seen: raise ValueError('duplicate registration keyword: ' + value)
+            seen.add(value)
+            mode = value
+        elif mode is None or mode == 'WHOLE_ARCHIVE':
+            raise ValueError('unsupported registration argument: ' + value)
         elif mode in {'REQUIRES', 'PRIV_REQUIRES'}:
             deps.append(value)
-    # Additional CMake commands can modify dependency properties after registration.
-    # Refuse potentially dynamic scripts until a complete dependency evaluator exists.
-    remainder = tokens[:start] + tokens[j:]
-    if any(kind == 'WORD' and value.lower() in {'set', 'list', 'include', 'add_subdirectory', 'if', 'foreach', 'function', 'macro', 'execute_process', 'set_property', 'set_target_properties', 'target_link_libraries'} for kind, value in remainder):
-        raise ValueError('unsupported CMake dependency-mutating command')
+        else:
+            # Literal file/directory inputs must stay inside the audited layer.
+            path = pathlib.PurePosixPath(value)
+            if path.is_absolute() or '..' in path.parts or ':' in value:
+                raise ValueError('registration path outside layer unsupported: ' + value)
     return deps
 
 
 def audit(root):
     components = root / 'components'
-    if components.is_symlink():
+    if not root.is_dir():
+        raise ValueError('scan root is not a directory')
+    if components.is_symlink() or (hasattr(components, 'is_junction') and components.is_junction()):
         return ['components is a symlink (unsupported)'], False
+    if components.exists() and not components.is_dir():
+        raise ValueError('components is not a directory')
     dirs = [components / name for name in LAYERS]
-    unknown = [p for p in components.glob('nn2_*') if p.name not in LAYERS] if components.is_dir() else []
+    unknown = [p for p in components.iterdir() if p.name.startswith('nn2_') and p.name not in LAYERS] if components.is_dir() else []
     errors = ['unknown layer: ' + str(p.relative_to(root)) for p in unknown]
     present = any(p.exists() or p.is_symlink() for p in dirs)
     if not present and not unknown:
         return [], False
     for name in LAYERS:
         d = components / name
-        if d.is_symlink() or not d.is_dir():
+        if d.is_symlink() or (hasattr(d, 'is_junction') and d.is_junction()) or not d.is_dir():
             errors.append('missing or symlink layer: ' + name)
             continue
         sources = []
-        for p in d.rglob('*'):
-            if p.is_symlink():
-                errors.append('symlink in layer: ' + str(p.relative_to(root)))
-                continue
-            if p.is_file() and p.suffix in SOURCE_EXT:
+        for p in layer_files(d):
+            if p.name in {'idf_component.yml', 'idf_component.yaml'}:
+                errors.append('component-manager dependency manifest unsupported: ' + str(p.relative_to(root)))
+            if p.name == 'CMakeLists.txt' and p.parent != d:
+                errors.append('nested CMakeLists.txt unsupported: ' + str(p.relative_to(root)))
+            if p.suffix.lower() in SOURCE_EXT:
                 sources.append(p)
         if not sources:
             errors.append('empty source/header layer: ' + name)
         for p in sources:
             try:
-                text = p.read_text(encoding='utf-8')
-            except (OSError, UnicodeError) as exc:
+                includes = literal_includes(p.read_text(encoding='utf-8'))
+            except (OSError, UnicodeError, ValueError) as exc:
                 errors.append('unreadable source: ' + str(p) + ': ' + str(exc))
                 continue
-            for inc in INCLUDE.findall(text):
-                # Only match basename for cross-layer headers; platform checks full path and basename.
-                base = inc.rsplit('/', 1)[-1]
-                if PLATFORM.match(inc) or PLATFORM.match(base) or any(base.startswith(prefix) for prefix in CROSS[name]):
+            for inc in includes:
+                parts = pathlib.PurePosixPath(inc.replace('\\', '/')).parts
+                suffixes = ['/'.join(parts[i:]) for i in range(len(parts))]
+                forbidden_layers = set(LAYERS) - LAYERS[name] - {name}
+                if (any(PLATFORM.fullmatch(s) for s in suffixes)
+                        or any(part.startswith(CROSS[name]) for part in parts)
+                        or forbidden_layers.intersection(parts)):
                     errors.append(f'{p.relative_to(root)}: forbidden include {inc}')
         cmake = d / 'CMakeLists.txt'
         if cmake.is_symlink() or not cmake.is_file():
@@ -129,8 +198,8 @@ def audit(root):
 
 
 def main():
-    root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else '.').resolve()
     try:
+        root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else '.').resolve()
         errors, present = audit(root)
     except Exception as exc:
         print('FAIL: scanner error:', exc)

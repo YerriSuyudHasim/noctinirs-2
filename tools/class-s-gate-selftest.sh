@@ -20,7 +20,10 @@ done
 mk empty;   rm -rf "$T/empty/components/nn2_app"/*;  expect empty-layer-folder 1 "$T/empty"
 mk missing; rm -rf "$T/missing/components/nn2_ports"; expect missing-layer-folder 1 "$T/missing"
 mk scanerr; chmod 000 "$T/scanerr/components/nn2_core/src"
-if [ "$(id -u)" -ne 0 ]; then expect scanner-error 1 "$T/scanerr"; else echo "skip scanner-error (root)"; fi
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) echo "skip scanner-error (native Windows Python does not enforce POSIX chmod; injected error fixture covers this)" ;;
+  *) if [ "$(id -u)" -ne 0 ]; then expect scanner-error 1 "$T/scanerr"; else echo "skip scanner-error (root)"; fi ;;
+esac
 chmod 755 "$T/scanerr/components/nn2_core/src"
 rm -rf "$T"
 echo "selftest failures: $fails"; [ "$fails" -eq 0 ]

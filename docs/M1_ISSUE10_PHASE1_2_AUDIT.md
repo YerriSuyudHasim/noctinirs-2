@@ -1,8 +1,8 @@
 # Issue #10 — Phase 1–2 audit and characterization fixtures
 
-**Scope:** static gate audit + tests only; no production gate changes, firmware changes, CI edits, branch protection changes, or hardware work. **Baseline:** `main` `4a21171353b72ceff62774ba114705e0c8be2c31`. ADR-0001 is **Proposed**, §3.3 rev1 and §3.5 are used as the provisional contract; Issue #11 remains authority for open contract questions.
+**Historical Phase 1–2 scope:** static gate audit + characterization tests. The baseline descriptions and RED results below describe that phase, not the latest scanner. Phase 3–4 status is appended below and in [the parser audit](M1_ISSUE10_PARSER_AUDIT.md). **Baseline:** `main` `4a21171353b72ceff62774ba114705e0c8be2c31`. ADR-0001 is **Proposed**; §3.3 rev1 and §3.5 are the provisional contract. Issue #11 retains authority for open contract questions.
 
-## Verified current implementation
+## Phase 1 baseline implementation
 
 - `tools/class-s-gate.sh`: grep-only include scanner for `components/nn2_core`, `nn2_ports`, `nn2_app`; no CMake dependency audit; partial forbidden patterns; `find -type f` counts sources; no explicit symlink policy.
 - `tools/class-s-gate-selftest.sh`: transient positive, no-layer, empty/missing layer, and selected include fixtures. No CMake or cross-layer fixtures.
@@ -10,7 +10,7 @@
 
 ## ADR §3.3/§3.5 traceability matrix
 
-| ADR rule | Current gate | Phase-2 fixture | Expected |
+| ADR rule | Phase 1 gate | Phase-2 fixture | Expected |
 |---|---|---|---|
 | Platform `esp_*`, `freertos/*`, `driver/*`, `lwip/*`, `hal/*`, `soc/*`, `rom/*`, `esp_private/*`, `sdkconfig.h` | Partial regex; `esp_*` broadly caught, `esp_private/*` caught by `esp_*` | Existing `tools/class-s-gate-selftest.sh` | FAIL for forbidden include |
 | BLE `nimble/*`, `host/ble_*`, `bt_*` | `nimble/*` only; others absent | `test_n1_ble_header` | FAIL |
@@ -35,10 +35,32 @@
 python3 -m unittest discover -s tests/gate-fixtures -p 'test_*.py' -v
 ```
 
-**Important:** N1/N2/N4 tests are deliberately expected to fail against the current scanner. This is the Phase-2 **RED baseline**, not a green acceptance suite. Do **not** wire the tests into required CI until Phase 3 implements and verifies the fixes. After Phase 3, all tests must pass and CI run URLs must be recorded. No claims of executed local tests are made by this commit.
+**Historical result:** N1/N2/N4 fixtures were deliberately RED against the Phase 1 scanner. Phase 3 subsequently implemented the gate; Phase 4 connected the regression suite to CI. The original record does not claim tests were executed in Phase 1–2.
 
-## Next handoff
+## Historical next handoff
 
 1. Phase 3: implement complete per-layer include checks, CMake `REQUIRES`/`PRIV_REQUIRES` audit, fail-closed symlink handling, and avoid false PASS on missing/empty layers; preserve NOT APPLICABLE semantics.
 2. Phase 4: add fixture execution to CI and collect green Class S + B run links at the exact PR head.
 3. Phase 5: independent reviewer approval, reference-integrity green, Owner authorization before merge. N5 remains blocked on Owner branch-protection decision; no repository settings change.
+
+## Phase 3–4 continuation traceability (2026-10-17)
+
+Accountable activity: engineering implementation and Verification for Issue #10, not independent approval. Specialist required: independent Reviewer/Architecture review of the supported parser subset. No RTOS/hardware behavior or architectural contract is changed.
+
+| Provisional ADR requirement | Implementation and regression evidence |
+|---|---|
+| §3.3 platform, BLE, NVS, unprefixed FreeRTOS, singular/plural adapter patterns | `PLATFORM`; `test_n1_complete_adr_forbidden_matrix` exercises all 23 representative headers in each of the three layers (69 subcases). Legacy Bash fixtures retain ESP32-S3 ROM/xtensa cases. |
+| §3.3 Core→App/Ports, Ports→App, all inner layers→Adapters forbidden | `CROSS` and path-segment checks; `test_n1_cross_layer_matrix`, relative-path and adapter fixtures. |
+| §3.5 Core dependencies: none | `LAYERS['nn2_core']`; `test_n2_core_requires_idf`, quoted keyword/dependency fixtures. |
+| §3.5 Ports dependencies: Core only | `LAYERS['nn2_ports']`; `test_n2_ports_priv_requires_illegal`, legal quoted/private fixture. |
+| §3.5 App dependencies: Core/Ports only | `LAYERS['nn2_app']`; multiline illegal and legal public/private fixtures. |
+| §4 every normative CMake script must be audited; parse errors fail | Whole-script restricted parser; extra/nested registrations, nested CMakeLists, dynamic and malformed syntax fail closed; nested scripts are unsupported rather than silently skipped. |
+| §3.5 unknown `nn2_*` paths fail | Scanner and actual workflow detection tests cover directories, files, and broken links. Path list remains duplicated pending N6 / Issue #11. |
+| §4 zero files or incomplete hierarchy cannot pass | Empty/missing fixtures; valid header-only Ports remains supported. |
+| §4 absent hierarchy = NOT APPLICABLE, not evidence | Exit 3 and workflow skip fixtures; malformed/symlinked paths cannot select this branch. |
+| §4 tool errors fail | Explicit directory enumeration, invalid UTF-8 and injected PermissionError fixtures; Bash permission test runs on non-root POSIX CI. |
+| N4 symlink handling | Fail closed for components, layer, nested directory, file, and broken links; Windows junctions also rejected. |
+| §3.3 standard headers / `<stdatomic.h>` | This gate enforces the forbidden patterns, not a full standard-header whitelist. `<stdatomic.h>` remains manual RTOS review; no automated claim. |
+| §3.3 G3/G4/G5 | Macro-expanded, transitive, and generated includes remain deferred; no automated absence claim. |
+
+The [parser audit](M1_ISSUE10_PARSER_AUDIT.md) records the new findings, fixtures, supported syntax, local results and the verified incoming SHA's CI. The append-only PR #38 continuation handoff records the implementation SHA and its own CI URLs after push. Phase 5 still requires independent approval and Owner action; N5 remains blocked.
