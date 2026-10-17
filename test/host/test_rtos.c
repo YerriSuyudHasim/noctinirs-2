@@ -1,0 +1,18 @@
+#include "nn2_rtos_config.h"
+#include "unity.h"
+
+#include <string.h>
+
+void test_rtos_config_pins_console_and_wifi_to_core_0(void)
+{
+    TEST_ASSERT_EQUAL_INT(0, NN2_RTOS_CORE_NET);
+    TEST_ASSERT_EQUAL_INT(0, NN2_RTOS_CORE_PROV);
+    TEST_ASSERT_EQUAL_STRING("nn2_net", NN2_TASK_NAME_NET);
+    TEST_ASSERT_EQUAL_STRING("nn2_prov", NN2_TASK_NAME_PROV);
+    TEST_ASSERT_LESS_OR_EQUAL(15, (int)strlen(NN2_TASK_NAME_NET));
+    TEST_ASSERT_LESS_OR_EQUAL(15, (int)strlen(NN2_TASK_NAME_PROV));
+    TEST_ASSERT_TRUE(NN2_RTOS_PRIO_NET > NN2_RTOS_PRIO_PROV);
+    TEST_ASSERT_TRUE(NN2_RTOS_STACK_NET_WORDS > 0u);
+    TEST_ASSERT_TRUE(NN2_RTOS_STACK_PROV_WORDS > 0u);
+    TEST_ASSERT_TRUE(NN2_WIFI_EVT_QUEUE_LEN >= 1u);
+}
