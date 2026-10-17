@@ -260,6 +260,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(2, workflow.count("ref: ${{ github.event.pull_request.head.sha || github.sha }}"))
         self.assertIn("if: always()", workflow)
         self.assertIn("retention-days: 90", workflow)
+        self.assertIn("include-hidden-files: true", workflow)
         self.assertNotIn("continue-on-error", workflow)
         self.assertIn(repro.IMAGE, (ROOT / ".github/workflows/firmware-build.yml").read_text())
 

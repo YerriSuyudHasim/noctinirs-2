@@ -55,6 +55,18 @@ toolchain paths. Generated config and actual compiler commands are retained from
 both builds so the effect can be checked independently. Debuggers need the SDK's
 generated `build/gdbinit/prefix_map` substitutions to locate local sources.
 
+Measured effective-config comparison against the downloaded M0 configuration
+shows exactly three value changes: APP_REPRODUCIBLE_BUILD `n -> y`,
+APP_COMPILE_TIME_DATE `y -> n`, and BOOTLOADER_COMPILE_TIME_DATE `y -> n`.
+COMPILER_HIDE_PATHS_MACROS was already `y` and stays `y`. The Class B ELF at
+`eda7adc112b010aef5d2fde3b5bbc404df5e1104` contains neither the actual project
+checkout path nor `/opt/esp/idf`; its app descriptor's date/time fields are 32 zero
+bytes. These are observed configuration/metadata effects, independently of the
+different-path build pair recorded below. Source: [Class B PR run 39017047331](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39017047331),
+[artifact 12095745639](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39017047331/artifacts/12095745639),
+zero warnings. App is 169952 bytes (-96 versus M0), bootloader 21072 (-48),
+partition table 3072 (unchanged); DIRAM remains 48242 bytes and IRAM 16384 bytes.
+
 No additional Kconfig, task, scheduling, peripheral, network, pin, partition,
 security or hardware setting is proposed. This requested build configuration is
 within Issue #9's authorization; independent review and Owner merge approval
@@ -116,11 +128,56 @@ The Linux CI suite is the final authoritative host result, tied to its source SH
 
 ## Current two-build and regression evidence
 
-CI execution and final matrix are pending at this initial implementation commit.
-The next evidence update records run URLs, complete artifact matrix, generated
-configuration, compiler commands, zero-warning Class B and reference integrity.
-Each final CI artifact identifies its own exact source SHA; the final PR handoff
-records the latest head without creating a self-referential commit hash.
+Implementation verification at `493b26abe4fb74917cd012696d16a2a4eb5891d2`:
+[PR reproducibility run 39017211516](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39017211516)
+**PASS**, [artifact 12095307101](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39017211516/artifacts/12095307101).
+The uploaded raw binaries were downloaded and all 14 per-build size/hash entries
+were independently recomputed by the author; every entry matches the CI report.
+This is author-side evidence validation, not independent review approval.
+
+- A: `/__w/_temp/nn2-issue9.qh6U9VdO/short-a`, clean start 08:26:05 UTC,
+  snapshot 08:28:10 UTC on 2026-10-17.
+- B: `/__w/_temp/nn2-issue9.qh6U9VdO/different-depth/longer-independent-workspace-b`,
+  clean start 08:28:12 UTC, snapshot 08:30:11 UTC.
+- Both: build exit 0, zero warnings, source SHA as above, empty tracked-source
+  status, identical sdkconfig SHA-256
+  `6d54d05c0e9e343175c423fed97f6df3249155e7838092a88c884ae11c00c725`.
+- SDK/compiler as pinned above; CMake 4.0.3, Ninja 1.11.1, Python 3.12.3,
+  Linux x86_64/glibc 2.39, UTC, C.UTF-8; ccache disabled, SOURCE_DATE_EPOCH
+  and inherited C/C++/preprocessor/linker flags unset.
+- Actual app compilation has 150 SDK prefix-map flags per build, including both
+  different project roots -> /IDF_PROJECT, build roots -> /IDF_BUILD,
+  main -> /COMPONENT_MAIN_DIR, SDK -> /IDF, and toolchain -> /TOOLCHAIN.
+  Exact commands and generated GDB substitutions are in each build's evidence.
+
+Every produced .bin is included, including the four CMake compiler ABI probes.
+These probes are not flash images; filtering them out would narrow the requested
+all-binary comparison. Paths below are relative to each build directory.
+
+| Binary | Bytes A = B | A SHA-256 | B SHA-256 | Result |
+|---|---:|---|---|---|
+| `CMakeFiles/4.0.3/CMakeDetermineCompilerABI_C.bin` | 9832 | `2e17a82b1b3d62c0d63d2a940e35310d0f99983f44a2e91f48368edae07f15e9` | `2e17a82b1b3d62c0d63d2a940e35310d0f99983f44a2e91f48368edae07f15e9` | PASS |
+| `CMakeFiles/4.0.3/CMakeDetermineCompilerABI_CXX.bin` | 9856 | `1f2415b09fad4f709656624f0d5e7f9926ce931e2e0e0f7e3f9ba2591373ecef` | `1f2415b09fad4f709656624f0d5e7f9926ce931e2e0e0f7e3f9ba2591373ecef` | PASS |
+| `bootloader/CMakeFiles/4.0.3/CMakeDetermineCompilerABI_C.bin` | 9832 | `2e17a82b1b3d62c0d63d2a940e35310d0f99983f44a2e91f48368edae07f15e9` | `2e17a82b1b3d62c0d63d2a940e35310d0f99983f44a2e91f48368edae07f15e9` | PASS |
+| `bootloader/CMakeFiles/4.0.3/CMakeDetermineCompilerABI_CXX.bin` | 9856 | `1f2415b09fad4f709656624f0d5e7f9926ce931e2e0e0f7e3f9ba2591373ecef` | `1f2415b09fad4f709656624f0d5e7f9926ce931e2e0e0f7e3f9ba2591373ecef` | PASS |
+| `bootloader/bootloader.bin` | 21072 | `da59a63758341ef54ff0083f178ea1f29ed7bc9cf89a8c7f64e9b0d2d9a9184b` | `da59a63758341ef54ff0083f178ea1f29ed7bc9cf89a8c7f64e9b0d2d9a9184b` | PASS |
+| `noctinirs2.bin` | 169952 | `6741624ccd5f6cbbba74b285ad35af7987baae117b648dd702d973899fb0d041` | `6741624ccd5f6cbbba74b285ad35af7987baae117b648dd702d973899fb0d041` | PASS |
+| `partition_table/partition-table.bin` | 3072 | `7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820` | `7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820` | PASS |
+
+Existing [Class B PR run 39017211513](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39017211513)
+and [push run 39017207927](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39017207927)
+both pass with zero warning lines; their three firmware images also match this
+matrix. [Reference PR run 39017211512](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39017211512)
+and [push run 39017207923](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39017207923)
+pass on the same SHA. Linux host tooling: 27/27 methods pass; Class S legacy
+fixtures/invariant pass, while the production dependency gate is explicitly
+SKIPPED / NOT APPLICABLE because product layers are absent.
+
+The documentation/upload-completeness follow-up must receive fresh CI on its own
+head. The final exact head, run URLs, artifact IDs and complete matrix are recorded
+in [Draft PR #40's append-only independent-review handoff](https://github.com/YerriSuyudHasim/noctinirs-2/pull/40).
+Each CI artifact identifies its own source SHA. This avoids a self-referential
+commit hash and does not treat earlier-head success as evidence for a later head.
 
 Initial CI at `eda7adc112b010aef5d2fde3b5bbc404df5e1104` stopped before any
 build: Git rejected the container checkout ownership on the first repository
@@ -131,15 +188,15 @@ ignored. This is an orchestration failure, not a binary nondeterminism finding.
 
 ## Acceptance traceability and limits
 
-| Requirement | Implementation / evidence location |
+| Requirement | Result at measured implementation SHA / evidence |
 |---|---|
-| All `.bin` bytes identical across clean paths | build-twice CI; comparison.json/.md, both inventories and raw bins |
-| Immutable IDF v6.1 toolchain | workflow digest; image-evidence; per-build metadata |
-| Mismatch, artifact-set and incomplete failures | tests/reproducibility/test_comparison.py; CI host tests |
-| Actionable diagnostics | JSON/Markdown report, original binaries/logs/config/commands |
-| Review sdkconfig and keep Class B zero-warning | single documented default; Class B warning gate and per-build snapshots |
-| Reference integrity | existing workflow, now checks exact PR head; before/after local 319-file verification |
-| Independent handoff | Draft PR checklist + hub-format append-only handoff, pending final CI |
+| All `.bin` bytes identical across clean paths | PASS, all 7 binaries / 14 hashes; full matrix and retained artifacts above |
+| Immutable IDF v6.1 toolchain | PASS, registry index/child verification; IDF/compiler enforcement |
+| Mismatch, artifact-set and incomplete failures | PASS, 27 host tooling methods including CLI and shell failure paths |
+| Actionable diagnostics | PASS, fixture assertions for JSON/Markdown names/sizes/hashes/offsets/environment; always-upload CI |
+| Review sdkconfig and keep Class B zero-warning | Build PASS, zero warnings; single default documented; independent configuration review PENDING |
+| Reference integrity | PASS, exact-head CI and local 319-file verification |
+| Independent handoff | Draft PR #40 checklist and final append-only hub handoff; independent approval PENDING |
 
 Residual risks: this verifies the current scaffold, target and linux/amd64 image,
 not arbitrary future components, hosts or SDK revisions. Future uses of date/time

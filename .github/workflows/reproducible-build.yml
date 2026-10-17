@@ -61,6 +61,7 @@ jobs:
           name: reproducibility-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 90
           if-no-files-found: error
+          include-hidden-files: true # Preserve recursively discovered binaries in hidden subdirectories too.
           path: |
             image-evidence/
             repro-evidence/
