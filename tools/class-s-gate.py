@@ -12,31 +12,71 @@ CROSS = {"nn2_core": ("nn2_app_", "nn2_port_"), "nn2_ports": ("nn2_app_",), "nn2
 
 
 def cmake_dependencies(text):
-    # Strip line comments, retaining quoted content; fail closed on unsupported dynamic constructs.
-    text = re.sub(r'#[^\n]*', '', text)
-    calls = list(re.finditer(r'\bidf_component_register\s*\(', text, re.I))
-    if len(calls) != 1:
-        raise ValueError('expected exactly one idf_component_register(...)')
-    pos = calls[0].end()
+    """Parse one literal idf_component_register invocation, reject dynamic/ambiguous CMake.
+
+    This is intentionally a restricted CMake subset, not a general CMake interpreter.
+    """
+    # Lexer: comments, quoted strings, parentheses, and plain words.
+    tokens = []
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c.isspace():
+            i += 1
+        elif c == '#':
+            i = text.find('\n', i)
+            if i < 0: break
+        elif c == '"':
+            j = i + 1
+            while j < len(text) and text[j] != '"':
+                if text[j] == '\\': j += 1
+                j += 1
+            if j >= len(text): raise ValueError('unterminated quoted string')
+            tokens.append(('STRING', text[i+1:j]))
+            i = j + 1
+        elif c in '()':
+            tokens.append((c, c))
+            i += 1
+        elif c == '[' and re.match(r'\[=+\[', text[i:]):
+            raise ValueError('CMake bracket syntax unsupported')
+        else:
+            j = i
+            while j < len(text) and not text[j].isspace() and text[j] not in '()#"':
+                j += 1
+            if j == i: raise ValueError('unsupported CMake syntax')
+            tokens.append(('WORD', text[i:j]))
+            i = j
+    if any('${' in value or '$<' in value or '$ENV{' in value or ';' in value for _, value in tokens):
+        raise ValueError('dynamic CMake expression or list unsupported')
+    calls = [i for i, tok in enumerate(tokens) if tok == ('WORD', 'idf_component_register')]
+    if len(calls) != 1: raise ValueError('expected exactly one idf_component_register')
+    start = calls[0]
+    if start+1 >= len(tokens) or tokens[start+1][0] != '(':
+        raise ValueError('invalid idf_component_register syntax')
     depth = 1
-    start = pos
-    while pos < len(text) and depth:
-        if text[pos] == '(': depth += 1
-        if text[pos] == ')': depth -= 1
-        pos += 1
-    if depth:
-        raise ValueError('unbalanced idf_component_register(...)')
-    tokens = re.findall(r'"[^"]*"|\S+', text[start:pos-1])
-    # CMake keywords terminating dependency lists; unsupported keywords fail closed
+    args = []
+    j = start + 2
+    while j < len(tokens) and depth:
+        kind, value = tokens[j]
+        if kind == '(': depth += 1
+        elif kind == ')': depth -= 1
+        if depth and kind in ('WORD', 'STRING'): args.append((kind, value))
+        if depth and kind in ('(', ')'): raise ValueError('nested CMake expressions unsupported')
+        j += 1
+    if depth: raise ValueError('unbalanced idf_component_register')
     keywords = {'SRCS', 'SRC_DIRS', 'EXCLUDE_SRCS', 'INCLUDE_DIRS', 'PRIV_INCLUDE_DIRS', 'REQUIRES', 'PRIV_REQUIRES', 'EMBED_FILES', 'EMBED_TXTFILES', 'WHOLE_ARCHIVE', 'LDFRAGMENTS'}
     deps = []
     mode = None
-    for token in tokens:
-        u = token.upper()
-        if u in keywords:
-            mode = u
+    for kind, value in args:
+        if kind == 'WORD' and value.upper() in keywords:
+            mode = value.upper()
         elif mode in {'REQUIRES', 'PRIV_REQUIRES'}:
-            deps.append(token.strip('"'))
+            deps.append(value)
+    # Additional CMake commands can modify dependency properties after registration.
+    # Refuse potentially dynamic scripts until a complete dependency evaluator exists.
+    remainder = tokens[:start] + tokens[j:]
+    if any(kind == 'WORD' and value.lower() in {'set', 'list', 'include', 'add_subdirectory', 'if', 'foreach', 'function', 'macro', 'execute_process', 'set_property', 'set_target_properties', 'target_link_libraries'} for kind, value in remainder):
+        raise ValueError('unsupported CMake dependency-mutating command')
     return deps
 
 

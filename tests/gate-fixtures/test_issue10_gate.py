@@ -90,6 +90,46 @@ class Issue10GateFixtures(unittest.TestCase):
         p.write_text('idf_component_register(\n SRCS "src/fixture.c"\n REQUIRES nn2_core\n   esp_wifi\n)\n')
         self.gate(1)
 
+    def test_n2_comment_fake_dependency_is_ignored(self):
+        p = self.root / 'components' / 'nn2_core' / 'CMakeLists.txt'
+        p.write_text('idf_component_register(SRCS "src/fixture.c" # REQUIRES esp_wifi\n)\n')
+        self.gate(0)
+
+    def test_n2_quoted_hash_preserved(self):
+        p = self.root / 'components' / 'nn2_core' / 'CMakeLists.txt'
+        p.write_text('idf_component_register(SRCS "src/#fixture.c")\n')
+        self.gate(0)
+
+    def test_n2_dynamic_requires_fails_closed(self):
+        p = self.root / 'components' / 'nn2_app' / 'CMakeLists.txt'
+        p.write_text('idf_component_register(SRCS "src/fixture.c" REQUIRES ${DYNAMIC_DEPS})\n')
+        self.gate(1)
+
+    def test_n2_cmake_semicolon_list_fails_closed(self):
+        p = self.root / 'components' / 'nn2_app' / 'CMakeLists.txt'
+        p.write_text('idf_component_register(SRCS "src/fixture.c" REQUIRES "nn2_core;esp_wifi")\n')
+        self.gate(1)
+
+    def test_n2_register_in_comment_not_counted(self):
+        p = self.root / 'components' / 'nn2_core' / 'CMakeLists.txt'
+        p.write_text('# idf_component_register(REQUIRES esp_wifi)\nidf_component_register(SRCS "src/fixture.c")\n')
+        self.gate(0)
+
+    def test_n2_quoted_dependency_is_checked(self):
+        p = self.root / 'components' / 'nn2_app' / 'CMakeLists.txt'
+        p.write_text('idf_component_register(SRCS "src/fixture.c" PRIV_REQUIRES "esp_wifi")\n')
+        self.gate(1)
+
+    def test_n2_unterminated_quote_fails_closed(self):
+        p = self.root / 'components' / 'nn2_core' / 'CMakeLists.txt'
+        p.write_text('idf_component_register(SRCS "src/fixture.c)\n')
+        self.gate(1)
+
+    def test_n2_external_include_fails_closed(self):
+        p = self.root / 'components' / 'nn2_core' / 'CMakeLists.txt'
+        p.write_text('include(external.cmake)\nidf_component_register(SRCS "src/fixture.c")\n')
+        self.gate(1)
+
     def test_n4_symlink_file_fails_closed(self):
         p = self.root / 'components' / 'nn2_core' / 'src' / 'fixture.c'
         p.unlink()
