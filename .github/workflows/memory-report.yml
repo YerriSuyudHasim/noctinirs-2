@@ -1,0 +1,76 @@
+name: Memory diagnostics
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  memory-tool-tests:
+    name: memory-tool-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Test report validation, comparison and collector failures
+        run: python3 -m unittest discover -s tests/memory -v
+
+  memory-report:
+    name: memory-report (informational)
+    runs-on: ubuntu-latest
+    # Diagnostics are informational. Existing Class B / integrity checks are unchanged.
+    # Parser/build failures remain visible in this job and its retained failure record.
+    continue-on-error: true
+    container:
+      image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
+    env:
+      PYTHONUTF8: '1'
+      CCACHE_DISABLE: '1'
+      MEMORY_CONTAINER_IMAGE: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
+      MEMORY_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      BASELINE_SHA: 4a21171353b72ceff62774ba114705e0c8be2c31
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: source
+      - uses: actions/checkout@v4
+        with:
+          ref: 4a21171353b72ceff62774ba114705e0c8be2c31
+          path: baseline
+      - name: Build exact baseline and current source, collect all size reports
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/source"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/baseline"
+          . "$IDF_PATH/export.sh" > /dev/null
+          python source/tools/collect_memory.py --project baseline --out memory-evidence/baseline --expected-sha "$BASELINE_SHA"
+          python source/tools/collect_memory.py --project source --out memory-evidence/current --expected-sha "$SOURCE_SHA"
+      - name: Compare using proposed advisory thresholds
+        run: |
+          set -euo pipefail
+          python source/tools/memory_report.py --baseline memory-evidence/baseline/metrics.json --current memory-evidence/current/metrics.json --thresholds source/tools/memory-thresholds.proposed.json --json memory-evidence/comparison.json --markdown memory-evidence/comparison.md
+      - name: Publish summary including diagnostic failures
+        if: always()
+        run: |
+          if [ -f memory-evidence/comparison.md ]; then
+            cat memory-evidence/comparison.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '## Memory diagnostics: INVALID / incomplete; no valid comparison' >> "$GITHUB_STEP_SUMMARY"
+            find memory-evidence -name failure.json -exec cat {} \; >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+      - name: Retain raw evidence (Class B only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: memory-evidence/
+          retention-days: 90
+          if-no-files-found: error

@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "evidence_class": "B-static-build",
+  "provenance": {
+    "source_sha": "4a21171353b72ceff62774ba114705e0c8be2c31",
+    "target": "esp32s3",
+    "idf_commit": "fff9895c82d744c7237be8847347bdd1b07c6643",
+    "compiler": "xtensa-esp-elf-gcc.exe (crosstool-NG esp-15.2.0_20251204) 15.2.0",
+    "size_tool_version": "2.3.2",
+    "sdkconfig_values_sha256": "6585b44741b9d89db087604c7fdb670350a7526eb821ff9dc961804f386c0c00",
+    "sdkconfig_sha256": "0838b3b5fc70fc6f080ef7e212bf3add9cff612488e2142a259fd25a591a81c6",
+    "build_flags": "{}",
+    "utc": "2026-10-17T09:06:55.268737+00:00",
+    "environment": "Windows-11-10.0.26200-SP0; Python 3.14.6",
+    "container_reference": "not used (local build)",
+    "report_sha256": "a5641a6ce559b08deb6eded739b089dad677e31e247c6a054413c11743898a33",
+    "map_sha256": "ce897a747b3f56663aa937ea3cfab68f7c3c0e49193e0815b9321ea3502f32ce",
+    "ci_run_url": "local; not immutable CI evidence",
+    "collection_mode": "existing-build-rebuilt"
+  },
+  "metrics": {
+    "iram_fixed": {
+      "used_bytes": 16384,
+      "capacity_bytes": 16384,
+      "headroom_bytes": 0,
+      "used_percent": 100.0
+    },
+    "iram_shared_text": {
+      "used_bytes": 32935,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "iram_placed": {
+      "used_bytes": 49319,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "dram_static": {
+      "used_bytes": 15307,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "diram": {
+      "used_bytes": 48242,
+      "capacity_bytes": 341760,
+      "headroom_bytes": 293518,
+      "used_percent": 14.115753745318353
+    },
+    "flash_code": {
+      "used_bytes": 69114,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "flash_data": {
+      "used_bytes": 38760,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "flash_app": {
+      "used_bytes": 170048,
+      "capacity_bytes": 1048576,
+      "headroom_bytes": 878528,
+      "used_percent": 16.217041015625
+    }
+  },
+  "image_size_from_report_bytes": 169928
+}

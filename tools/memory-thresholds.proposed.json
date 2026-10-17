@@ -1,0 +1,18 @@
+{
+  "iram_placed": {
+    "warning": {"max_increase_bytes": 16384},
+    "critical": {"max_increase_bytes": 32768}
+  },
+  "dram_static": {
+    "warning": {"max_used_bytes": 65536},
+    "critical": {"max_used_bytes": 98304}
+  },
+  "diram": {
+    "warning": {"min_headroom_bytes": 131072},
+    "critical": {"min_headroom_bytes": 98304}
+  },
+  "flash_app": {
+    "warning": {"max_used_percent": 70},
+    "critical": {"max_used_percent": 80}
+  }
+}
