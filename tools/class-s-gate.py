@@ -13,7 +13,22 @@ CROSS = {"nn2_core": ("nn2_app_", "nn2_port_"), "nn2_ports": ("nn2_app_",), "nn2
 
 
 def literal_includes(text):
-    """Handle C line splicing and comments; macro/transitive/generated includes remain deferred."""
+    """Scan literal includes; macro/transitive/generated includes remain deferred."""
+    text = text.removeprefix('\ufeff')  # One optional UTF-8 signature at source start.
+    trigraphs = {'=': '#', '/': '\\', "'": '^', '(': '[', ')': ']',
+                '!': '|', '<': '{', '>': '}', '-': '~'}
+    # C11 phase 1 precedes phase 2 splicing and phase 3 comment recognition.
+    translated = re.sub(r'\?\?([=/\'()!<>-])', lambda m: trigraphs[m[1]], text)
+    includes = unspliced_literal_includes(translated)
+    if translated != text:
+        # Also cover modes where trigraphs are inactive. Conversion must not
+        # hide an ordinary directive behind a newly spliced // comment.
+        includes += unspliced_literal_includes(text)
+    return includes
+
+
+def unspliced_literal_includes(text):
+    """Apply line splicing, then lex comments and literal header tokens."""
     text = re.sub(r'\\\r?\n', '', text)
     clean = []
     line = ''
