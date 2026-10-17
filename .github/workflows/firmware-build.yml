@@ -179,6 +179,10 @@ jobs:
           sha256sum build/*.bin build/bootloader/bootloader.bin build/partition_table/partition-table.bin sdkconfig | tee evidence/SHA256SUMS
           grep -ciE 'warning:' evidence/build.log > evidence/warning-count.txt || true
           echo "Compiler warning lines: $(cat evidence/warning-count.txt)"
+          if [ "$(cat evidence/warning-count.txt)" -ne 0 ]; then
+            echo "::error::Class B requires zero compiler warning lines"
+            exit 1
+          fi
 
       - name: Write step summary
         if: always()

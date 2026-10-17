@@ -1,0 +1,157 @@
+# Issue #9 — M1.3 reproducible build evidence
+
+Accountable: Group 2, Verifier Lead and Integration Engineer. Scope: build
+determinism, comparison tooling, CI and review evidence. Base: `main` at
+`4a21171353b72ceff62774ba114705e0c8be2c31`. PRs #38 and #39 are separate work;
+neither is included or modified. No reference snapshot is a build input.
+
+## Original failure and measured cause
+
+M0 built `cd4ed7f88905a1c430e0b942732ddc0613081aef` twice:
+
+| Image | Push SHA-256 | PR SHA-256 | Bytes each |
+|---|---|---|---:|
+| Application | `86ca19229b1ba9604f70c3a5e6812b1c8fe7c025597f14266fdba6bf2ba70384` | `49f58488907e721e57f49d127cc4499a44de487e52c3d8ac81f45bbe3621cf6a` | 170048 |
+| Bootloader | `e4006072d8c2f89f5ae96dfedd9cef9e92f77198702398dee46520f828a46fa1` | `95c36fb89e19ef2101f2be2cbed8de71076be7217afc964336bbac88f2488c0d` | 21120 |
+| Partition table | `7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820` | `7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820` | 3072 |
+
+Source artifacts were downloaded and measured on 2026-10-17:
+[push run 38847664721](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/38847664721),
+artifact **12024271866**; [PR run 38847669878](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/38847669878),
+artifact **12023717650**. See [raw measurement record](evidence/issue9-m0-measurements.json).
+
+The application descriptor contains `03:56:07` versus `03:57:09`, both dated
+`Oct 16 2026`. The two ELF files differ in exactly **two bytes**, both in
+`.flash.appdesc`; every other ELF section is identical. Their complete ELF
+SHA-256 values match the different ELF hashes embedded at application binary
+offsets 176..207. The application binary has 67 different bytes: two timestamp
+characters, 32 ELF-hash bytes, one image checksum byte and 32 appended image-hash
+bytes. This is measured timestamp nondeterminism and its derived hash/checksum
+propagation, not an inference from different final hashes alone. Bootloaders
+differ in 35 bytes (timestamp region and derived trailer); partition tables and
+generated sdkconfig are identical. Both configurations enable application and
+bootloader timestamps and disable reproducible builds.
+
+Absolute project and IDF paths are present in the original ELF debug data.
+They did **not** differ between these two M0 jobs, so they are a measured exposure,
+not the proven cause of that historical mismatch. Different-path CI below tests
+their removal by the SDK's reproducible build mode. Ordering, compiler randomness,
+locale, environment and generated metadata are additional possible sources;
+none is claimed as a measured historical cause without supporting differences.
+
+Reproduce the read-only historical measurement:
+
+```text
+python tools/analyze_m0_reproducibility.py m0-push.zip m0-pr.zip measurements.json
+```
+
+## Configuration proposal (independent review required)
+
+Exactly one sdkconfig.defaults value is added: `CONFIG_APP_REPRODUCIBLE_BUILD=y`.
+The existing optimization and logging defaults are retained. Under the pinned
+SDK this disables application and bootloader date/time metadata, selects macro
+path hiding and enables debug prefix maps for project, build, component, SDK and
+toolchain paths. Generated config and actual compiler commands are retained from
+both builds so the effect can be checked independently. Debuggers need the SDK's
+generated `build/gdbinit/prefix_map` substitutions to locate local sources.
+
+No additional Kconfig, task, scheduling, peripheral, network, pin, partition,
+security or hardware setting is proposed. This requested build configuration is
+within Issue #9's authorization; independent review and Owner merge approval
+remain required. No additional Owner-only configuration exception is identified.
+
+Alternatives considered: manually disabling only timestamps leaves debug-path
+dependence; fixing SOURCE_DATE_EPOCH masks time-dependent source use; post-build
+binary normalization changes the artifact being tested. None is used. SDK-native
+compiler prefix maps act during compilation; comparison hashes the exact produced
+bytes and never rewrites, strips, patches or excludes a binary.
+
+## Immutable toolchain
+
+The original Class B job already used the correct immutable pin; it is preserved:
+
+- OCI index: `espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c`.
+- linux/amd64 child: `sha256:f81b6e077e6af93c312181cd7d4e7936cfbafc5c7f77cbacba8fdd34994f218a`.
+- ESP-IDF v6.1: `fff9895c82d744c7237be8847347bdd1b07c6643`.
+- Compiler: `xtensa-esp-elf-gcc (crosstool-NG esp-15.2.0_20251204) 15.2.0`.
+
+`tools/verify_idf_image.py` verifies SHA-256 of exact registry response bytes for
+the pinned index and its linux/amd64 child. Local verification on 2026-10-17
+08:19 UTC passed; each reproducibility job repeats it and retains raw manifests.
+The runtime also enforces the SDK commit and compiler version in both snapshots.
+New workflow actions are pinned to upstream tag-verified commit SHAs. Existing
+firmware/reference workflow action tags are outside this change's pinning scope.
+
+## Procedure and failure behavior
+
+`Reproducible build` checks out the exact PR head (or pushed SHA). Host comparison
+tests must pass before the Class B job. `tools/build_twice.sh` clones that SHA into
+two new paths with different lengths/depths, without hardlinks, shared build
+directories, sdkconfig or ccache. Builds run sequentially at real wall-clock times,
+with no SOURCE_DATE_EPOCH. Clean-start records, full logs, generated sdkconfigs,
+compile commands, flasher metadata, GDB prefix maps and every recursively found
+`.bin` are retained separately. Build, target and size command failures are
+preserved as failures even when partial binaries exist.
+
+`tools/reproducible_build.py` requires the application, bootloader and partition
+table, every flasher input, successful build status, nonempty binaries, pinned
+toolchain, matching source SHA/config and zero warnings. It validates actual
+retained files against their inventories, then compares the union of all binary
+paths. Missing, unexpected or changed files fail. Both builds missing the same
+required file also fail. Symlinked output is rejected. The report contains names,
+sizes, both full hashes, first differing byte offsets, errors and environment
+metadata. The comparison command's exit status is the CI verdict; `always()`
+steps preserve diagnostics and raw artifacts even on failure. No continue-on-error
+or artifact filtering is used to obtain PASS.
+
+Local host tooling suite: **25 methods PASS** on the implementation tree. It tests
+identical bytes, changed content with equal size, changed size, each required file
+missing, unexpected nested files, optional produced bins, empty/missing outputs,
+incomplete status with matching outputs, malformed/missing manifests, evidence
+tampering, changed environment, identical workspaces, symlinks, CLI exit codes,
+snapshot failure/config/warning/flash checks and workflow head/digest wiring.
+The Linux CI suite is the final authoritative host result, tied to its source SHA.
+
+## Current two-build and regression evidence
+
+CI execution and final matrix are pending at this initial implementation commit.
+The next evidence update records run URLs, complete artifact matrix, generated
+configuration, compiler commands, zero-warning Class B and reference integrity.
+Each final CI artifact identifies its own exact source SHA; the final PR handoff
+records the latest head without creating a self-referential commit hash.
+
+## Acceptance traceability and limits
+
+| Requirement | Implementation / evidence location |
+|---|---|
+| All `.bin` bytes identical across clean paths | build-twice CI; comparison.json/.md, both inventories and raw bins |
+| Immutable IDF v6.1 toolchain | workflow digest; image-evidence; per-build metadata |
+| Mismatch, artifact-set and incomplete failures | tests/reproducibility/test_comparison.py; CI host tests |
+| Actionable diagnostics | JSON/Markdown report, original binaries/logs/config/commands |
+| Review sdkconfig and keep Class B zero-warning | single documented default; Class B warning gate and per-build snapshots |
+| Reference integrity | existing workflow, now checks exact PR head; before/after local 319-file verification |
+| Independent handoff | Draft PR checklist + hub-format append-only handoff, pending final CI |
+
+Residual risks: this verifies the current scaffold, target and linux/amd64 image,
+not arbitrary future components, hosts or SDK revisions. Future uses of date/time
+macros, absolute paths or generated/random data can regress determinism; the
+binary gate must then fail. Mutable hosted runner infrastructure, CPU/kernel,
+network availability and the existing workflows' action tags remain outside the
+container pin. Registry outage fails closed. Artifact retention is 90 days; copy
+evidence to approved controlled storage before expiry if needed. Generated
+metadata/logs can legitimately contain workspace paths and times; their raw
+content is retained for diagnosis and is not firmware binary equality evidence.
+IRAM baseline concerns belong to Issue #12. Combined compatibility with unmerged
+PRs #37/#38/#39 needs fresh integration CI; their green runs are not this PR's
+evidence. Independent configuration review and Owner merge approval are pending.
+
+No on-target, HIL, field, flash, signing, electrical or clinical test was run.
+Board revision: not applicable to this host-only ESP32-S3 scaffold build. Rollback:
+reviewed revert of this PR, with no device state or partition changes. No automatic
+Reviewer Agent workflow exists in product or hub; use the hub's independent PR
+review/handoff contract. The author cannot provide that independent approval.
+
+Primary SDK references at the exact pinned commit:
+[reproducible build implementation guide](https://github.com/espressif/esp-idf/blob/fff9895c82d744c7237be8847347bdd1b07c6643/docs/en/api-guides/reproducible-builds.rst),
+[root Kconfig](https://github.com/espressif/esp-idf/blob/fff9895c82d744c7237be8847347bdd1b07c6643/Kconfig),
+[app descriptor Kconfig](https://github.com/espressif/esp-idf/blob/fff9895c82d744c7237be8847347bdd1b07c6643/components/esp_app_format/Kconfig.projbuild).
