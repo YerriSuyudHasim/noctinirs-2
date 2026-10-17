@@ -9,6 +9,10 @@
 #include <stdint.h>
 #include <string.h>
 
+/* ESP-IDF headers test unset CONFIG_* and build macros with #if.
+   -Werror=undef stays on for this file; those headers are not our code. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wundef"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -16,6 +20,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#pragma GCC diagnostic pop
 
 static const char *TAG = "nn2_wifi";
 

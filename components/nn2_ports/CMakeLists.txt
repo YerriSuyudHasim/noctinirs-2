@@ -4,4 +4,4 @@ idf_component_register(
     REQUIRES nn2_core
 )
 
-target_compile_options(${COMPONENT_LIB} PRIVATE -std=c11 -Wall -Wextra -Werror)
+target_compile_options(${COMPONENT_LIB} PRIVATE -std=c11 -Wall -Wextra -Werror -Werror=undef)

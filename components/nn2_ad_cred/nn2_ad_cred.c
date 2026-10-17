@@ -2,9 +2,14 @@
 
 #include <string.h>
 
+/* ESP-IDF headers test unset CONFIG_* and build macros with #if.
+   -Werror=undef stays on for this file; those headers are not our code. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wundef"
 #include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#pragma GCC diagnostic pop
 
 static const char *TAG = "nn2_cred";
 

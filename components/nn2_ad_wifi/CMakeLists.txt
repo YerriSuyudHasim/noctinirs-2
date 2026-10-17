@@ -4,4 +4,4 @@ idf_component_register(
     REQUIRES nn2_core nn2_ports nn2_rtos esp_wifi esp_event esp_netif esp_timer freertos
 )
 
-target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror -Werror=undef)

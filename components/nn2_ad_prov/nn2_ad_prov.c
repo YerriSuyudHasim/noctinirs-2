@@ -6,8 +6,13 @@
 #include <sys/select.h>
 #include <unistd.h>
 
+/* ESP-IDF headers test unset CONFIG_* and build macros with #if.
+   -Werror=undef stays on for this file; those headers are not our code. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wundef"
 #include "esp_log.h"
 #include "esp_timer.h"
+#pragma GCC diagnostic pop
 
 static const char *TAG = "nn2_prov";
 
