@@ -160,7 +160,7 @@ Short examples:
 | Concurrency | Core is single-threaded and reentrant by construction (no globals with mutable state). Application state shared across contexts requires a documented synchronization strategy approved by RTOS Specialist. |
 | Const / types | Fixed-width integers; `const` for inputs; no implicit platform `int` size assumptions in wire formats. |
 
-### 3.5 Component layout and normative layer paths (NOT implemented)
+### 3.5 Component layout and normative layer paths
 
 ```text
 components/
@@ -180,6 +180,10 @@ test/host/                  # Unity host tests with fake ports (proposed)
 | `components/nn2_core` | Core |
 | `components/nn2_app` | Application |
 | `components/nn2_ports` | Ports |
+| `components/nn2_rtos` | Adapter (RTOS config header only; issue #35) |
+| `components/nn2_adapter_ads131` | Adapter (ADS131M04; issue #35) |
+
+Issue #35 is the first slice that adds these paths. Host tests in that slice do not use Unity (the M1.5 license decision is still open). This ADR stays Proposed.
 
 - Until `tools/layers.yaml` exists (to be introduced after this ADR is accepted), **this ADR is the source of truth for layer paths**. The Architect owns the layer map; CI consumes it and must not maintain an independent list.
 - Any `components/nn2_*` directory that is not in this table is a layer-map violation (**CI FAIL**), until the map is amended by a revision of this ADR (or, after acceptance, `tools/layers.yaml`). Adapter components (`nn2_adapters_<area>`) must be added to the map by name when introduced.
@@ -328,3 +332,4 @@ Acceptance requires an independent reviewer and Owner acknowledgment. Code confo
 |---|---|---|---|
 | 0 | 2026-10-16 | Initial draft (`c5667a46`). | Proposed |
 | 1 | 2026-10-16 | Revision following the PR #6 architecture review (head `690deff`) and the Orchestrator decision in the team room: normative layer paths (3.5); NOT APPLICABLE is not evidence (4); `-std=c11` for inner layers; explicit FreeRTOS/BLE/NVS include patterns and cross-layer edges (3.3); `<stdatomic.h>` restated as review-only; `REQUIRES` allow-list; Class U and `REQUIRES` audit acceptance criteria; Class H for on-target claims (3.7); OWNER-M0-A1-001 r1.1 cited. | **Proposed** (unchanged) |
+| 2 | 2026-10-17 | Map addition required by section 3.5 when an adapter is introduced (issue #35). Adds `components/nn2_rtos` and `components/nn2_adapter_ads131`, and drops the "not implemented" label on this section. Status stays Proposed. | **Proposed** (unchanged) |

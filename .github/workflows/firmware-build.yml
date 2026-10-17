@@ -6,7 +6,8 @@ name: Firmware build
 #   esp-idf-build          -> Class B (build) only
 # A successful build is NOT hardware validation, NOT unit/integration evidence,
 # and says nothing about timing, electrical behaviour, safety, or clinical validity.
-# No Class U job exists yet: no tests are present in the repository.
+# class-u-host-tests -> Class U (host/unit) only. Not hardware validation.
+# class-s-pin-guard  -> Class S pin and eFuse-write scan for issue #35.
 
 on:
   push:
@@ -38,14 +39,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Normative inner-layer paths, ADR-0001 section 3.5 @ 880903832c8d8c6527ad2c42ec095f9e5a0d1560
-          # (docs/adr/0001-clean-architecture-boundaries.md). Change only together with an ADR revision.
+          # Inner-layer paths, ADR-0001 section 3.5.
+          # Adapter names were added with issue #35. Change only together with an ADR revision.
           normative=(components/nn2_core components/nn2_app components/nn2_ports)
+          adapters=(components/nn2_rtos components/nn2_adapter_ads131)
           unknown=()
           if [ -d components ]; then
             while IFS= read -r d; do
               known=false
-              for n in "${normative[@]}"; do [ "$d" = "$n" ] && known=true; done
+              for n in "${normative[@]}" "${adapters[@]}"; do [ "$d" = "$n" ] && known=true; done
               [ "$known" = true ] || unknown+=("$d")
             done < <(find components -mindepth 1 -maxdepth 1 -type d -name 'nn2_*' | sort)
           fi
@@ -111,6 +113,36 @@ jobs:
         shell: bash
         run: bash tools/class-s-gate-selftest.sh
 
+  class-u-host-tests:
+    name: class-u-host-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Run host unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash test/host/run.sh | tee host-tests.txt
+          echo "### Class U host tests: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat host-tests.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  pin-guard:
+    name: class-s-pin-guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Run ADS131 pin guards
+        shell: bash
+        run: bash tools/check-pin-guards.sh .
+
   esp-idf-build:
     name: class-b-esp-idf-build
     runs-on: ubuntu-latest
@@ -161,6 +193,7 @@ jobs:
           idf.py set-target esp32s3 2>&1 | tee evidence/set-target.log
           idf.py build 2>&1 | tee evidence/build.log
           idf.py size 2>&1 | tee evidence/size.txt
+          idf.py size-components 2>&1 | tee evidence/size-components.txt
 
       - name: Verify generated target
         run: |
@@ -186,7 +219,7 @@ jobs:
           {
             echo "## Class B build evidence (build only, not hardware validation)"
             echo "Source SHA: $SOURCE_SHA (event: $GITHUB_EVENT_NAME)"
-            for f in toolchain.txt target.txt SHA256SUMS size.txt warning-count.txt; do
+            for f in toolchain.txt target.txt SHA256SUMS size.txt size-components.txt warning-count.txt; do
               [ -f "evidence/$f" ] && { echo "### $f"; echo '```'; cat "evidence/$f"; echo '```'; }
             done
             if [ -f evidence/build.log ]; then
