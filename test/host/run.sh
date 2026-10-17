@@ -49,3 +49,68 @@ gcc -o "$OUT/nn2_host_tests" \
   "$OUT/test_cred.o" "$OUT/test_backoff.o" "$OUT/test_link.o" \
   "$OUT/test_rtos.o" "$OUT/test_runner.o" "$OUT/unity.o"
 "$OUT/nn2_host_tests"
+
+# Target-only guards must fail closed. Host Class U above leaves ESP_PLATFORM unset.
+expect_fail() {
+  local name="$1"
+  local needle="$2"
+  shift 2
+  set +e
+  "$@" >"$OUT/${name}.log" 2>&1
+  local rc=$?
+  set -e
+  if [ "$rc" -eq 0 ]; then
+    fail "$name compiled, expected failure"
+  fi
+  if ! grep -F "$needle" "$OUT/${name}.log" >/dev/null; then
+    cat "$OUT/${name}.log" >&2
+    fail "$name did not report: $needle"
+  fi
+  echo "PASS: $name"
+}
+
+EMPTY_SDK="$OUT/empty-sdk"
+mkdir -p "$EMPTY_SDK"
+: >"$EMPTY_SDK/sdkconfig.h"
+expect_fail rtos_missing_sdkconfig "sdkconfig not seen" \
+  gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
+    -I"$EMPTY_SDK" \
+    -I"$ROOT/components/nn2_rtos/include" \
+    -c "$ROOT/components/nn2_rtos/nn2_rtos_anchor.c" \
+    -o "$OUT/rtos_missing_sdkconfig.o"
+
+cat >"$OUT/limits_target.c" <<'EOF'
+#include "nn2_wifi_limits.h"
+EOF
+expect_fail limits_missing_macros "NN2_WIFI_BACKOFF_FIRST_MS is required on target" \
+  gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
+    -I"$ROOT/components/nn2_core/include" \
+    -c "$OUT/limits_target.c" \
+    -o "$OUT/limits_missing_macros.o"
+
+GOOD_SDK="$OUT/good-sdk"
+mkdir -p "$GOOD_SDK"
+cat >"$GOOD_SDK/sdkconfig.h" <<'EOF'
+#define CONFIG_IDF_TARGET "esp32s3"
+#define CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0 1
+#define CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0 1
+#define CONFIG_LWIP_TCPIP_TASK_AFFINITY 0
+#define CONFIG_ESP_TIMER_TASK_AFFINITY_CPU0 1
+#define CONFIG_ESP_TIMER_TASK_AFFINITY 0
+EOF
+gcc -std=c11 -Wall -Wextra -Werror -Werror=undef -DESP_PLATFORM \
+  -I"$GOOD_SDK" \
+  -I"$ROOT/components/nn2_rtos/include" \
+  -c "$ROOT/components/nn2_rtos/nn2_rtos_anchor.c" \
+  -o "$OUT/rtos_good_sdkconfig.o"
+echo "PASS: rtos_good_sdkconfig"
+
+gcc -std=c11 -Wall -Wextra -Werror -Werror=undef -DESP_PLATFORM \
+  -DNN2_WIFI_BACKOFF_FIRST_MS=500 \
+  -DNN2_WIFI_BACKOFF_MAX_MS=8000 \
+  -DNN2_WIFI_BACKOFF_FACTOR=2 \
+  -DNN2_WIFI_CONNECT_GUARD_MS=15000 \
+  -I"$ROOT/components/nn2_core/include" \
+  -c "$OUT/limits_target.c" \
+  -o "$OUT/limits_injected.o"
+echo "PASS: limits_injected"

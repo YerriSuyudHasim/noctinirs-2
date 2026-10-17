@@ -51,14 +51,15 @@ _Static_assert(NN2_WIFI_EVT_QUEUE_LEN >= 1u, "event queue depth");
 _Static_assert(NN2_RTOS_STACK_NET_BYTES == 3072u, "nn2_net stack is 3072 bytes");
 _Static_assert(NN2_RTOS_STACK_PROV_BYTES == 2560u, "nn2_prov stack is 2560 bytes");
 
-/* Pull Kconfig macros before the #error guards. Include order of other
-   headers must not hide CONFIG_IDF_TARGET or the affinity symbols.
-   Host Class U builds have no sdkconfig.h, so the include is skipped
-   and the guards stay inactive. */
-#if defined(__has_include)
-#  if __has_include("sdkconfig.h")
-#    include "sdkconfig.h"
-#  endif
+/* ESP-IDF defines ESP_PLATFORM on the target command line. Include
+   sdkconfig.h before the affinity guards so those checks cannot skip
+   when an earlier header did not pull Kconfig in. Host Class U builds
+   leave ESP_PLATFORM unset and do not include sdkconfig.h. */
+#ifdef ESP_PLATFORM
+#include "sdkconfig.h"
+#endif
+#if defined(ESP_PLATFORM) && !defined(CONFIG_IDF_TARGET)
+#error "sdkconfig not seen"
 #endif
 #if defined(CONFIG_IDF_TARGET)
 #if !defined(CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0)
@@ -70,10 +71,14 @@ _Static_assert(NN2_RTOS_STACK_PROV_BYTES == 2560u, "nn2_prov stack is 2560 bytes
 #if !defined(CONFIG_ESP_TIMER_TASK_AFFINITY_CPU0)
 #error CONFIG_ESP_TIMER_TASK_AFFINITY_CPU0 is required
 #endif
-#if (CONFIG_LWIP_TCPIP_TASK_AFFINITY != 0)
+#if !defined(CONFIG_LWIP_TCPIP_TASK_AFFINITY)
+#error CONFIG_LWIP_TCPIP_TASK_AFFINITY is required
+#elif (CONFIG_LWIP_TCPIP_TASK_AFFINITY != 0)
 #error lwIP TCP/IP task must be pinned to core 0
 #endif
-#if (CONFIG_ESP_TIMER_TASK_AFFINITY != 0)
+#if !defined(CONFIG_ESP_TIMER_TASK_AFFINITY)
+#error CONFIG_ESP_TIMER_TASK_AFFINITY is required
+#elif (CONFIG_ESP_TIMER_TASK_AFFINITY != 0)
 #error esp_timer task must be pinned to core 0
 #endif
 #endif
