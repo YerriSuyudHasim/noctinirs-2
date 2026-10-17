@@ -17,7 +17,15 @@ done
 mk empty;   rm -rf "$T/empty/components/nn2_app"/*;  expect empty-layer-folder 1 "$T/empty"
 mk missing; rm -rf "$T/missing/components/nn2_ports"; expect missing-layer-folder 1 "$T/missing"
 mk scanerr; chmod 000 "$T/scanerr/components/nn2_core/src"
-if [ "$(id -u)" -ne 0 ]; then expect scanner-error 1 "$T/scanerr"; else echo "skip scanner-error (root)"; fi
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) echo "skip scanner-error (Windows POSIX permissions are not enforced)" ;;
+  *) if [ "$(id -u)" -ne 0 ]; then expect scanner-error 1 "$T/scanerr"; else echo "skip scanner-error (root)"; fi ;;
+esac
 chmod 755 "$T/scanerr/components/nn2_core/src"
+# Deterministic scanner failure on every platform, including native Windows.
+mkdir -p "$T/mock-bin"
+printf '#!/usr/bin/env bash\nexit 2\n' > "$T/mock-bin/grep"
+chmod +x "$T/mock-bin/grep"
+PATH="$T/mock-bin:$PATH" expect scanner-error-injected 1 "$T/valid"
 rm -rf "$T"
 echo "selftest failures: $fails"; [ "$fails" -eq 0 ]

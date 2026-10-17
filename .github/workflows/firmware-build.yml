@@ -6,7 +6,7 @@ name: Firmware build
 #   esp-idf-build          -> Class B (build) only
 # A successful build is NOT hardware validation, NOT unit/integration evidence,
 # and says nothing about timing, electrical behaviour, safety, or clinical validity.
-# No Class U job exists yet: no tests are present in the repository.
+# Contract fixtures verify tooling; no product Class U suite exists yet.
 
 on:
   push:
@@ -38,36 +38,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Normative inner-layer paths, ADR-0001 section 3.5 @ 880903832c8d8c6527ad2c42ec095f9e5a0d1560
-          # (docs/adr/0001-clean-architecture-boundaries.md). Change only together with an ADR revision.
-          normative=(components/nn2_core components/nn2_app components/nn2_ports)
-          unknown=()
-          if [ -d components ]; then
-            while IFS= read -r d; do
-              known=false
-              for n in "${normative[@]}"; do [ "$d" = "$n" ] && known=true; done
-              [ "$known" = true ] || unknown+=("$d")
-            done < <(find components -mindepth 1 -maxdepth 1 -type d -name 'nn2_*' | sort)
-          fi
-          if [ "${#unknown[@]}" -gt 0 ]; then
-            echo "::error title=Layer map violation::components/nn2_* not in ADR-0001 normative map: ${unknown[*]}"
-            echo "### Layer map violation (FAIL): ${unknown[*]} not in ADR-0001 section 3.5 map" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          dirs=()
-          for d in "${normative[@]}"; do
-            [ -d "$d" ] && dirs+=("$d")
-          done
-          if [ "${#dirs[@]}" -eq 0 ]; then
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "dirs=" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Class S dependency gate::NOT APPLICABLE (not evidence): components/nn2_core, nn2_app, nn2_ports absent; gate job skipped"
+          python3 tools/layer_contract.py detect > layer-state.txt
+          cat layer-state.txt >> "$GITHUB_OUTPUT"
+          cat layer-state.txt
+          if grep -qx 'present=false' layer-state.txt; then
             echo "### Class S: NOT APPLICABLE (not evidence)" >> "$GITHUB_STEP_SUMMARY"
-            echo "No layered components (components/nn2_core, components/nn2_app, components/nn2_ports). The gate job is skipped; no conformance is claimed." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
-            echo "dirs=${dirs[*]}" >> "$GITHUB_OUTPUT"
-            echo "Layered components found: ${dirs[*]}"
           fi
 
   static-dependency-gate:
@@ -110,6 +85,33 @@ jobs:
       - name: Run gate fixtures
         shell: bash
         run: bash tools/class-s-gate-selftest.sh
+
+  architecture-contract:
+    name: architecture-contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Manifest, workflow and C11 contract regression tests
+        run: |
+          set -euo pipefail
+          {
+            echo "SOURCE_SHA=$SOURCE_SHA"
+            echo "UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            python3 --version
+            cc --version | head -n1
+            cmake --version | head -n1
+            ninja --version
+          } | tee architecture-tests.txt
+          python3 -m unittest discover -s tests/architecture -v 2>&1 | tee -a architecture-tests.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: architecture-contract-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          if-no-files-found: error
+          path: architecture-tests.txt
 
   esp-idf-build:
     name: class-b-esp-idf-build
@@ -161,6 +163,13 @@ jobs:
           idf.py set-target esp32s3 2>&1 | tee evidence/set-target.log
           idf.py build 2>&1 | tee evidence/build.log
           idf.py size 2>&1 | tee evidence/size.txt
+
+      - name: Verify C11 using the pinned target compiler
+        run: |
+          set -euo pipefail
+          . "$IDF_PATH/export.sh" > /dev/null
+          NN2_TEST_CC=xtensa-esp32s3-elf-gcc python3 -m unittest discover -s tests/architecture -p 'test_c11.py' -v 2>&1 | tee evidence/c11-target.txt
+          python3 tools/verify_c11_idf.py 2>&1 | tee evidence/c11-idf-fixture.txt
 
       - name: Verify generated target
         run: |

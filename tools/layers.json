@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "layers": [
+    {"name": "core", "path": "components/nn2_core"},
+    {"name": "ports", "path": "components/nn2_ports"},
+    {"name": "app", "path": "components/nn2_app"}
+  ]
+}

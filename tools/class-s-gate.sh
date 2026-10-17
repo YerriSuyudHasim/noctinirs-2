@@ -5,7 +5,12 @@
 # grep semantics: rc=0 match -> FAIL; rc=1 no match -> PASS; rc>=2 scanner error -> FAIL.
 set -uo pipefail
 ROOT="${1:-.}"
-layers=(components/nn2_core components/nn2_ports components/nn2_app)
+# Only path discovery changes here; Issue #10 scanner behavior stays on its PR.
+TOOLS_DIR="$(cd "$(dirname "$0")" && pwd)"
+PYTHON="${PYTHON:-python3}"
+layer_text="$("$PYTHON" "$TOOLS_DIR/layer_contract.py" paths)" || exit 1
+[ -n "$layer_text" ] || { echo "FAIL: empty layer manifest"; exit 1; }
+mapfile -t layers <<< "$layer_text"
 present=0
 for l in "${layers[@]}"; do [ -e "$ROOT/$l" ] && present=1; done
 if [ "$present" -eq 0 ]; then
