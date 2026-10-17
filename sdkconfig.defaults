@@ -13,6 +13,12 @@ CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0=y
 # CONFIG_ESP_WIFI_NVS_ENABLED is not set
 # CONFIG_ESP_WIFI_SOFTAP_SUPPORT is not set
 
+# lwIP TCP/IP and esp_timer tasks stay on core 0 with the station task.
+# sys_evt has no affinity Kconfig in ESP-IDF v6.1. esp_event_loop_create_default
+# sets task_core_id to 0.
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+CONFIG_ESP_TIMER_TASK_AFFINITY_CPU0=y
+
 # First reconnect after disconnect is immediate. This is the next delay.
 CONFIG_NN2_WIFI_BACKOFF_FIRST_MS=500
 CONFIG_NN2_WIFI_BACKOFF_MAX_MS=8000

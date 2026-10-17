@@ -193,6 +193,31 @@ jobs:
             echo "FAIL: CONFIG_IDF_TARGET is not \"esp32s3\""
             exit 1
           fi
+          fail=0
+          for required in \
+            'CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0=y' \
+            'CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y' \
+            'CONFIG_ESP_TIMER_TASK_AFFINITY_CPU0=y' \
+            'CONFIG_LWIP_TCPIP_TASK_AFFINITY=0x0' \
+            'CONFIG_ESP_TIMER_TASK_AFFINITY=0x0'
+          do
+            if grep -qxF "$required" sdkconfig; then
+              echo "PASS: $required" | tee -a evidence/target.txt
+            else
+              echo "FAIL: missing $required" | tee -a evidence/target.txt
+              fail=1
+            fi
+          done
+          evt_src="${IDF_PATH}/components/esp_event/default_event_loop.c"
+          if grep -q 'task_core_id = 0' "$evt_src"; then
+            echo "PASS: sys_evt task_core_id = 0 in ${evt_src}" | tee -a evidence/target.txt
+          else
+            echo "FAIL: sys_evt is not pinned to core 0 in ${evt_src}" | tee -a evidence/target.txt
+            fail=1
+          fi
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Hash outputs
         run: |
