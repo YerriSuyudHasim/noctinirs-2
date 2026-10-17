@@ -104,12 +104,14 @@ metadata. The comparison command's exit status is the CI verdict; `always()`
 steps preserve diagnostics and raw artifacts even on failure. No continue-on-error
 or artifact filtering is used to obtain PASS.
 
-Local host tooling suite: **25 methods PASS** on the implementation tree. It tests
+Local host tooling suite: **27 methods PASS** on the implementation tree. It tests
 identical bytes, changed content with equal size, changed size, each required file
 missing, unexpected nested files, optional produced bins, empty/missing outputs,
 incomplete status with matching outputs, malformed/missing manifests, evidence
 tampering, changed environment, identical workspaces, symlinks, CLI exit codes,
 snapshot failure/config/warning/flash checks and workflow head/digest wiring.
+An actual shell-runner fixture injects build exit 7 into both clean clones and
+verifies that a successful size command cannot mask it; a spy records both exits.
 The Linux CI suite is the final authoritative host result, tied to its source SHA.
 
 ## Current two-build and regression evidence
@@ -119,6 +121,13 @@ The next evidence update records run URLs, complete artifact matrix, generated
 configuration, compiler commands, zero-warning Class B and reference integrity.
 Each final CI artifact identifies its own exact source SHA; the final PR handoff
 records the latest head without creating a self-referential commit hash.
+
+Initial CI at `eda7adc112b010aef5d2fde3b5bbc404df5e1104` stopped before any
+build: Git rejected the container checkout ownership on the first repository
+operation. [Failed run with preserved diagnostics](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39017024779).
+The runner now supplies a scoped safe.directory for that first operation, then
+registers only the selected checkout path; no global wildcard or failed check is
+ignored. This is an orchestration failure, not a binary nondeterminism finding.
 
 ## Acceptance traceability and limits
 

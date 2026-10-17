@@ -1,6 +1,5 @@
 """Host tooling tests; these do not constitute firmware/hardware unit evidence."""
 import contextlib
-import copy
 import importlib.util
 import io
 import json
@@ -139,6 +138,12 @@ class ComparisonTests(unittest.TestCase):
     def test_malformed_manifest_fails_with_report(self):
         (self.b / "manifest.json").write_text("not json")
         self.compare(False)
+
+    def test_wrong_manifest_or_metadata_type_still_produces_failure_report(self):
+        for value in ([], {"schema": 1, "complete": True, "metadata": []}):
+            with self.subTest(value=value):
+                repro.write_json(self.b / "manifest.json", value)
+                self.compare(False)
 
     def test_post_capture_content_change_is_detected(self):
         (self.b / "bins/noctinirs2.bin").write_bytes(b"changed after capture")

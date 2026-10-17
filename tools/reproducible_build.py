@@ -164,7 +164,10 @@ def load_build(root):
     manifest = {}
     artifacts = {}
     try:
-        manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+        parsed = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+        if not isinstance(parsed, dict):
+            raise ValueError("manifest must be a JSON object")
+        manifest = parsed
         if manifest.get("schema") != 1 or manifest.get("complete") is not True:
             errors.append("incomplete/invalid build manifest")
         errors.extend(manifest.get("errors", []))
@@ -197,7 +200,8 @@ def compare(left, right, output):
     a, aa, ae = load_build(left)
     b, ba, be = load_build(right)
     errors = [f"A: {e}" for e in ae] + [f"B: {e}" for e in be]
-    am, bm = a.get("metadata", {}), b.get("metadata", {})
+    am = a.get("metadata") if isinstance(a.get("metadata"), dict) else {}
+    bm = b.get("metadata") if isinstance(b.get("metadata"), dict) else {}
     for key in ("source_sha", "image", "idf_commit", "compiler", "idf_version", "cmake", "ninja", "python", "sdkconfig_sha256"):
         if not am.get(key) or am.get(key) != bm.get(key):
             errors.append(f"environment mismatch or missing value: {key}: A={am.get(key)!r}, B={bm.get(key)!r}")

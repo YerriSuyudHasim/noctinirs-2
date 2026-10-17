@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Run in the pinned IDF image. No shared build, sdkconfig, object, or ccache state.
 set -euo pipefail
-source_root="$(git rev-parse --show-toplevel)"
+# Container checkout ownership can differ from the executing UID. Trust only the
+# explicitly selected working directory before the first repository operation.
+source_root="$(git -c safe.directory="$PWD" rev-parse --show-toplevel)"
 sha="${SOURCE_SHA:?SOURCE_SHA must be the full source commit}"
 evidence="${1:?usage: bash tools/build_twice.sh ABSOLUTE_EVIDENCE_DIRECTORY}"
 [[ "$evidence" = /* ]] || { echo 'Evidence directory must be absolute'; exit 1; }
@@ -9,9 +11,9 @@ evidence="${1:?usage: bash tools/build_twice.sh ABSOLUTE_EVIDENCE_DIRECTORY}"
 mkdir -p "$evidence"
 root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nn2-issue9.XXXXXXXX")"
 printf '%s\n' "$root" > "$evidence/workspace-root.txt"
-export CCACHE_DISABLE=1 IDF_CCACHE_ENABLE=0 LC_ALL=C.UTF-8 TZ=UTC
+export CCACHE_DISABLE=1 LC_ALL=C.UTF-8 TZ=UTC
 # Exercise real wall-clock variation; do not mask timestamp bugs with an epoch.
-unset SOURCE_DATE_EPOCH CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
+unset IDF_CCACHE_ENABLE SOURCE_DATE_EPOCH CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
 . "$IDF_PATH/export.sh" > /dev/null
 git config --global --add safe.directory "$source_root"
 for label in A B; do
