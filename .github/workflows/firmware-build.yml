@@ -110,6 +110,9 @@ jobs:
       - name: Run gate fixtures
         shell: bash
         run: bash tools/class-s-gate-selftest.sh
+      - name: Run Issue 10 ADR regression fixtures
+        shell: bash
+        run: python3 -m unittest discover -s tests/gate-fixtures -p "test_*.py" -v
 
   esp-idf-build:
     name: class-b-esp-idf-build

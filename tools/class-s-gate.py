@@ -7,7 +7,7 @@ import sys
 LAYERS = {"nn2_core": set(), "nn2_ports": {"nn2_core"}, "nn2_app": {"nn2_core", "nn2_ports"}}
 SOURCE_EXT = {".c", ".h", ".cpp", ".hpp"}
 INCLUDE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]', re.M)
-PLATFORM = re.compile(r'^(?:esp_.*|freertos/.*|driver/.*|lwip/.*|hal/.*|soc/.*|rom/.*|xtensa/.*|esp_private/.*|sdkconfig\.h|nimble/.*|host/ble_.*|bt_.*|nvs(?:_.*)?\.h|FreeRTOS\.h|task\.h|queue\.h|semphr\.h|timers\.h|event_groups\.h|nn2_adapters?_.*)$')
+PLATFORM = re.compile(r'^(?:esp_.*|freertos/.*|driver/.*|lwip/.*|hal/.*|soc/.*|rom/.*|esp32s3/rom/.*|xtensa/.*|esp_private/.*|sdkconfig\.h|nimble/.*|host/ble_.*|bt_.*|nvs(?:_.*)?\.h|FreeRTOS\.h|task\.h|queue\.h|semphr\.h|timers\.h|event_groups\.h|nn2_adapters?_.*)$')
 CROSS = {"nn2_core": ("nn2_app_", "nn2_port_"), "nn2_ports": ("nn2_app_",), "nn2_app": ()}
 
 

@@ -6,7 +6,10 @@ T="$(mktemp -d)"; fails=0
 mk() { d="$T/$1"; mkdir -p "$d/components/nn2_core/src" "$d/components/nn2_ports/include" "$d/components/nn2_app/src"
   echo '#include <stdint.h>' > "$d/components/nn2_core/src/a.c"
   echo '#include "nn2_core_types.h"' > "$d/components/nn2_ports/include/p.h"
-  echo '#include "nn2_port_led.h"' > "$d/components/nn2_app/src/b.c"; }
+  echo '#include "nn2_port_led.h"' > "$d/components/nn2_app/src/b.c";
+  echo 'idf_component_register(SRCS "src/a.c")' > "$d/components/nn2_core/CMakeLists.txt";
+  echo 'idf_component_register(INCLUDE_DIRS "include" REQUIRES nn2_core)' > "$d/components/nn2_ports/CMakeLists.txt";
+  echo 'idf_component_register(SRCS "src/b.c" REQUIRES nn2_core nn2_ports)' > "$d/components/nn2_app/CMakeLists.txt"; }
 expect() { name="$1"; want="$2"; shift 2; out="$(bash "$GATE" "$@" 2>&1)"; got=$?
   if [ "$got" -eq "$want" ]; then echo "ok   $name (exit $got)"; else echo "FAIL $name: want $want got $got: $out"; fails=$((fails+1)); fi; }
 mk valid;            expect valid-header-only-ports 0 "$T/valid"
