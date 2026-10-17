@@ -51,7 +51,15 @@ _Static_assert(NN2_WIFI_EVT_QUEUE_LEN >= 1u, "event queue depth");
 _Static_assert(NN2_RTOS_STACK_NET_BYTES == 3072u, "nn2_net stack is 3072 bytes");
 _Static_assert(NN2_RTOS_STACK_PROV_BYTES == 2560u, "nn2_prov stack is 2560 bytes");
 
-/* Target builds inject sdkconfig.h. Host tests leave these unset. */
+/* Pull Kconfig macros before the #error guards. Include order of other
+   headers must not hide CONFIG_IDF_TARGET or the affinity symbols.
+   Host Class U builds have no sdkconfig.h, so the include is skipped
+   and the guards stay inactive. */
+#if defined(__has_include)
+#  if __has_include("sdkconfig.h")
+#    include "sdkconfig.h"
+#  endif
+#endif
 #if defined(CONFIG_IDF_TARGET)
 #if !defined(CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0)
 #error CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0 is required
