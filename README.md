@@ -35,17 +35,7 @@ noctinirs-2/
 └── VERSION
 ```
 
-The root build definition, `components/`, and `main/` form the active firmware. Files under `reference/` are evidence and design input, not build inputs. Also add `docs/m2-wifi-provisioning.md` and `docs/adr/` to the layout tree? The docs folder listing is incomplete but was already incomplete (adr exists). I'll add a line for the provisioning doc under docs for accuracy.
-
-```
-├── docs/
-│   ├── adr/
-│   ├── m2-wifi-provisioning.md
-│   ├── ai-engineering-hub.md
-│   └── ai-engineering-hub-registration-draft.yaml
-```
-
-Let me update that.
+The root build definition, `components/`, and `main/` form the active firmware. Files under `reference/` are evidence and design input, not build inputs.
 
 ## Toolchain baseline
 
