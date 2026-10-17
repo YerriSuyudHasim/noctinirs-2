@@ -294,9 +294,11 @@ Baseline map hash is `08fbdf0a0066429373058a919e6232517a17da91410348667155d9dd8f
 Baseline measurement UTC: `2026-10-17T09:14:03.704911+00:00`.
 
 `docs/evidence/issue12-baseline.json` is copied from that verified **CI baseline**
-record, retaining its original measurement SHA/time/run. Summary, component and
-file JSON values match the local main build exactly despite the host size-tool
-patch version difference. Local-to-CI comparisons are nevertheless marked
+record, retaining its original measurement SHA/time/run. Summary JSON matches
+the local build exactly. Component and file entries have equal values when
+indexed by archive/object basename; absolute toolchain archive paths differ
+between Windows and Linux (6 component keys and 42 file keys differ). This is
+not raw report identity. Local-to-CI comparisons are nevertheless marked
 `NOT_COMPARABLE` by the conservative environment checks. CI compares two builds
 in the same environment. Final stricter source/input validation and the added
 empty-image test are checked again on the **final head**; the append-only
