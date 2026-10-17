@@ -1,3 +1,18 @@
+/* These values come from this component's target_compile_definitions.
+   Checked before nn2_wifi_limits.h, which supplies host defaults. */
+#if !defined(NN2_WIFI_BACKOFF_FIRST_MS)
+#error "NN2_WIFI_BACKOFF_FIRST_MS is required"
+#endif
+#if !defined(NN2_WIFI_BACKOFF_MAX_MS)
+#error "NN2_WIFI_BACKOFF_MAX_MS is required"
+#endif
+#if !defined(NN2_WIFI_BACKOFF_FACTOR)
+#error "NN2_WIFI_BACKOFF_FACTOR is required"
+#endif
+#if !defined(NN2_WIFI_CONNECT_GUARD_MS)
+#error "NN2_WIFI_CONNECT_GUARD_MS is required"
+#endif
+
 #include "nn2_ad_wifi.h"
 
 #include "nn2_rtos_config.h"

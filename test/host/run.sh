@@ -81,12 +81,21 @@ expect_fail rtos_missing_sdkconfig "sdkconfig not seen" \
 
 cat >"$OUT/limits_target.c" <<'EOF'
 #include "nn2_wifi_limits.h"
+int nn2_limits_host_anchor;
 EOF
-expect_fail limits_missing_macros "NN2_WIFI_BACKOFF_FIRST_MS is required on target" \
-  gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
-    -I"$ROOT/components/nn2_core/include" \
-    -c "$OUT/limits_target.c" \
-    -o "$OUT/limits_missing_macros.o"
+gcc -std=c11 -Wall -Wextra -Werror -Werror=undef -DESP_PLATFORM \
+  -I"$ROOT/components/nn2_core/include" \
+  -c "$OUT/limits_target.c" \
+  -o "$OUT/limits_core_defaults.o"
+echo "PASS: limits_core_defaults"
+
+awk 'BEGIN{p=1} /^#include/{exit} {print}' \
+  "$ROOT/components/nn2_ad_wifi/nn2_ad_wifi.c" >"$OUT/ad_wifi_guard.c"
+echo "int nn2_ad_wifi_guard_anchor;" >>"$OUT/ad_wifi_guard.c"
+expect_fail ad_wifi_missing_macros "NN2_WIFI_BACKOFF_FIRST_MS is required" \
+  gcc -std=c11 -Wall -Wextra -Werror -Werror=undef \
+    -c "$OUT/ad_wifi_guard.c" \
+    -o "$OUT/ad_wifi_missing_macros.o"
 
 GOOD_SDK="$OUT/good-sdk"
 mkdir -p "$GOOD_SDK"
@@ -105,12 +114,11 @@ gcc -std=c11 -Wall -Wextra -Werror -Werror=undef -DESP_PLATFORM \
   -o "$OUT/rtos_good_sdkconfig.o"
 echo "PASS: rtos_good_sdkconfig"
 
-gcc -std=c11 -Wall -Wextra -Werror -Werror=undef -DESP_PLATFORM \
+gcc -std=c11 -Wall -Wextra -Werror -Werror=undef \
   -DNN2_WIFI_BACKOFF_FIRST_MS=500 \
   -DNN2_WIFI_BACKOFF_MAX_MS=8000 \
   -DNN2_WIFI_BACKOFF_FACTOR=2 \
   -DNN2_WIFI_CONNECT_GUARD_MS=15000 \
-  -I"$ROOT/components/nn2_core/include" \
-  -c "$OUT/limits_target.c" \
-  -o "$OUT/limits_injected.o"
-echo "PASS: limits_injected"
+  -c "$OUT/ad_wifi_guard.c" \
+  -o "$OUT/ad_wifi_injected.o"
+echo "PASS: ad_wifi_injected"
