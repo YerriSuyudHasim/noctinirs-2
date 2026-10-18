@@ -117,6 +117,7 @@ jobs:
         if: always()
         with:
           name: architecture-contract-${{ github.event.pull_request.head.sha || github.sha }}
+          include-hidden-files: true # Keep Ninja metadata covered by the checksum inventory.
           retention-days: 90
           if-no-files-found: error
           path: |
@@ -219,6 +220,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: class-b-build-${{ github.event.pull_request.head.sha || github.sha }}
+          include-hidden-files: true # Evidence checksum inventory includes Ninja metadata.
           retention-days: 90
           if-no-files-found: error
           path: |
