@@ -190,7 +190,13 @@ class N6Tests(unittest.TestCase):
 
     def test_q11_residual_risks_remain_explicit(self):
         text = (ROOT / 'docs/adr/0001-clean-architecture-boundaries.md').read_text()
-        for token in ('**Proposed**', 'G3', 'G4', 'G5', '__has_include', '-std=c11', '<stdatomic.h>'):
+        for token in ('| Status | **Accepted** (bounded static architecture framework;',
+                      'G3', 'G4', 'G5', '__has_include', '-std=c11', '<stdatomic.h>',
+                      '**R1/R2 retain only their', '**CLOSED**',
+                      'NOT APPLICABLE (not evidence)', 'class-u-host-tests',
+                      '**15368**', '**2026-10-25T01:00:00Z**',
+                      'isolated C11 host builds', 'Each atomic use needs its own RTOS/target review',
+                      'No issue is closed by this record'):
             self.assertIn(token, text)
         # Characterize the known macro blind spot; this is no conformance claim.
         (self.root / 'components/nn2_core/include/fixture.h').write_text(
