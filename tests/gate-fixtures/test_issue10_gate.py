@@ -361,7 +361,10 @@ class WorkflowDetectionFixtures(unittest.TestCase):
     def detect(self, expected, present=None):
         import os
         env = dict(os.environ, GITHUB_OUTPUT='.detect-output', GITHUB_STEP_SUMMARY='.detect-summary')
-        p = subprocess.run(['bash', '-c', self.script], cwd=self.root, env=env,
+        script = self.script
+        if os.name == 'nt':
+            script = 'python3() { "' + pathlib.Path(sys.executable).as_posix() + '" "$@"; };\n' + script
+        p = subprocess.run(['bash', '-c', script], cwd=self.root, env=env,
                            capture_output=True, text=True)
         self.assertEqual(p.returncode, expected, p.stdout + p.stderr)
         if present is not None:

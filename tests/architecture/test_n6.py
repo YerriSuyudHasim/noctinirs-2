@@ -141,6 +141,22 @@ class N6Tests(unittest.TestCase):
                 self.policy = load_contract(); self.policy[field] = value
                 self.write_policy(); self.gate(1)
 
+    def test_extension_and_prefix_policy_are_live(self):
+        # Independent stricter policies must change the actual scanner verdict.
+        header = self.root / 'components/nn2_core/include/fixture.h'
+        header.write_text('#include "nn2_service_private.h"\n')
+        self.gate(0)
+        self.policy['layers'][2]['header_prefixes'].append('nn2_service_')
+        self.write_policy()
+        self.assertIn('forbidden include', self.gate(1))
+        header.write_text('#include <stdint.h>\n')
+        extra = header.with_suffix('.fixture')
+        extra.write_text('#include <esp_wifi.h>\n')
+        self.gate(0)
+        self.policy['source_extensions'].append('.fixture')
+        self.write_policy()
+        self.assertIn('forbidden include', self.gate(1))
+
     def workflow_script(self, start, end=None):
         workflow = (ROOT / '.github/workflows/firmware-build.yml').read_text()
         block = workflow.split(start, 1)[1].split('        run: |\n', 1)[1]
