@@ -84,14 +84,14 @@ class ManifestTests(unittest.TestCase):
         if os.name=='nt':bash=str(Path(os.environ.get('ProgramFiles','C:/Program Files'))/'Git/bin/bash.exe')
         if not bash or not Path(bash).is_file():self.fail('Bash required for gate integration')
         toolroot=self.root/'tools';toolroot.mkdir()
-        for name in ('class-s-gate.sh','layer_contract.py','layers.json'):
+        for name in ('class-s-gate.sh','class-s-gate.py','layer_contract.py','layers.json'):
             shutil.copy2(ROOT/'tools'/name,toolroot/name)
         for row in self.data['layers']:(self.root/row['path']).mkdir(parents=True)
         env=dict(os.environ,PYTHON=Path(sys.executable).as_posix())
         command=[bash,str(toolroot/'class-s-gate.sh'),str(self.root)]
         p=subprocess.run(command,env=env,capture_output=True,text=True)
         self.assertEqual(p.returncode,1,p.stdout+p.stderr)
-        self.assertIn('no C/C++ sources',p.stdout)
+        self.assertIn('empty source/header layer',p.stdout)
         (toolroot/'layers.json').unlink()
         p=subprocess.run(command,env=env,capture_output=True,text=True)
         self.assertEqual(p.returncode,1,p.stdout+p.stderr)

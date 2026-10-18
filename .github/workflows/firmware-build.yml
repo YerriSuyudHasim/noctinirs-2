@@ -59,12 +59,12 @@ jobs:
 
       - name: Forbidden-include gate for layered components
         shell: bash
-        # Logic lives in tools/class-s-gate.sh (Refs #10): exit 0 PASS; 1 FAIL (violation,
-        # empty/missing layer folder, or grep rc>=2 scanner error). Only grep rc=1 (no match) passes.
+        # Logic lives in tools/class-s-gate.py via the shell wrapper (Refs #10):
+        # exit 0 PASS; 1 FAIL; 3 NOT APPLICABLE. A present hierarchy must return 0.
         run: |
           set -uo pipefail
           rc=0
-          VIOLATIONS_FILE=violations.txt bash tools/class-s-gate.sh . || rc=$?
+          bash tools/class-s-gate.sh . 2>&1 | tee violations.txt || rc=$?
           if [ "$rc" -eq 0 ]; then
             echo "### Class S dependency gate: PASS" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -84,7 +84,20 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Run gate fixtures
         shell: bash
-        run: bash tools/class-s-gate-selftest.sh
+        run: |
+          set -euo pipefail
+          bash tools/class-s-gate-selftest.sh 2>&1 | tee gate-selftest.txt
+      - name: Run Issue 10 ADR regression fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/gate-fixtures -p "test_*.py" -v 2>&1 | tee gate-regressions.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-regressions-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          path: gate-*.txt
 
   architecture-contract:
     name: architecture-contract
