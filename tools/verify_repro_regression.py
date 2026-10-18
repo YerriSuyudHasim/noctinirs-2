@@ -26,7 +26,7 @@ def main():
         expected = ('test_nested_enumeration_failure_never_reports_matching_inventory',
                     'test_nested_enumeration_failure_records_incomplete_snapshot',
                     'test_exact_hash_outputs_block_fails_closed')
-        if result.returncode != 1 or any(f'FAIL: {name}' not in result.stderr for name in expected):
+        if result.returncode != 1 or 'ERROR:' in result.stderr or any(f'FAIL: {name}' not in result.stderr for name in expected):
             print('FAIL: baseline did not reproduce both findings', file=sys.stderr)
             return 1
         print('PASS: regression-first controls reproduced F1 capture/compare and F2 workflow failures.')

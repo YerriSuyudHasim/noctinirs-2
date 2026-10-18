@@ -146,7 +146,10 @@ class WarningWorkflowTests(unittest.TestCase):
                         log.chmod(0)
                     count = root / 'evidence/warning-count.txt'
                     count.write_text('0\n')  # A previous zero must not mask failure.
-                    result = subprocess.run([bash, '-c', prefix + script], cwd=root, capture_output=True, text=True, timeout=20)
+                    try:
+                        result = subprocess.run([bash, '-c', prefix + script], cwd=root, capture_output=True, text=True, timeout=5)
+                    except subprocess.TimeoutExpired:
+                        self.fail('warning log validation blocked on a non-regular file')
                     if name == 'unreadable':
                         log.chmod(0o600)
                     self.assertEqual(expected, result.returncode == 0, result.stdout + result.stderr)
