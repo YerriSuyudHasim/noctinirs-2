@@ -21,8 +21,26 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          fetch-depth: 0 # Regression-first checks read the reviewed helper/workflow blobs.
+      - name: Reproduce both findings on the reviewed implementation
+        run: |
+          set -euo pipefail
+          python3 tools/verify_repro_regression.py 2>&1 | tee regression-first.txt
       - name: Exercise success, mismatch, incomplete and diagnostic paths
-        run: python3 -m unittest discover -s tests/reproducibility -v
+        run: |
+          set -euo pipefail
+          echo "SOURCE_SHA=$SOURCE_SHA UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee comparison-tests.txt
+          python3 --version | tee -a comparison-tests.txt
+          python3 -m unittest discover -s tests/reproducibility -v 2>&1 | tee -a comparison-tests.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reproducibility-tests-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            regression-first.txt
+            comparison-tests.txt
 
   build-twice:
     name: class-b-reproducible-build

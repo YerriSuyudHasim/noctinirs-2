@@ -221,3 +221,52 @@ Primary SDK references at the exact pinned commit:
 [reproducible build implementation guide](https://github.com/espressif/esp-idf/blob/fff9895c82d744c7237be8847347bdd1b07c6643/docs/en/api-guides/reproducible-builds.rst),
 [root Kconfig](https://github.com/espressif/esp-idf/blob/fff9895c82d744c7237be8847347bdd1b07c6643/Kconfig),
 [app descriptor Kconfig](https://github.com/espressif/esp-idf/blob/fff9895c82d744c7237be8847347bdd1b07c6643/components/esp_app_format/Kconfig.projbuild).
+
+
+## PR #40 F1/F2 remediation and current-main integration
+
+The preceding measurements and acceptance table are historical evidence for their
+named commits. Independent review at `f97767035e0ab4f801e655ec751141314668c407`
+[requested changes](https://github.com/YerriSuyudHasim/noctinirs-2/pull/40#issuecomment-6237139654):
+the old inventory could suppress nested enumeration errors (F1), and the Class B
+warning guard accepted missing or invalid logs (F2). Its broad completeness and
+warning-enforcement claims were therefore not established by those normal runs.
+
+F1 now uses explicit scandir traversal with no suppressed enumeration, iteration,
+entry-stat or binary-read errors. An error discards the inventory, marks snapshot
+capture incomplete, or makes retained-evidence comparison FAIL with diagnostics.
+No partial matching inventory establishes completeness. Symlinks and non-regular
+binary entries fail. Optional nested binaries remain part of the inventory.
+
+F2 replaces the workflow's grep/error suppression with the same strict warning-log
+validator used by snapshot capture and retained-evidence loading. Logs must be
+readable, nonempty regular files, contain valid UTF-8 without NUL bytes, and have
+zero case-insensitive `warning:` lines. Non-regular logs (including symlinks and
+FIFOs), read errors and invalid text fail. A stale warning-count file is removed
+before validation; only a successful read can produce a numeric count. The count
+is retained even when it is nonzero. Comparison also checks the recorded count
+against the actual retained log rather than trusting a manifest's zero.
+
+New host fixtures inject nested PermissionError/FileNotFoundError/OSError during
+comparison and snapshot capture with a real optional binary, inject binary/log
+read errors, and execute the entire committed Class B Hash outputs block on
+ordinary, missing, directory, empty, binary and invalid-UTF-8 logs. Linux adds
+FIFO, symlink and real non-root permission-denial fixtures. The regression-first
+runner uses the exact reviewed helper/workflow blobs in a temporary directory;
+it requires both F1 paths and the F2 workflow case to fail on that baseline.
+These are tooling regressions, not product firmware Class U or hardware evidence.
+
+Current main `d92796d` is integrated, including merged #38/#39/#43. The sole workflow
+conflict preserves main's evidence checksums alongside strict zero-warning
+enforcement. Canonical layer detection, parser regressions, fail-closed invariant,
+C11 host/target/header/IDF probes and evidence retention remain in place. The
+reference workflow retains #40's explicit PR-head checkout. No runtime source,
+SDK/image pin, sdkconfig default, ADR decision, historical snapshot, hardware or
+repository setting changes are part of this remediation.
+
+The append-only remediation handoff on PR #40 records the resulting full SHA,
+fresh exact-head CI, two new isolated builds, raw artifact checksums and IR
+re-review request. Earlier-head runs are not substituted for that new evidence.
+The PR stays draft, Issue #9 remains open, and author-side verification does not
+satisfy independent review or human merge approval. Recovery is a reviewed revert;
+no device state changed. On-target/HIL/field tests, flashing and signing: NOT RUN.

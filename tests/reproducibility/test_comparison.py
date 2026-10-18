@@ -29,6 +29,7 @@ class ComparisonTests(unittest.TestCase):
                 path = directory / "bins" / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"real unmodified fixture bytes: " + name.encode())
+            (directory / "build.log").write_text("Build complete\n", encoding="utf-8")
             self.manifest(directory)
 
     def manifest(self, directory, **overrides):

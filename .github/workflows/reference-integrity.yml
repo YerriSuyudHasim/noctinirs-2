@@ -18,4 +18,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Verify historical snapshots
         shell: pwsh
-        run: ./tools/verify-reference.ps1
+        run: |
+          Write-Output "SOURCE_SHA=$(git rev-parse HEAD)"
+          ./tools/verify-reference.ps1

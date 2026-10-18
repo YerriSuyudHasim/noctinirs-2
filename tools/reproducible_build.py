@@ -10,6 +10,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 
@@ -36,18 +37,53 @@ def inventory(root):
     result = {}
     if not root.is_dir() or root.is_symlink():
         raise ValueError(f"missing or symlinked binary directory: {root}")
-    for directory, dirs, files in os.walk(root, followlinks=False):
-        for name in dirs + files:
-            path = Path(directory) / name
-            if path.is_symlink():
-                raise ValueError(f"symlink in binary tree: {path}")
-        for name in files:
-            path = Path(directory) / name
-            if path.suffix == ".bin":
-                result[path.relative_to(root).as_posix()] = {
-                    "size": path.stat().st_size, "sha256": digest(path)
-                }
+    pending = [root]
+    while pending:
+        # scandir iteration and entry classification can both raise. Do not use
+        # os.walk's default error suppression or accept a partial inventory.
+        with os.scandir(pending.pop()) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                mode = entry.stat(follow_symlinks=False).st_mode
+                if stat.S_ISLNK(mode):
+                    raise ValueError(f"symlink in binary tree: {path}")
+                if stat.S_ISDIR(mode):
+                    pending.append(path)
+                elif path.suffix == ".bin":
+                    if not stat.S_ISREG(mode):
+                        raise ValueError(f"non-regular binary: {path}")
+                    result[path.relative_to(root).as_posix()] = {
+                        "size": path.stat().st_size, "sha256": digest(path)
+                    }
     return dict(sorted(result.items()))
+
+
+def warning_count(path):
+    """Require readable, nonempty regular UTF-8 text; never infer zero on error."""
+    if not stat.S_ISREG(path.lstat().st_mode):
+        raise ValueError(f"warning log is not a regular file: {path}")
+    # Nonblocking open prevents a replaced FIFO from hanging validation.
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    with os.fdopen(fd, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError(f"warning log is not a regular file: {path}")
+        text = stream.read().decode("utf-8")
+    if not text or "\0" in text:
+        raise ValueError(f"warning log is empty or contains NUL bytes: {path}")
+    return sum(bool(re.search(r"warning:", line, re.IGNORECASE)) for line in text.splitlines())
+
+
+def verify_warnings(log, output):
+    # Remove stale counts before any operation that may fail.
+    output.unlink(missing_ok=True)
+    try:
+        count = warning_count(log)
+    except (OSError, ValueError) as error:
+        print(f"cannot validate warning log: {error}", file=sys.stderr)
+        return False
+    output.write_text(f"{count}\n", encoding="utf-8")
+    print(f"Compiler warning lines: {count}")
+    return count == 0
 
 
 def config_values(path):
@@ -144,15 +180,13 @@ def snapshot(workspace, output, sha, build_exit):
                 errors.append(f"incomplete build: flasher input missing from binary inventory: {name}")
     except (OSError, ValueError, KeyError, TypeError) as error:
         errors.append(f"cannot validate build configuration/flash metadata: {error}")
-    log = output / "build.log"
-    if not log.is_file() or log.stat().st_size == 0:
-        errors.append("incomplete build: missing or empty build.log")
-    else:
-        warnings = [line for line in log.read_text(encoding="utf-8", errors="replace").splitlines()
-                    if re.search(r"warning:", line, re.IGNORECASE)]
-        metadata["warning_count"] = len(warnings)
-        if warnings:
-            errors.append(f"compiler/build warnings: {len(warnings)} (see build.log)")
+    try:
+        count = warning_count(output / "build.log")
+        metadata["warning_count"] = count
+        if count:
+            errors.append(f"compiler/build warnings: {count} (see build.log)")
+    except (OSError, ValueError) as error:
+        errors.append(f"cannot validate warning log: {error}")
     manifest = {"schema": 1, "complete": not errors, "errors": errors,
                 "metadata": metadata, "artifacts": artifacts}
     write_json(output / "manifest.json", manifest)
@@ -188,8 +222,9 @@ def load_build(root):
             errors.append("toolchain pin mismatch")
         if meta["compiler"].splitlines()[0] != COMPILER:
             errors.append("compiler pin mismatch")
-        if meta["warning_count"] != 0:
-            errors.append("nonzero warning count")
+        count = warning_count(root / "build.log")
+        if type(meta["warning_count"]) is not int or meta["warning_count"] != count or count != 0:
+            errors.append("nonzero or inconsistent warning count")
     except (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError) as error:
         errors.append(f"cannot validate build evidence: {error}")
     return manifest, artifacts, errors
@@ -256,9 +291,14 @@ def main():
     diff.add_argument("left", type=Path)
     diff.add_argument("right", type=Path)
     diff.add_argument("--output", type=Path, required=True)
+    warnings = sub.add_parser("warnings")
+    warnings.add_argument("log", type=Path)
+    warnings.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.mode == "snapshot":
         success = snapshot(args.workspace, args.output, args.sha, args.build_exit)
+    elif args.mode == "warnings":
+        success = verify_warnings(args.log, args.output)
     else:
         success = compare(args.left, args.right, args.output)
     return 0 if success else 1
