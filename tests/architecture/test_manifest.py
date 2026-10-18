@@ -28,7 +28,7 @@ class ManifestTests(unittest.TestCase):
                 self.path.write_text(s)
                 with self.assertRaises(ValueError):c.load_manifest(self.path)
     def test_invalid_schema(self):
-        for d in ([],{},dict(self.data,extra=1),dict(self.data,schema_version=True),dict(self.data,schema_version=2),dict(self.data,layers=[]),dict(self.data,layers={})):
+        for d in ([],{},dict(self.data,extra=1),dict(self.data,schema_version=True),dict(self.data,schema_version=1),dict(self.data,layers=[]),dict(self.data,layers={})):
             with self.subTest(d=d),self.assertRaises(ValueError):self.load(d)
     def test_missing_duplicate_unexpected_layers(self):
         for change in ('missing','duplicate','unexpected','wrongpath','extra','badtype','traversal'):
@@ -37,7 +37,7 @@ class ManifestTests(unittest.TestCase):
             elif change=='duplicate':d['layers'][1]=d['layers'][0]
             elif change=='unexpected':d['layers'][1]['name']='adapter'
             elif change=='wrongpath':d['layers'][1]['path']='components/other'
-            elif change=='extra':d['layers'][1]['requires']=[]
+            elif change=='extra':d['layers'][1]['unexpected']=[]
             elif change=='badtype':d['layers'][1]=None
             else:d['layers'][1]['path']='../components/nn2_ports'
             with self.subTest(change=change),self.assertRaises(ValueError):self.load(d)
@@ -71,7 +71,8 @@ class ManifestTests(unittest.TestCase):
         self.assertIn('needs: [layer-detect, static-dependency-gate]',s)
         self.assertNotIn('normative=(',s)
         for row in self.data['layers']:self.assertNotIn(row['path'],s)
-        s=(ROOT/'tools/class-s-gate.sh').read_text();self.assertIn('layer_contract.py" paths',s);self.assertNotIn('layers=(components/',s)
+        s=(ROOT/'tools/class-s-gate.sh').read_text();self.assertIn('class-s-gate.py',s);self.assertNotIn('layers=(components/',s)
+        s=(ROOT/'tools/class-s-gate.py').read_text();self.assertIn('load_contract(manifest)',s);self.assertNotIn('LAYERS =',s)
     def test_cli_missing_manifest_no_outputs(self):
         p=subprocess.run([sys.executable,str(ROOT/'tools/layer_contract.py'),'detect','--manifest',str(self.path)],capture_output=True,text=True)
         self.assertEqual(p.returncode,1);self.assertEqual(p.stdout,'')

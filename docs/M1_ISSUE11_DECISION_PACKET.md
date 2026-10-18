@@ -1,5 +1,11 @@
 # Issue #11: Owner architecture decision packet
 
+> Historical packet for PR #39 at `789b4fa8bb2904a85116c6c6116973c348565c05`.
+> Its cross-PR N6 limitations describe that original tree. The current combined
+> implementation and review request are in [N6 integration report](N6_INTEGRATION_REPORT.md).
+> Earlier CI remains evidence only for its recorded SHA. Owner recommendation
+> remains Amend pending independent review; ADR-0001 remains Proposed.
+
 Prepared by Group 1 Architect Lead / Orchestrator, 2026-10-17. ADR-0001 remains **Proposed**. This packet is an author recommendation, not independent approval or merge authorization.
 
 ## Proposed decision
