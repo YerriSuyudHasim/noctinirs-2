@@ -80,7 +80,7 @@ nn2_enforce_idf_layers("${{CMAKE_CURRENT_SOURCE_DIR}}")
         p=self.run_cmake('--build',str(self.root/'build'),'--target','component','--verbose')
         self.assertEqual(p.returncode,0,p.stdout+p.stderr)
         p=self.run_cmake('--build',str(self.root/'build'),'--verbose')
-        self.assertEqual(p.returncode,0,p.stdout+p.stderr)
+        self.assertEqual(p.returncode,0,'F1: valid separate private headers rejected\n'+p.stdout+p.stderr)
 
     def test_helper_matching_guards_cannot_hide_non_c11(self):
         self.layer_fixture({
@@ -90,7 +90,7 @@ nn2_enforce_idf_layers("${{CMAKE_CURRENT_SOURCE_DIR}}")
         p=self.run_cmake('--build',str(self.root/'build'),'--target','component','--verbose')
         self.assertEqual(p.returncode,0,p.stdout+p.stderr)
         p=self.run_cmake('--build',str(self.root/'build'),'--verbose')
-        self.assertNotEqual(p.returncode,0,'non-C11 header hidden by matching guard\n'+p.stdout+p.stderr)
+        self.assertNotEqual(p.returncode,0,'F1: non-C11 header hidden by matching guard\n'+p.stdout+p.stderr)
         self.assertIn('z/private.h',(p.stdout+p.stderr).replace('\\','/'))
 
     def test_helper_header_only_ports(self):

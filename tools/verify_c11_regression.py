@@ -28,6 +28,10 @@ with tempfile.TemporaryDirectory(prefix='nn2-reviewed-helper-') as tmp:
     suite = unittest.TestSuite(test_c11.C11Tests(name) for name in CASES)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     failed = {test._testMethodName for test, _ in result.failures}
-    if result.errors or failed != set(CASES) or result.testsRun != len(CASES):
+    markers = {'test_helper_separate_private_headers': 'F1: valid separate private headers rejected',
+               'test_helper_matching_guards_cannot_hide_non_c11': 'F1: non-C11 header hidden by matching guard'}
+    expected_assertions = all(markers[test._testMethodName] in trace
+                              for test, trace in result.failures)
+    if result.errors or failed != set(CASES) or result.testsRun != len(CASES) or not expected_assertions:
         raise SystemExit('FAIL: expected both F1 assertion failures and no setup errors')
     print('PASS: both new regressions expose the unchanged reviewed implementation')
