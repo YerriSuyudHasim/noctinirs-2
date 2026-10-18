@@ -351,6 +351,8 @@ class WorkflowDetectionFixtures(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = pathlib.Path(self.tmp.name)
+        import shutil
+        shutil.copytree(GATE.parent, self.root / 'tools', ignore=shutil.ignore_patterns('__pycache__'))
         workflow = (GATE.parents[1] / '.github/workflows/firmware-build.yml').read_text()
         block = workflow.split('      - name: Detect layered components', 1)[1]
         self.script = textwrap.dedent(block.split('        run: |\n', 1)[1]
@@ -359,7 +361,10 @@ class WorkflowDetectionFixtures(unittest.TestCase):
     def detect(self, expected, present=None):
         import os
         env = dict(os.environ, GITHUB_OUTPUT='.detect-output', GITHUB_STEP_SUMMARY='.detect-summary')
-        p = subprocess.run(['bash', '-c', self.script], cwd=self.root, env=env,
+        script = self.script
+        if os.name == 'nt':
+            script = 'python3() { "' + pathlib.Path(sys.executable).as_posix() + '" "$@"; };\n' + script
+        p = subprocess.run(['bash', '-c', script], cwd=self.root, env=env,
                            capture_output=True, text=True)
         self.assertEqual(p.returncode, expected, p.stdout + p.stderr)
         if present is not None:

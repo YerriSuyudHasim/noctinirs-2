@@ -25,5 +25,9 @@ case "$(uname -s)" in
   *) if [ "$(id -u)" -ne 0 ]; then expect scanner-error 1 "$T/scanerr"; else echo "skip scanner-error (root)"; fi ;;
 esac
 chmod 755 "$T/scanerr/components/nn2_core/src"
+# Deterministic wrapper failure; Python regressions inject traversal errors.
+printf '#!/usr/bin/env bash\nexit 2\n' > "$T/failing-python"
+chmod +x "$T/failing-python"
+PYTHON="$T/failing-python" expect interpreter-error-injected 1 "$T/valid"
 rm -rf "$T"
 echo "selftest failures: $fails"; [ "$fails" -eq 0 ]
