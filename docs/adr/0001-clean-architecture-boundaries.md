@@ -35,9 +35,10 @@ confirms exact tree preservation and post-merge CI. This revision records the ex
 decision through a separate reviewable change; it does not backdate the source edit,
 alter historical Proposed revisions, or grant merge authority to this revision.
 
-Decision inputs are the [non-author integration approval](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6247562819),
-[bounded Firmware/RTOS consultation](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6247910114),
-and [non-author reconciliation confirmation](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6256423199).
+The decision's technical inputs are the [non-author integration approval](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6247562819)
+and [bounded Firmware/RTOS consultation](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6247910114).
+The later [non-author reconciliation confirmation](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6256423199)
+verifies preservation of that accepted tree; it is not an input to the earlier decision.
 These are separately attributed Owner-account relay reports, not native GitHub APPROVE
 reviews. One assigned non-author assessor held the reviewer and both consulted roles;
 they are not three independent people. Consultation recommended acceptance with no
