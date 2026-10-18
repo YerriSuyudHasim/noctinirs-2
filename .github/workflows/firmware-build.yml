@@ -93,6 +93,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0 # Regression-first checks read the exact reviewed helper blob.
       - name: Manifest, workflow and C11 contract regression tests
         run: |
           set -euo pipefail
@@ -104,14 +105,23 @@ jobs:
             cmake --version | head -n1
             ninja --version
           } | tee architecture-tests.txt
-          python3 -m unittest discover -s tests/architecture -v 2>&1 | tee -a architecture-tests.txt
+          NN2_C11_EVIDENCE_DIR=evidence/reviewed-helper python3 tools/verify_c11_regression.py 2>&1 | tee evidence-regression-first.txt
+          NN2_C11_EVIDENCE_DIR=evidence/c11-host python3 -m unittest discover -s tests/architecture -v 2>&1 | tee -a architecture-tests.txt
+      - name: Hash contract evidence
+        if: always()
+        run: |
+          mkdir -p evidence
+          cp architecture-tests.txt evidence-regression-first.txt evidence/ 2>/dev/null || true
+          find evidence -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/EVIDENCE_SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: architecture-contract-${{ github.event.pull_request.head.sha || github.sha }}
           retention-days: 90
           if-no-files-found: error
-          path: architecture-tests.txt
+          path: |
+            architecture-tests.txt
+            evidence/
 
   esp-idf-build:
     name: class-b-esp-idf-build
@@ -168,7 +178,7 @@ jobs:
         run: |
           set -euo pipefail
           . "$IDF_PATH/export.sh" > /dev/null
-          NN2_TEST_CC=xtensa-esp32s3-elf-gcc python3 -m unittest discover -s tests/architecture -p 'test_c11.py' -v 2>&1 | tee evidence/c11-target.txt
+          NN2_C11_EVIDENCE_DIR=evidence/c11-target NN2_TEST_CC=xtensa-esp32s3-elf-gcc python3 -m unittest discover -s tests/architecture -p 'test_c11.py' -v 2>&1 | tee evidence/c11-target.txt
           python3 tools/verify_c11_idf.py 2>&1 | tee evidence/c11-idf-fixture.txt
 
       - name: Verify generated target
@@ -188,6 +198,7 @@ jobs:
           sha256sum build/*.bin build/bootloader/bootloader.bin build/partition_table/partition-table.bin sdkconfig | tee evidence/SHA256SUMS
           grep -ciE 'warning:' evidence/build.log > evidence/warning-count.txt || true
           echo "Compiler warning lines: $(cat evidence/warning-count.txt)"
+          find evidence -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/EVIDENCE_SHA256SUMS
 
       - name: Write step summary
         if: always()
