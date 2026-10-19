@@ -210,8 +210,7 @@ jobs:
           set -euo pipefail
           cp sdkconfig evidence/sdkconfig
           sha256sum build/*.bin build/bootloader/bootloader.bin build/partition_table/partition-table.bin sdkconfig | tee evidence/SHA256SUMS
-          grep -ciE 'warning:' evidence/build.log > evidence/warning-count.txt || true
-          echo "Compiler warning lines: $(cat evidence/warning-count.txt)"
+          python3 tools/reproducible_build.py warnings evidence/build.log --output evidence/warning-count.txt
           find evidence -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/EVIDENCE_SHA256SUMS
 
       - name: Write step summary
