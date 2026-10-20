@@ -4,18 +4,73 @@
 |---|---|
 | ID | ADR-0001 |
 | Title | Clean architecture layer boundaries (Core / Application / Ports / Adapters) |
-| Status | **Proposed** (not approved; not implemented) |
-| Date | 2026-10-17 (rev 2, see Revision history) |
+| Status | **Accepted** (bounded static architecture framework; not product implementation approval) |
+| Date | 2026-10-18 (Owner decision; recorded 2026-10-19, rev 4) |
 | Issue | #3 (M0.3 — Clean Architecture ADR) |
 | Author role | Architect (draft) |
-| Independent reviewer | TBD (must not be the author) |
+| Independent reviewer | Group 2 Independent Technical Reviewer; separately attributed reports linked in Section 0 (not the implementation author) |
 | Approver / merge | Project Owner `YerriSuyudHasim` only |
 | Decision authority | OWNER-M0-A1-001 (recorded in `project.yaml` `governance.decision_ref`) |
 | Input commit | `noctinirs-2` `main` @ `52d9f85d6ce454b7e1ef97cc7908bbae92b49d4f` (merge of PR #5) |
 | Governance input | `ai-engineering-hub` `main` @ `e645829a726b1008c46373d7ef2b25929988d7f1` (read 2026-10-16) |
 | Evidence class of this document | Static (design review only) |
 
-> This ADR describes a *target* architecture. Nothing in it is implemented at the input commit. Proposed names, paths, and interfaces are not approved until this ADR is accepted by the Project Owner after independent review.
+> This ADR describes an accepted *target* architecture, not a verified product implementation. The input-commit scaffold observations below are historical. Acceptance of the static framework does not establish runtime, hardware, timing, safety or clinical conformance.
+
+## 0. Owner decision record (bounded acceptance)
+
+**Decision: ACCEPT. Decision date: 2026-10-18 at 09:22:14 UTC.** Human Owner
+`YerriSuyudHasim` accepted the bounded static architecture framework in the
+[actual Owner decision](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6248188579),
+referring to the [decision packet](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6248048761).
+The accepted proposal is identified by complete Git tree
+`6fb344225d6ea7a489e7eaf5b18d0b5bebf3b88c`, reviewed at
+`3c24189d455cefc52143134f57cdff31528256ef` and preserved by actual #43 squash
+`d92796d73806e2e97092329be3741b3ddac19c54`.
+
+The [later final integration authorization](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6256494704)
+authorized only that integration and explicitly left ADR source recording separate.
+The [execution record](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6256587588)
+confirms exact tree preservation and post-merge CI. This revision records the existing
+decision through a separate reviewable change; it does not backdate the source edit,
+alter historical Proposed revisions, or grant merge authority to this revision.
+
+The decision's technical inputs are the [non-author integration approval](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6247562819)
+and [bounded Firmware/RTOS consultation](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6247910114).
+The later [non-author reconciliation confirmation](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6256423199)
+verifies preservation of that accepted tree; it is not an input to the earlier decision.
+These are separately attributed Owner-account relay reports, not native GitHub APPROVE
+reviews. One assigned non-author assessor held the reviewer and both consulted roles;
+they are not three independent people. Consultation recommended acceptance with no
+current static-design amendment, not approval of future concurrency or hardware code.
+
+**Accepted scope:** the Core/Application/Ports/Adapters contract, Q-10 strict C11
+enforcement design, Q-11 complementary static/compiler/manual strategy and disclosed
+residual risks, canonical N6 policy ownership, and port-interface contract template.
+The full N6 migration is merged; #39 was only its partial prerequisite. F1 remains
+**CLOSED** for the corrected independent per-header probes. **R1/R2 retain only their
+existing conditionally accepted scope**; this record accepts no new defect or broader
+exception. See the linked reports for their exact conditions.
+
+**Retained obligations:** Sections 3.6-3.10 and 9 remain binding. Macro/conditional,
+transitive/generated-header, header-shadow, root/toolchain, link/callback and
+standard-header limits remain explicit manual/deferred obligations. Actual product
+layers require isolated C11 host builds of all inner translation units/headers,
+retained full dependencies and compile commands, configuration coverage and behavior
+tests. Each atomic use needs its own RTOS/target review; implementation-specific
+tasks/ISRs, synchronization, assertion/watchdog behavior, timing and hardware parameters
+are not approved here. Production Class S is **NOT APPLICABLE (not evidence)** while
+layers are absent; tooling fixtures and Class B do not substitute for product Class U
+or physical evidence. Accepted residual limits are not unfinished Issue #11 strategy
+criteria; future product evidence has not been supplied by accepting them.
+
+**N5 restoration:** restore meaningful real `class-u-host-tests`, bound to GitHub
+Actions integration **15368**, before the first production `nn2_*` component/runtime
+merge (including #13), or **2026-10-25T01:00:00Z**, whichever is earlier. Restore at
+expiry absent a new explicit Owner-approved extension. Synthetic/empty/skipped success
+is insufficient. [Approved exception](https://github.com/YerriSuyudHasim/ai-engineering-hub/issues/2#issuecomment-6236882761).
+No issue is closed by this record. See the [Issue #11 matrix and N5 sequence](../M1_ISSUE11_ACCEPTANCE_RECORD.md)
+for review/closeout boundaries and the separate #13/#15/#40 work.
 
 ## 1. Context
 
@@ -147,10 +202,10 @@ Short examples:
 
 ### 3.4 C11 conventions
 
-| Topic | Rule (proposed) |
+| Topic | Rule (accepted static framework) |
 |---|---|
 | Prefixes | `nn2_core_*`, `nn2_app_*`, `nn2_port_*`, `nn2_adapter_*`; macros `NN2_*`; file names match prefixes. |
-| Language standard | Inner layers (`nn2_core`, `nn2_app`, `nn2_ports`) compile with `-std=c11` in both host (Class U) and target (Class B) builds. Enforced by the root build hook and compiler guard in Section 3.9 (Q-10); specialist review remains required before Owner acceptance. |
+| Language standard | Inner layers (`nn2_core`, `nn2_app`, `nn2_ports`) compile with `-std=c11` in both host (Class U) and target (Class B) builds. Enforced by the root build hook and compiler guard in Section 3.9 (Q-10); bounded design consultation and Owner acceptance are recorded in Section 0. Future implementation review remains required. |
 | Opaque handles | Modules expose `typedef struct nn2_x nn2_x_t;` with storage supplied by the caller (static allocation helpers or `NN2_X_STORAGE_SIZE`) to avoid heap. |
 | Errors | Functions return `nn2_status_t` (a Core-defined enum, `NN2_OK = 0`); outputs go through pointer parameters. Adapters translate `esp_err_t` at the boundary; `esp_err_t` never crosses into Ports/Application/Core. |
 | Memory | No dynamic allocation after init. Init-time allocation is allowed only in Adapters/composition root and must be documented; Core and Application do not call `malloc`/`free`. |
@@ -179,7 +234,7 @@ Schema v2 has exactly `schema_version: 2`, `layers`, `source_extensions` and `fo
 
 The Architect owns schema/path changes through an ADR revision, independent review and Owner decision. Any new `components/nn2_*` entry (including a future adapter) requires a reviewed schema/map extension first. Detection rejects unmapped entries and malformed top-level paths. A valid manifest with absent product layers produces explicit NOT APPLICABLE (not evidence); an empty layer selects the gate and cannot establish conformance. Missing or invalid configuration fails before workflow outputs are emitted.
 
-**Cross-PR dependency:** The separate N6 integration candidate preserves both [PR #38](https://github.com/YerriSuyudHasim/noctinirs-2/pull/38) and [PR #39](https://github.com/YerriSuyudHasim/noctinirs-2/pull/39) histories and migrates the Python dependency map, CROSS patterns and platform patterns to this manifest. The legacy grep scanner is retired; wrappers invoke the same Python scanner. See the [N6 integration report](../N6_INTEGRATION_REPORT.md) for pinned inputs, conflict resolutions, checks and merge order. This candidate is not independently mergeable ahead of its prerequisites. ADR acceptance remains an Owner decision after independent review.
+**Cross-PR integration (completed):** [PR #38](https://github.com/YerriSuyudHasim/noctinirs-2/pull/38), [PR #39](https://github.com/YerriSuyudHasim/noctinirs-2/pull/39), then [PR #43](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43) landed in the required order. #43 migrated the Python dependency map, CROSS patterns and platform patterns to this manifest. The legacy grep scanner is retired; wrappers invoke the same Python scanner. The [N6 integration report](../N6_INTEGRATION_REPORT.md) retains historical candidate inputs and conflict evidence; Section 0 links actual squash execution and the bounded Owner acceptance. No pending PR #40 change is included in that integration.
 
 **`REQUIRES` / `PRIV_REQUIRES` allow-list** (derived from the layout above; no ESP-IDF components permitted):
 
@@ -227,7 +282,7 @@ No timing, latency, jitter, or throughput claim is made by this ADR. All three m
 
 ### 3.9 Q-10 decision: verifiable ISO C11 enforcement
 
-Decision proposed for Owner acceptance: strict ISO C11 for inner-layer C translation units and every port header, in host and ESP-IDF builds. Adapters and the composition root retain the SDK default. This resolves the engineering question; it does not provide Firmware/RTOS Specialist or Owner approval.
+Decision accepted within Section 0's static framework: strict ISO C11 for inner-layer C translation units and every port header, in host and ESP-IDF builds. Adapters and the composition root retain the SDK default. The bounded Firmware/RTOS consultation supports this design; future implementation, atomic and timing approvals remain separate.
 
 At ESP-IDF v6.1 commit `fff9895c82d744c7237be8847347bdd1b07c6643`, `tools/cmake/build.cmake` selects `-std=gnu23` for the target compiler. The older Issue #11 comment's gnu17 default is not this pinned source's behavior. `C_STANDARD 11` alone is insufficient: CMake may decay unless `C_STANDARD_REQUIRED` is set, extensions default ON, and raw SDK/compiler options can override properties.
 
@@ -322,7 +377,7 @@ Neutral: `main/app_main.c` becomes the only place that knows concrete adapters.
 | AC-5 | Scaffold gap (1.2); "not implemented" statements throughout. | Static review |
 | AC-6 | The PR adds only this file; no source layout or `reference/**` change. | PR diff |
 
-Acceptance requires an independent reviewer and Owner acknowledgment. Code conformance is verified later by the Class S/U/B jobs.
+The bounded framework's independent review and Owner acceptance are recorded in Section 0. This decision-record revision requires its own non-author review and subsequent Owner merge authorization. Product code conformance is verified later by the Class S/U/B jobs; it is not established by document acceptance.
 
 ## 9. Open questions and risks
 
@@ -335,9 +390,9 @@ Acceptance requires an independent reviewer and Owner acknowledgment. Code confo
 | Q-5 | Acceptability of function-pointer ports on the hot path; need for a real-time island exception. | RTOS Specialist (measurement) |
 | Q-6 | Product scope for 0.1.x (modalities, transport, storage). | Owner |
 | Q-7 | Host test framework (Unity) as a dependency: provenance/licence review. | Owner / Verifier |
-| Q-8 | Branch protection on `main` is reported unavailable/disabled (`protected: false`); merge discipline relies on process. | Owner (Issue #1 follow-up) |
+| Q-8 | Historical protection gap superseded by active main ruleset 25220606; meaningful Class U restoration remains governed by N5 in Section 0. This record changes no protection. | Owner / governance |
 | Q-9 | Backup owner unassigned. | Owner |
-| Q-10 | Engineering decision resolved in 3.9; independent Firmware/RTOS review and Owner decision pending. | Firmware + RTOS Specialist / Owner |
+| Q-10 | Static enforcement design accepted after bounded Firmware/RTOS consultation (Section 0); future product compiler evidence and implementation review remain required. | Firmware + RTOS Specialist / Verifier |
 | Q-11 | Strategy resolved in 3.10; production host/dependency evidence deferred until layers land. | Verifier / Architect |
 
 ## 10. References
@@ -363,3 +418,4 @@ Acceptance requires an independent reviewer and Owner acknowledgment. Code confo
 | 2 | 2026-10-17 | Issue #11: Q-10 strict C11 root enforcement and compiler probes; Q-11 verification/residual-risk strategy; JSON canonical manifest and partial cross-PR N6 integration; port contract template and Owner decision packet. | **Proposed** (Owner decision required) |
 
 | 3 | 2026-10-17 | N6 combined integration: schema v2 owns dependency/include policy, hardened Python scanner and canonical detector replace independent gate maps; adversarial and CI propagation regressions. | **Proposed** (Owner decision required) |
+| 4 | 2026-10-19 | Record the actual 2026-10-18 Owner acceptance of the reviewed static framework, source links and retained conditions; update current decision dispositions without altering historical evidence. | **Accepted** (bounded scope in Section 0) |

@@ -78,7 +78,18 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(p.returncode,1);self.assertEqual(p.stdout,'')
     def test_adr_canonical_reference(self):
         s=(ROOT/'docs/adr/0001-clean-architecture-boundaries.md').read_text()
-        self.assertIn('../../tools/layers.json',s);self.assertNotIn('tools/layers.yaml',s);self.assertIn('**Proposed**',s)
+        self.assertIn('../../tools/layers.json',s);self.assertNotIn('tools/layers.yaml',s)
+        self.assertIn('| Status | **Accepted** (bounded static architecture framework;',s)
+        decision=s.split('## 0. Owner decision record (bounded acceptance)',1)[1].split('## 1. Context',1)[0]
+        for token in ('Decision date: 2026-10-18 at 09:22:14 UTC',
+                      'issuecomment-6248188579', 'issuecomment-6256494704',
+                      '6fb344225d6ea7a489e7eaf5b18d0b5bebf3b88c',
+                      'issuecomment-6247562819', 'issuecomment-6247910114',
+                      'issuecomment-6256423199', 'not native GitHub APPROVE'):
+            self.assertIn(token,decision)
+        # Proposed belongs to immutable history, not the current status.
+        history=s.split('## 11. Revision history',1)[1]
+        self.assertIn('| 3 | 2026-10-17',history);self.assertIn('**Proposed**',history)
 
     def test_gate_empty_layer_and_missing_config_cannot_pass(self):
         bash=shutil.which('bash')
