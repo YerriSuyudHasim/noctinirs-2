@@ -3,9 +3,9 @@
  * One serialized task caller; no ISR/reentry. Static ctx lives until reboot.
  * Every operation blocks up to timeout_ms (1..1000), conditionally on RTOS
  * scheduling. TIMEOUT does not acknowledge quiescence. No retained pointers.
- * Output copies remain unchanged on failure; EMPTY means no buffered record.
+ * Output copies remain unchanged on failure; EMPTY means no record by the read deadline.
  * INVALID_ARG: null/bad deadline; INVALID_STATE: lifecycle; IO: device fault.
- * init: STOPPED/FAULT -> READY, flush/count old queue; start: READY -> RUNNING;
+ * init: STOPPED/READY/FAULT -> READY, flush/count old queue; start: READY -> RUNNING;
  * stop: any -> STOPPED with reset held; snapshot/read do not alter device config.
  * SPI completion timeout requires reboot; stop never frees in-flight buffers. */
 #ifndef NN2_PORT_ADC_STREAM_H

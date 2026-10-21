@@ -24,7 +24,8 @@ typedef struct {
     nn2_ads131_logic_t logic;
     spi_device_handle_t spi;
     spi_transaction_t transaction;
-    uint8_t tx[NN2_ADS131_BYTES], rx[NN2_ADS131_BYTES];
+    _Alignas(4) uint8_t tx[NN2_ADS131_BYTES];
+    _Alignas(4) uint8_t rx[NN2_ADS131_BYTES];
     bool created, poisoned, hardware_ready, watchdog;
     int32_t last_esp_error;
     TaskHandle_t task, caller;

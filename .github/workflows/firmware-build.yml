@@ -206,6 +206,7 @@ jobs:
           else
             python3 tools/check_ads131_config.py sdkconfig | tee evidence/profile-config.txt
           fi
+          python3 tools/collect_adc_adapter_build.py --build build --evidence evidence/adapter-dependencies | tee evidence/adapter-dependency-coverage.log
           cp build/flasher_args.json evidence/
           cp build/flash*args evidence/ 2>/dev/null || true
           python3 tools/collect_inner_build.py --build build --evidence evidence/product-dependencies --mode idf 2>&1 | tee evidence/product-dependency-coverage.log
@@ -283,6 +284,7 @@ jobs:
           { echo "SOURCE_SHA=$SOURCE_SHA"; date -u +%Y-%m-%dT%H:%M:%SZ; gcc --version; cmake --version; ninja --version; } > evidence-u/toolchain.txt
           python3 tools/run_host_tests.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence "$GITHUB_WORKSPACE/evidence-u" --failure-controls 2>&1 | tee evidence-u/runner.log
           python3 tools/collect_inner_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/product-dependencies --mode host 2>&1 | tee evidence-u/dependency-coverage.log
+          python3 tools/collect_adc_adapter_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/adapter-dependencies | tee evidence-u/adapter-dependency-coverage.log
           python3 tools/layer_contract.py detect | tee evidence-u/layer-state.txt
           python3 tools/class-s-gate.py . 2>&1 | tee evidence-u/real-layer-gate.log
           cat evidence-u/result.json >> "$GITHUB_STEP_SUMMARY"

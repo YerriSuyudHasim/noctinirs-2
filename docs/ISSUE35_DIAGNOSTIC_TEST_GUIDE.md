@@ -24,7 +24,7 @@ Do not treat ADC reset as emitter control. No eFuse action is specified.
 Expected USB Serial/JTAG console, diagnostic profile (values are placeholders):
 
 ```text
-profile=ADS131_DIAGNOSTIC source=ADC time_kind=read_complete_us emitter_control=ABSENT fixture=REQUIRED version=0.1.0 elf_sha256=<image identifier>
+profile=ADS131_DIAGNOSTIC source=ADC time_kind=read_complete_us emitter_control=ABSENT fixture=REQUIRED source_sha=<full SHA> config=MODE0110_CLOCK0F0A_GAIN0000 version=0.1.0 elf_sha256=<image identifier>
 diagnostic result=OK state=0 fault=0 session=1 produced=<n> consumed=<n> lost=<n> overflow=<n> crc_bad=0 spi_errors=0 drdy_timeouts=0 missed_min=<lower bound> unknown_loss=<events> occupancy=<n> peak=<n> record_bytes=<sizeof>
 source=ADC sequence=<observed sequence> read_complete_us=<software time> status=010f quality=<flags> ch0=<signed> ch1=<signed> ch2=<signed> ch3=<signed>
 ```
