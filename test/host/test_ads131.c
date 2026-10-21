@@ -218,24 +218,35 @@ static void wrap_and_output(void)
     TEST_ASSERT_EQUAL(0u,out.sequence);before=out;
     TEST_ASSERT_EQUAL(NN2_ERR_EMPTY,nn2_ads131_pop(&dev,&out));TEST_ASSERT_EQUAL_MEMORY(&before,&out,sizeof(out));
 }
-static unsigned app_stop_count,app_reads;static nn2_status_t app_failure;
+static unsigned app_stop_count,app_reads;static nn2_status_t app_failure;static bool app_observed_fault;
 static nn2_status_t app_init(void *ctx,uint32_t ms) {(void)ctx;(void)ms;return app_failure;}
 static nn2_status_t app_start(void *ctx,uint32_t ms) {(void)ctx;(void)ms;return NN2_OK;}
 static nn2_status_t app_stop(void *ctx,uint32_t ms) {(void)ctx;(void)ms;app_stop_count++;return NN2_OK;}
 static nn2_status_t app_read(void *ctx,nn2_core_adc_record_t *out,uint32_t ms)
 {(void)ctx;(void)ms;app_reads++;memset(out,0,sizeof(*out));return NN2_OK;}
 static nn2_status_t app_observe(void *ctx,nn2_core_adc_observation_t *out,uint32_t ms)
-{(void)ctx;(void)ms;memset(out,0,sizeof(*out));return NN2_OK;}
+{(void)ctx;(void)ms;memset(out,0,sizeof(*out));if(app_observed_fault)out->fault=NN2_ADC_FAULT_GAP;return NN2_OK;}
 static void diagnostic_fake_profile(void)
 {
     nn2_port_adc_stream_t p={NULL,app_init,app_start,app_stop,app_read,app_observe};
     nn2_core_adc_observation_t out;nn2_core_adc_record_t record;
-    app_stop_count=0u;app_reads=0u;app_failure=NN2_OK;
+    app_stop_count=0u;app_reads=0u;app_failure=NN2_OK;app_observed_fault=false;
     TEST_ASSERT_EQUAL(NN2_OK,nn2_app_adc_diagnostic_run(&p,8u,&out,&record));
     TEST_ASSERT_EQUAL(1u,app_stop_count);TEST_ASSERT_EQUAL(8u,app_reads);
     app_failure=NN2_ERR_IO;
     TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_app_adc_diagnostic_run(&p,8u,&out,&record));
     TEST_ASSERT_EQUAL(2u,app_stop_count);TEST_ASSERT_EQUAL(8u,app_reads);
+}
+static void diagnostic_retained_fault_is_not_success(void)
+{
+    nn2_port_adc_stream_t p={NULL,app_init,app_start,app_stop,app_read,app_observe};
+    nn2_core_adc_observation_t out,before;nn2_core_adc_record_t record;
+    memset(&before,0xa5,sizeof(before));out=before;
+    app_failure=NN2_OK;app_observed_fault=true;app_stop_count=0u;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_app_adc_diagnostic_run(&p,8u,&out,&record));
+    TEST_ASSERT_EQUAL(1u,app_stop_count);
+    TEST_ASSERT_EQUAL_MEMORY(&before,&out,sizeof(out));
+    app_observed_fault=false;
 }
 void test_ads131_suite(void)
 {
@@ -244,5 +255,5 @@ void test_ads131_suite(void)
     RUN_TEST(masked_id);RUN_TEST(each_spi_failure_rolls_back);RUN_TEST(ready_reset_timeout);
     RUN_TEST(repeated_lifecycle);RUN_TEST(overflow_drop_oldest);RUN_TEST(stale_notifications);
     RUN_TEST(service_gap_and_stall);RUN_TEST(acquisition_integrity_faults);RUN_TEST(wrap_and_output);
-    RUN_TEST(diagnostic_fake_profile);
+    RUN_TEST(diagnostic_fake_profile);RUN_TEST(diagnostic_retained_fault_is_not_success);
 }
