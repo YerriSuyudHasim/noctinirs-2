@@ -200,7 +200,7 @@ jobs:
           idf.py build 2>&1 | tee evidence/build.log
           idf.py size 2>&1 | tee evidence/size.txt
           idf.py size-components 2>&1 | tee evidence/size-components.txt
-          python3 tools/check_ads131_config.py --selftest | tee evidence/config-negatives.txt
+          python3 tools/check_ads131_config.py --selftest --cc xtensa-esp32s3-elf-gcc --generated-header build/config/sdkconfig.h | tee evidence/config-negatives.txt
           if [ "${{ matrix.profile }}" = diagnostic ]; then
             python3 tools/check_ads131_config.py sdkconfig --diagnostic | tee evidence/profile-config.txt
           else
@@ -215,7 +215,7 @@ jobs:
           set -euo pipefail
           . "$IDF_PATH/export.sh" > /dev/null
           NN2_C11_EVIDENCE_DIR=evidence/c11-target NN2_TEST_CC=xtensa-esp32s3-elf-gcc python3 -m unittest discover -s tests/architecture -p 'test_c11.py' -v 2>&1 | tee evidence/c11-target.txt
-          python3 tools/verify_c11_idf.py 2>&1 | tee evidence/c11-idf-fixture.txt
+          env -u SDKCONFIG_DEFAULTS python3 tools/verify_c11_idf.py 2>&1 | tee evidence/c11-idf-fixture.txt
 
       - name: Verify generated target
         run: |

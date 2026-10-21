@@ -51,7 +51,7 @@ Read copies one record; counters copies a coherent owner snapshot. Outputs are
 unchanged on any non-OK result. Null/zero or timeout>1000ms is INVALID_ARG.
 Read waits for data in bounded tick steps; EMPTY means no record by its deadline; IO means device/protocol/integrity failure; TIMEOUT
 means the command deadline expired, not proof of quiescence. Start requires READY;
-init requires STOPPED/FAULT, not RUNNING; stop is idempotent and holds ADC reset.
+init requires STOPPED/READY/FAULT, not RUNNING; stop is idempotent and holds ADC reset.
 Reinit flushes buffered records and counts them as lost; lifetime counters persist.
 Application always requests stop after attempted initialization or acquisition;
 it never automatically restarts on an acquisition fault.
@@ -99,6 +99,7 @@ hard time bounds, interrupt latency and SPI completion remain unmeasured.
 The consumer may block one tick on EMPTY (10ms at100Hz); the
 10ms tick interval is the proposed stall budget and is counted as overflow rather than concealed. Budget and
 consumer scheduling require RTOS assessment before any throughput claim.
+The SYNC critical-section requirement is <=10us including GPIO overhead, unmeasured.
 Task provisional priority5/core1/stack4096 bytes; no historical priority ladder
 adopted, no integrated scheduler exists here. Static internal memory only, no
 PSRAM buffers/stacks. TWDT subscribes while the owner task lives and resets once
@@ -108,7 +109,8 @@ miss count. Diagnostic excludes flash writes/OTA; unexpected cache stalls may
 cause detected service-gap fault or unknown loss, never timing certification.
 
 Board Nocti v1/N16R8: RESET6 CS7 DRDY35 SCLK36 MISO37 MOSI38. Only board table
-contains pin values. No GPIO26 configuration/readback, eFuse or emitter IO18 code.
+contains pin values. Creation accepts only the address of that immutable table,
+then copies it; arbitrary pin structures are rejected before GPIO operations. No GPIO26 configuration/readback, eFuse or emitter IO18 code.
 The fake/disabled profile stays default; diagnostic is mutually exclusive opt-in.
 Generated configuration must reject PSRAM and octal flash, select DIO/16MB and USB
 Serial/JTAG console for diagnostic. This software choice does not disconnect bonded

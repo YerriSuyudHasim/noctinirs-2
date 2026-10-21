@@ -1,9 +1,7 @@
 #include "nn2_adapter_ads131.h"
 #include "nn2_rtos_config.h"
-#include "sdkconfig.h"
-#if CONFIG_SPIRAM || CONFIG_ESPTOOLPY_OCT_FLASH || CONFIG_SPIRAM_MODE_OCT
-#error ADS131 diagnostic requires PSRAM and octal flash disabled
-#endif
+#include "nn2_board_v1.h"
+#include "nn2_ads131_build_guard.h"
 #include <string.h>
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
@@ -60,6 +58,7 @@ static nn2_status_t reset(void *ctx, bool high)
 static nn2_status_t sync_adc(void *ctx)
 {
     device_t *d = ctx; esp_err_t low, high;
+    /* Requirement: entire critical section <=10us; WCET is NOT RUN. */
     portENTER_CRITICAL(&sync_lock);
     low = gpio_set_level(d->board.reset, 0);
     esp_rom_delay_us(1u);
@@ -232,7 +231,7 @@ static nn2_status_t observe_port(void *ctx, nn2_core_adc_observation_t *out, uin
 nn2_status_t nn2_adapter_ads131_create(const nn2_ads131_board_t *board, nn2_port_adc_stream_t *out)
 {
     device_t *d = &device;
-    if (!board || !out || nn2_ads131_validate(&board->config) != NN2_OK) return NN2_ERR_INVALID_ARG;
+    if (board != &nn2_board_v1_adc || !out || nn2_ads131_validate(&board->config) != NN2_OK) return NN2_ERR_INVALID_ARG;
     if (d->created) return NN2_ERR_INVALID_STATE;
     d->board = *board; d->caller = xTaskGetCurrentTaskHandle();
     nn2_ads131_io_t io = { .ctx=d, .transfer=transfer, .reset=reset, .sync=sync_adc,

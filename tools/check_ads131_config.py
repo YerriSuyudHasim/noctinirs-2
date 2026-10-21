@@ -3,6 +3,32 @@
 import argparse
 from pathlib import Path
 import tempfile
+import subprocess
+
+
+def compile_guards(compiler, generated):
+    root = Path(__file__).resolve().parents[1]
+    header = root / 'main/adapters/nn2_ads131_build_guard.h'
+    original = generated.read_text()
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp)
+        source = dest / 'probe.c'
+        source.write_text('#include "nn2_ads131_build_guard.h"\nint probe(void) { return 0; }\n')
+        for option in (None, 'CONFIG_SPIRAM', 'CONFIG_ESPTOOLPY_OCT_FLASH', 'CONFIG_SPIRAM_MODE_OCT'):
+            config = original
+            if option:
+                config += '\n#undef ' + option + '\n#define ' + option + ' 1\n'
+            (dest / 'sdkconfig.h').write_text(config)
+            command = [compiler, '-fsyntax-only', '-x', 'c', '-I', str(dest),
+                       '-I', str(header.parent), str(source)]
+            result = subprocess.run(command, capture_output=True, text=True)
+            print('COMMAND', command, 'EXIT', result.returncode)
+            print(result.stdout + result.stderr)
+            if (result.returncode == 0) != (option is None):
+                raise RuntimeError('production compile guard failed: ' + str(option))
+            if option and 'ADS131 diagnostic requires' not in result.stderr:
+                raise RuntimeError('negative failed for unrelated reason')
+    print('PASS production compile guard: positive and 3 compiler negatives')
 
 
 def check(path, diagnostic):
@@ -56,11 +82,17 @@ if __name__ == '__main__':
     parser.add_argument('config', nargs='?', type=Path)
     parser.add_argument('--diagnostic', action='store_true')
     parser.add_argument('--selftest', action='store_true')
+    parser.add_argument('--cc', help='compile production guard against generated config/header')
+    parser.add_argument('--generated-header', type=Path)
     args = parser.parse_args()
     if args.selftest:
         selftest()
-    elif args.config:
+    if args.cc:
+        if not args.generated_header:
+            parser.error('--cc requires --generated-header')
+        compile_guards(args.cc, args.generated_header)
+    if args.config:
         check(args.config, args.diagnostic)
         print('PASS generated profile config')
-    else:
+    elif not args.selftest and not args.cc:
         parser.error('config or --selftest required')
