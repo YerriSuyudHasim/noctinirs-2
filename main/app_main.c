@@ -1,42 +1,67 @@
+/* NoctiNIRS 2 composition root (draft v0.1.0). Non-clinical research prototype:
+ * raw counts only, no physiological or clinical interpretation. */
+#include <inttypes.h>
+#include "sdkconfig.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
-#include "nn2_adapter_ads131.h"
-#include "nn2_app_safe.h"
-#include "nn2_board_v1.h"
+#include "nn2_core_types.h"
+#include "nn2_core_ring.h"
+#include "nn2_app_sequencer.h"
+#include "nn2_adapter_esp32s3.h"
 
-static const char *TAG = "noctinirs2";
+static const char *TAG = "nn2_main";
+
+static nn2_core_ring_storage_t s_ring_storage;
+static nn2_core_ring_t *s_ring;
+static nn2_app_seq_storage_t s_seq_storage;
+static nn2_app_sequencer_t *s_seq;
 
 void app_main(void)
 {
-    nn2_port_adc_t port;
-    nn2_status_t status;
+    ESP_LOGI(TAG, "NoctiNIRS 2 firmware v%s (draft library skeleton, non-clinical)", NN2_VERSION_STRING);
 
-    ESP_LOGI(TAG, "NoctiNIRS 2 firmware v0.1.0");
-    if (!nn2_app_adc_hold_required(NN2_APP_BOOT)) {
-        ESP_LOGE(TAG, "BOOT does not require the ADS131 hold");
+    if (nn2_core_ring_init(&s_ring_storage, &s_ring) != NN2_OK) return;
+    nn2_app_seq_config_t cfg = {
+        .clock = nn2_adapter_clock_esp_port(),
+        .log = nn2_adapter_log_esp_port(),
+        .ring = s_ring,
+        .channel = 0,
+        .settle_us = CONFIG_NN2_LED_SETTLE_US,
+    };
+    if (nn2_adapter_led_disabled_init(&cfg.led) != NN2_OK ||
+        nn2_adapter_adc_fake_init(&cfg.adc) != NN2_OK) {
+        ESP_LOGE(TAG, "adapter init failed; halting demo");
         return;
     }
-    status = nn2_adapter_ads131_bind(&port, &nn2_board_ads131_pins);
-    if (status != NN2_OK) {
-        ESP_LOGE(TAG, "ADS131 bind failed: %d", (int)status);
+    nn2_status_t st = nn2_app_sequencer_init(&s_seq_storage, &s_seq, &cfg);
+    if (st != NN2_OK) {
+        ESP_LOGE(TAG, "sequencer init: %s", nn2_core_status_str(st));
         return;
     }
-    /* Hold SYNC/RESET low before any task is created. */
-    status = port.safe_state(port.ctx);
-    if (status != NN2_OK) {
-        ESP_LOGE(TAG, "ADS131 safe_state failed: %d", (int)status);
-        return;
+
+    for (int i = 0; i < CONFIG_NN2_DEMO_CYCLES; i++) {
+        st = nn2_app_sequencer_run_cycle(s_seq);
+        if (st != NN2_OK) {
+            /* Fault: the sequencer already issued the fail-safe off(). Stop the
+             * demo; no further on() is issued. Cleanup runs in this task. */
+            ESP_LOGE(TAG, "cycle %d failed: %s (state %s); stopping, no further cycles", i,
+                     nn2_core_status_str(st), nn2_app_seq_state_str(nn2_app_sequencer_state(s_seq)));
+        }
+        nn2_core_sample_t s;
+        while (nn2_core_ring_pop(s_ring, &s) == NN2_OK) {
+            ESP_LOGI(TAG, "sample seq=%" PRIu32 " ch=%u src=%s raw=%" PRIu32 " t_on=%" PRIu64 "us dt=%" PRIu64 "us",
+                     s.seq, (unsigned)s.channel, nn2_core_sample_src_str(s.src), s.raw, s.t_led_on_us,
+                     s.t_sample_us - s.t_led_on_us);
+        }
+        if (st != NN2_OK) {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); /* blocking (not busy) bounded inter-cycle delay */
     }
-    status = port.init(port.ctx, &nn2_board_ads131_cfg);
-    if (status != NN2_OK) {
-        ESP_LOGE(TAG, "ADS131 init failed: %d", (int)status);
-        return;
-    }
-    status = nn2_adapter_ads131_create_task(port.ctx);
-    if (status != NN2_OK) {
-        ESP_LOGE(TAG, "ADS131 task create failed: %d", (int)status);
-        return;
-    }
-    ESP_LOGW(TAG,
-             "ADS131 held in reset; start is not called; Class H is not run");
+    nn2_app_seq_observation_t observation;
+    if (nn2_app_sequencer_observe(s_seq, &observation) != NN2_OK) return;
+    ESP_LOGI(TAG, "done: cycles_ok=%" PRIu32 " faults=%" PRIu32 " off_failures=%" PRIu32 " dropped=%" PRIu32,
+             observation.cycles_ok, observation.faults, observation.off_failures, nn2_core_ring_dropped(s_ring));
 }

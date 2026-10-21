@@ -1,7 +1,3 @@
-idf_component_register(
-    SRCS "nn2_ports_anchor.c"
-    INCLUDE_DIRS "include"
-    REQUIRES nn2_core
-)
-
-target_compile_options(${COMPONENT_LIB} PRIVATE -std=c11)
+# Ports layer (ADR-0001 3.5): header-only contracts, REQUIRES nn2_core only.
+idf_component_register(INCLUDE_DIRS "include"
+                       REQUIRES nn2_core)

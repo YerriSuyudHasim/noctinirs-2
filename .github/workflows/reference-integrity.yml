@@ -14,6 +14,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Verify historical snapshots
         shell: pwsh
-        run: ./tools/verify-reference.ps1
+        run: |
+          Write-Output "SOURCE_SHA=$(git rev-parse HEAD)"
+          ./tools/verify-reference.ps1

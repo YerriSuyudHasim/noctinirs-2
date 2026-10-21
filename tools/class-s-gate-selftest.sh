@@ -6,7 +6,10 @@ T="$(mktemp -d)"; fails=0
 mk() { d="$T/$1"; mkdir -p "$d/components/nn2_core/src" "$d/components/nn2_ports/include" "$d/components/nn2_app/src"
   echo '#include <stdint.h>' > "$d/components/nn2_core/src/a.c"
   echo '#include "nn2_core_types.h"' > "$d/components/nn2_ports/include/p.h"
-  echo '#include "nn2_port_led.h"' > "$d/components/nn2_app/src/b.c"; }
+  echo '#include "nn2_port_led.h"' > "$d/components/nn2_app/src/b.c";
+  echo 'idf_component_register(SRCS "src/a.c")' > "$d/components/nn2_core/CMakeLists.txt";
+  echo 'idf_component_register(INCLUDE_DIRS "include" REQUIRES nn2_core)' > "$d/components/nn2_ports/CMakeLists.txt";
+  echo 'idf_component_register(SRCS "src/b.c" REQUIRES nn2_core nn2_ports)' > "$d/components/nn2_app/CMakeLists.txt"; }
 expect() { name="$1"; want="$2"; shift 2; out="$(bash "$GATE" "$@" 2>&1)"; got=$?
   if [ "$got" -eq "$want" ]; then echo "ok   $name (exit $got)"; else echo "FAIL $name: want $want got $got: $out"; fails=$((fails+1)); fi; }
 mk valid;            expect valid-header-only-ports 0 "$T/valid"
@@ -17,7 +20,15 @@ done
 mk empty;   rm -rf "$T/empty/components/nn2_app"/*;  expect empty-layer-folder 1 "$T/empty"
 mk missing; rm -rf "$T/missing/components/nn2_ports"; expect missing-layer-folder 1 "$T/missing"
 mk scanerr; chmod 000 "$T/scanerr/components/nn2_core/src"
-if [ "$(id -u)" -ne 0 ]; then expect scanner-error 1 "$T/scanerr"; else echo "skip scanner-error (root)"; fi
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) echo "skip scanner-error (native Windows Python does not enforce POSIX chmod; injected error fixture covers this)" ;;
+  *) if [ "$(id -u)" -ne 0 ]; then expect scanner-error 1 "$T/scanerr"; else echo "skip scanner-error (root)"; fi ;;
+esac
 chmod 755 "$T/scanerr/components/nn2_core/src"
+# Deterministic wrapper/interpreter failure; scanner traversal errors are also
+# injected by the Python regression suite. The retired grep gate is not invoked.
+printf '#!/usr/bin/env bash\nexit 2\n' > "$T/failing-python"
+chmod +x "$T/failing-python"
+PYTHON="$T/failing-python" expect interpreter-error-injected 1 "$T/valid"
 rm -rf "$T"
 echo "selftest failures: $fails"; [ "$fails" -eq 0 ]

@@ -6,8 +6,7 @@ NoctiNIRS 2 is a new clean-architecture ESP32-S3 firmware project starting at **
 
 ```text
 noctinirs-2/
-├── main/                         # Composition root
-├── components/                   # Active v0.1.0 layers (issue #35)
+├── main/                         # Active v0.1.0 firmware
 ├── reference/
 │   ├── v2/                       # Sanitized historical snapshot
 │   ├── v3/                       # Sanitized historical snapshot
@@ -25,7 +24,7 @@ noctinirs-2/
 └── VERSION
 ```
 
-The root build definition, `main/`, and `components/` form the active firmware. Files under `reference/` are evidence and design input, not build inputs.
+Only the root build definition and `main/` form the active firmware. Files under `reference/` are evidence and design input, not build inputs.
 
 ## Toolchain baseline
 
@@ -41,7 +40,7 @@ idf.py set-target esp32s3
 idf.py build
 ```
 
-`app_main` holds the ADS131M04 SYNC/RESET line low and creates the `nn2_ads131` task. It does not call `start`, and it does not claim on-target sampling.
+The current scaffold only logs its version and an explicit warning that hardware behavior is not implemented.
 
 ## Historical references
 
@@ -66,5 +65,5 @@ The relationship to `ai-engineering-hub` is documentation and governance only—
 - Local working tree prepared.
 - Private GitHub repository URL: verified from local `origin`.
 - Reciprocal hub registration: prepared in both repositories; human owner, backup owner, risk class, and evidence-retention fields remain unresolved.
-- ESP-IDF build: Class B host build for the ADS131 scaffold is recorded on the issue #35 pull request. That build is not hardware validation.
+- ESP-IDF build: not run because ESP-IDF is not available in the current shell.
 - On-target and HIL testing: not run.

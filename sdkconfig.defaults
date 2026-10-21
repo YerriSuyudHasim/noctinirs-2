@@ -2,7 +2,5 @@
 # Select the target explicitly with: idf.py set-target esp32s3
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
-
-# Issue #35 / #33 F1: octal PSRAM stays off. IO35-37 are the ADS131
-# SCLK, MISO, and DRDY pins on this module. Do not enable SPIRAM.
-# CONFIG_SPIRAM is not set
+# Issue #9: omit IDF build timestamps and map source/debug paths deterministically.
+CONFIG_APP_REPRODUCIBLE_BUILD=y
