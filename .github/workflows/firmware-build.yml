@@ -139,13 +139,24 @@ jobs:
             evidence/
 
   esp-idf-build:
-    name: class-b-esp-idf-build
+    name: class-b-esp-idf-build${{ matrix.suffix }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: fake
+            suffix: ''
+            defaults: sdkconfig.defaults
+          - profile: diagnostic
+            suffix: '-ads131-diagnostic'
+            defaults: sdkconfig.defaults;sdkconfig.ads131-diagnostic
     runs-on: ubuntu-latest
     container:
       # espressif/idf:v6.1, pinned by digest (Docker Hub tag v6.1, verified 2026-10-16).
       image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
     env:
       EXPECTED_IDF_COMMIT: fff9895c82d744c7237be8847347bdd1b07c6643  # espressif/esp-idf tag v6.1
+      SDKCONFIG_DEFAULTS: ${{ matrix.defaults }}
     defaults:
       run:
         shell: bash
@@ -188,6 +199,15 @@ jobs:
           idf.py set-target esp32s3 2>&1 | tee evidence/set-target.log
           idf.py build 2>&1 | tee evidence/build.log
           idf.py size 2>&1 | tee evidence/size.txt
+          idf.py size-components 2>&1 | tee evidence/size-components.txt
+          python3 tools/check_ads131_config.py --selftest | tee evidence/config-negatives.txt
+          if [ "${{ matrix.profile }}" = diagnostic ]; then
+            python3 tools/check_ads131_config.py sdkconfig --diagnostic | tee evidence/profile-config.txt
+          else
+            python3 tools/check_ads131_config.py sdkconfig | tee evidence/profile-config.txt
+          fi
+          cp build/flasher_args.json evidence/
+          cp build/flash*args evidence/ 2>/dev/null || true
           python3 tools/collect_inner_build.py --build build --evidence evidence/product-dependencies --mode idf 2>&1 | tee evidence/product-dependency-coverage.log
 
       - name: Verify C11 using the pinned target compiler
@@ -233,7 +253,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: class-b-build-${{ github.event.pull_request.head.sha || github.sha }}
+          name: class-b-build-${{ matrix.profile }}-${{ github.event.pull_request.head.sha || github.sha }}
           include-hidden-files: true # Evidence checksum inventory includes Ninja metadata.
           retention-days: 90
           if-no-files-found: error
@@ -242,6 +262,8 @@ jobs:
             build/*.bin
             build/*.elf
             build/*.map
+            build/flasher_args.json
+            build/flash*args
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
 

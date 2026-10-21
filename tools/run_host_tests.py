@@ -110,7 +110,7 @@ def main():
         for kind in ('assertion-failure', 'zero-tests'):
             # Retained isolated source copy is part of the control evidence.
             isolated = evidence / kind / 'source'
-            for path in ('test/host', 'components', 'cmake'):
+            for path in ('test/host', 'components', 'cmake', 'main/adapters'):
                 shutil.copytree(ROOT / path, isolated / path)
             if kind == 'assertion-failure':
                 path = isolated / 'test/host/test_ring.c'
@@ -122,7 +122,7 @@ def main():
             else:
                 path = isolated / 'test/host/test_main.c'
                 source = path.read_text()
-                for suite in ('ring', 'sequencer', 'contract', 'storage'):
+                for suite in ('ring', 'sequencer', 'contract', 'storage', 'ads131'):
                     source = source.replace('    test_' + suite + '_suite();', '')
                 path.write_text(source)
             control = execute(isolated, evidence / kind / 'build', evidence / kind)
