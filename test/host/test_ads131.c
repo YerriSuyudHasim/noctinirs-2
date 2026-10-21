@@ -174,15 +174,15 @@ static void repeated_lifecycle(void)
 }
 static void overflow_drop_oldest(void)
 {
-    running();for(unsigned i=0;i<70u;++i) TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_service(&dev,1u));
-    TEST_ASSERT_EQUAL(64u,dev.count);TEST_ASSERT_EQUAL(6u,dev.observation.overflow);
-    TEST_ASSERT_EQUAL(6u,dev.observation.lost);TEST_ASSERT_EQUAL(70u,dev.observation.produced);
+    running();for(unsigned i=0;i<134u;++i) TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_service(&dev,1u));
+    TEST_ASSERT_EQUAL(128u,dev.count);TEST_ASSERT_EQUAL(6u,dev.observation.overflow);
+    TEST_ASSERT_EQUAL(6u,dev.observation.lost);TEST_ASSERT_EQUAL(134u,dev.observation.produced);
     nn2_core_adc_record_t out;TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_pop(&dev,&out));
     TEST_ASSERT_EQUAL(9u,out.sequence); /* 2 settling + 6 overwritten + first */
-    for(unsigned i=1;i<64u;++i) TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_pop(&dev,&out));
+    for(unsigned i=1;i<128u;++i) TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_pop(&dev,&out));
     TEST_ASSERT_TRUE((out.quality&NN2_ADC_QUALITY_OVERFLOW)!=0u);
     TEST_ASSERT_EQUAL(NN2_ERR_EMPTY,nn2_ads131_pop(&dev,&out));
-    TEST_ASSERT_EQUAL(64u,dev.observation.consumed);
+    TEST_ASSERT_EQUAL(128u,dev.observation.consumed);
 }
 static void stale_notifications(void)
 {

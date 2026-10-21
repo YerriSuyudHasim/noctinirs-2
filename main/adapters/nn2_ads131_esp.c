@@ -37,6 +37,7 @@ typedef struct {
     uint8_t command_storage[sizeof(request_t)], reply_storage[sizeof(reply_t)];
     uint32_t next_id;
 } device_t;
+_Static_assert(sizeof(device_t) <= 12288u, "Review internal static memory budget");
 static device_t device;
 static portMUX_TYPE sync_lock = portMUX_INITIALIZER_UNLOCKED;
 _Static_assert(sizeof(StackType_t) == 1u, "IDF Xtensa stack depth is bytes");
@@ -176,7 +177,7 @@ static void owner(void *arg)
         }
         if (!command && d->logic.observation.state == NN2_ADC_RUNNING)
             (void)nn2_ads131_service(&d->logic, got);
-        else if (command && !discard_events && got && d->logic.observation.state == NN2_ADC_RUNNING) {
+        else if (command && !discard_events && d->logic.observation.state == NN2_ADC_RUNNING) {
             /* A control wake must not silently consume an ADC notification. */
             (void)nn2_ads131_service(&d->logic, got);
         }
@@ -208,9 +209,19 @@ static nn2_status_t start_port(void *ctx, uint32_t ms) { return call(ctx, CMD_ST
 static nn2_status_t stop_port(void *ctx, uint32_t ms) { return call(ctx, CMD_STOP, ms, NULL); }
 static nn2_status_t read_port(void *ctx, nn2_core_adc_record_t *out, uint32_t ms)
 {
-    reply_t reply; nn2_status_t s;
-    if (!out) return NN2_ERR_INVALID_ARG;
-    s = call(ctx, CMD_READ, ms, &reply); if (s == NN2_OK) *out = reply.record; return s;
+    reply_t reply;
+    device_t *d = ctx;
+    if (!out || !d || ms == 0u || ms > 1000u) return NN2_ERR_INVALID_ARG;
+    const uint64_t end = now_us(d) + (uint64_t)ms * 1000u;
+    for (;;) {
+        uint64_t now = now_us(d);
+        if (now >= end) return NN2_ERR_EMPTY;
+        uint32_t remaining = (uint32_t)((end - now + 999u) / 1000u);
+        nn2_status_t status = call(d, CMD_READ, remaining, &reply);
+        if (status == NN2_OK) { *out = reply.record; return status; }
+        if (status != NN2_ERR_EMPTY) return status;
+        vTaskDelay(1u); /* Consumer blocks; producer continues on its own core. */
+    }
 }
 static nn2_status_t observe_port(void *ctx, nn2_core_adc_observation_t *out, uint32_t ms)
 {

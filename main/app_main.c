@@ -79,7 +79,7 @@ static void adc_diagnostic(void)
     nn2_port_adc_stream_t port;
     nn2_core_adc_observation_t observation = {0};
     const esp_app_desc_t *description = esp_app_get_description();
-    ESP_LOGI(TAG, "profile=ADS131_DIAGNOSTIC source=ADC time_kind=read_complete_us emitter_control=ABSENT fixture=REQUIRED version=%s elf_sha256=%02x%02x%02x%02x", description->version,
+    ESP_LOGI(TAG, "profile=ADS131_DIAGNOSTIC source=ADC time_kind=read_complete_us emitter_control=ABSENT fixture=REQUIRED source_sha=%s config=MODE0110_CLOCK0F0A_GAIN0000 version=%s elf_sha256=%02x%02x%02x%02x", NN2_SOURCE_SHA, description->version,
         description->app_elf_sha256[0], description->app_elf_sha256[1], description->app_elf_sha256[2], description->app_elf_sha256[3]);
     nn2_status_t s = nn2_adapter_ads131_create(&nn2_board_v1_adc, &port);
     if (s != NN2_OK) { ESP_LOGE(TAG, "owner creation failed: %s", nn2_core_status_str(s)); return; }

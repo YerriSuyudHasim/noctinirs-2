@@ -4,7 +4,7 @@
 #define NN2_ADS131_LOGIC_H
 #include "nn2_core_adc_record.h"
 #define NN2_ADS131_BYTES 18u
-#define NN2_ADS131_CAPACITY 64u
+#define NN2_ADS131_CAPACITY 128u
 typedef struct {
     uint32_t clkin_hz, osr, rate_hz, spi_hz;
 } nn2_ads131_config_t;

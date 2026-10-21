@@ -49,7 +49,7 @@ nonreentrant; caller serializes the handle. Adapter context/static resources liv
 until reboot. Inputs are copied for the call; no borrowed pointers are queued.
 Read copies one record; counters copies a coherent owner snapshot. Outputs are
 unchanged on any non-OK result. Null/zero or timeout>1000ms is INVALID_ARG.
-EMPTY means no record yet; IO means device/protocol/integrity failure; TIMEOUT
+Read waits for data in bounded tick steps; EMPTY means no record by its deadline; IO means device/protocol/integrity failure; TIMEOUT
 means the command deadline expired, not proof of quiescence. Start requires READY;
 init requires STOPPED/FAULT, not RUNNING; stop is idempotent and holds ADC reset.
 Reinit flushes buffered records and counts them as lost; lifetime counters persist.
@@ -68,7 +68,7 @@ notification word; lower31 bits count DRDY (eIncrement). Control never aborts SP
 queue waits. The bounded notification wait also expires every RTOS tick. Commands are processed before any notified read.
 No caller stack pointer crosses the mailbox. No shared Core ring is used.
 
-The adapter owner exclusively accesses a64-record overwrite-oldest queue. Each
+The adapter owner exclusively accesses a128-record overwrite-oldest queue. Each
 overwrite increments overflow and lost, and sets persistent discontinuity quality
 on subsequent records. Counters are uint32 modulo2^32 (including sequence); each
 snapshot is coherent because the owner copies it. Produced counts valid parsed
@@ -77,10 +77,12 @@ adc_missed is only an observed lower bound. Unknown/cache-off losses are explici
 No physical total-conversion count is claimed. Stop retains queued records;
 init flushes/counts them. Fault preserves records and counters for inspection.
 
-Proposed diagnostic consumer budget5ms at8kSPS:40 frames plus25%=50; round to64
-for8ms capacity. This explicitly replaces the old50ms assumption for this bounded
+Proposed diagnostic consumer budget10ms at8kSPS:80 frames plus25%=100; round to128
+for16ms capacity. This explicitly replaces the old50ms assumption for this bounded
 profile. It does not meet50ms: that would need500 records. `sizeof` and map evidence
-must accompany review; nominal record40B gives2560B plus state/mailboxes/stack.
+must accompany review; record size <=48B gives <=6144B; the complete static adapter state including
+4096B stack/mailboxes is compile-asserted <=12288B. Init driver allocation is
+additional and retained in map/heap review.
 Overflow remains observable when consumer scheduling exceeds the proposed budget.
 
 ## ESP implementation requirements and limits
@@ -94,6 +96,9 @@ Tick rounding is ceil(ms*tick_hz/1000), minimum1: at100Hz one tick is10ms,
 not a250us wall-clock detector. A30ms stall budget is conditional on scheduling;
 hard time bounds, interrupt latency and SPI completion remain unmeasured.
 
+The consumer may block one tick on EMPTY (10ms at100Hz); the
+10ms tick interval is the proposed stall budget and is counted as overflow rather than concealed. Budget and
+consumer scheduling require RTOS assessment before any throughput claim.
 Task provisional priority5/core1/stack4096 bytes; no historical priority ladder
 adopted, no integrated scheduler exists here. Static internal memory only, no
 PSRAM buffers/stacks. TWDT subscribes while the owner task lives and resets once

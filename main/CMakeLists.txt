@@ -8,3 +8,7 @@ if(CONFIG_NN2_PROFILE_ADS131_DIAGNOSTIC)
     list(APPEND nn2_requires esp_driver_spi esp_driver_gpio esp_system)
 endif()
 idf_component_register(SRCS ${nn2_sources} INCLUDE_DIRS "." "adapters" PRIV_REQUIRES ${nn2_requires})
+
+execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE nn2_source_sha OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+target_compile_definitions(${COMPONENT_LIB} PRIVATE NN2_SOURCE_SHA="${nn2_source_sha}")
