@@ -73,6 +73,16 @@ def main():
               'environment': {k: os.environ.get(k) for k in ('CPATH','C_INCLUDE_PATH','CPLUS_INCLUDE_PATH','INCLUDE','SDKROOT')},
               'source_count': len(list((ROOT / 'components').rglob('*.c'))), 'header_count': len(headers),
               'compiled_units': len(records), 'records': records}
+    if args.mode == 'idf':
+        # Owner decision 6306981230 is bounded to these unmodified shim bytes.
+        # Preserve the evidence; never hide it or modify SDK search roots.
+        shim = Path(os.environ['IDF_PATH']) / 'components/esp_libc/platform_include/sys/cdefs.h'
+        digest = hashlib.sha256(shim.read_bytes()).hexdigest()
+        if digest != '45151a90d09f8e7d6b8acab050f2e15686e7fdca70d29b298df88af16d4d884a':
+            raise RuntimeError('Pinned A2 libc shim changed; fresh assessment required')
+        shutil.copy2(shim, dest / 'pinned-libc-cdefs.h')
+        report['a2_shim'] = {'path': str(shim), 'sha256': digest,
+            'owner_decision': 'https://github.com/YerriSuyudHasim/noctinirs-2/pull/15#issuecomment-6306981230'}
     (dest / 'coverage.json').write_text(json.dumps(report, indent=2) + '\n')
     print(f"PASS product {args.mode}: {report['source_count']} sources, {len(headers)} independent headers, {len(records)} commands")
 

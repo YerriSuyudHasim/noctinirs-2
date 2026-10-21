@@ -1,5 +1,5 @@
 #include "nn2_test.h"
-#include "nn2_app_sequencer.h"
+#include "nn2_test_private.h"
 #include <limits.h>
 #include <string.h>
 
@@ -20,64 +20,69 @@ static void same_sample(nn2_core_sample_t a, nn2_core_sample_t b)
     TEST_ASSERT_EQUAL_UINT64(a.t_sample_us, b.t_sample_us);
     TEST_ASSERT_EQUAL(a.src, b.src);
 }
-static void same_ring(const nn2_core_ring_t *a, const nn2_core_ring_t *b)
+static void same_ring(const nn2_core_ring_state_t *a, const nn2_core_ring_state_t *b)
 {
     TEST_ASSERT_EQUAL(a->head,b->head); TEST_ASSERT_EQUAL(a->tail,b->tail);
     TEST_ASSERT_EQUAL(a->count,b->count); TEST_ASSERT_EQUAL(a->dropped,b->dropped);
     for (size_t i=0; i<NN2_CORE_RING_CAPACITY; ++i) same_sample(a->items[i],b->items[i]);
 }
+static void same_ring_handle(const nn2_core_ring_state_t *before, const nn2_core_ring_t *handle)
+{
+    nn2_core_ring_state_t after=ring_view(handle);
+    same_ring(before,&after);
+}
 static void ring_failure_nonmutation_and_null_queries(void)
 {
-    nn2_core_ring_t r, before;
+    DECLARE_RING(r); nn2_core_ring_state_t before;
     nn2_core_sample_t out=sample(77u), sentinel=out;
-    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_init(NULL));
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r)); before=r;
-    TEST_ASSERT_FALSE(nn2_core_ring_is_full(&r));
+    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_init(NULL,&r));
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r_storage,&r)); before=ring_view(r);
+    TEST_ASSERT_FALSE(nn2_core_ring_is_full(r));
     TEST_ASSERT_EQUAL(0u,nn2_core_ring_count(NULL));
     TEST_ASSERT_FALSE(nn2_core_ring_is_full(NULL));
     TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_push(NULL,&out));
-    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_push(&r,NULL));
+    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_push(r,NULL));
     TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_pop(NULL,&out));
-    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_pop(&r,NULL));
-    TEST_ASSERT_EQUAL(NN2_ERR_EMPTY,nn2_core_ring_pop(&r,&out));
-    same_sample(sentinel,out); same_ring(&before,&r);
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_push(&r,&out)); before=r;
-    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_pop(&r,NULL));
-    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_push(&r,NULL));
-    same_ring(&before,&r); same_sample(sentinel,out);
+    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_pop(r,NULL));
+    TEST_ASSERT_EQUAL(NN2_ERR_EMPTY,nn2_core_ring_pop(r,&out));
+    same_sample(sentinel,out); same_ring_handle(&before,r);
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_push(r,&out)); before=ring_view(r);
+    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_pop(r,NULL));
+    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_core_ring_push(r,NULL));
+    same_ring_handle(&before,r); same_sample(sentinel,out);
 }
 static void ring_multielement_wrap_refill_and_repeated_full(void)
 {
-    nn2_core_ring_t r,before; nn2_core_sample_t out;
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r));
+    DECLARE_RING(r); nn2_core_ring_state_t before; nn2_core_sample_t out;
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r_storage,&r));
     uint32_t next=0u, expected=0u;
     for (unsigned round=0; round<5u; ++round) {
-        while (!nn2_core_ring_is_full(&r)) {
+        while (!nn2_core_ring_is_full(r)) {
             nn2_core_sample_t in=sample(next++);
-            TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_push(&r,&in));
+            TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_push(r,&in));
         }
-        before=r;
+        before=ring_view(r);
         nn2_core_sample_t rejected=sample(999u);
         for (unsigned j=0; j<3u; ++j) {
-            TEST_ASSERT_EQUAL(NN2_ERR_FULL,nn2_core_ring_push(&r,&rejected));
-            ++before.dropped; same_ring(&before,&r); same_sample(sample(999u),rejected);
+            TEST_ASSERT_EQUAL(NN2_ERR_FULL,nn2_core_ring_push(r,&rejected));
+            ++before.dropped; same_ring_handle(&before,r); same_sample(sample(999u),rejected);
         }
         for (unsigned j=0; j<7u; ++j) {
-            TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(&r,&out));
+            TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(r,&out));
             same_sample(sample(expected++),out);
         }
-        TEST_ASSERT_EQUAL(NN2_CORE_RING_CAPACITY-7u,r.count);
+        TEST_ASSERT_EQUAL(NN2_CORE_RING_CAPACITY-7u,ring_view(r).count);
     }
-    while (r.count) {
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(&r,&out));
+    while (ring_view(r).count) {
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(r,&out));
         same_sample(sample(expected++),out);
     }
     TEST_ASSERT_EQUAL(next,expected);
-    TEST_ASSERT_EQUAL(r.head,r.tail);
-    TEST_ASSERT_EQUAL(15u,r.dropped);
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r));
-    TEST_ASSERT_EQUAL(0u,r.count); TEST_ASSERT_EQUAL(0u,r.head);
-    TEST_ASSERT_EQUAL(0u,r.tail); TEST_ASSERT_EQUAL(0u,r.dropped);
+    TEST_ASSERT_EQUAL(ring_view(r).head,ring_view(r).tail);
+    TEST_ASSERT_EQUAL(15u,ring_view(r).dropped);
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r_storage,&r));
+    TEST_ASSERT_EQUAL(0u,ring_view(r).count); TEST_ASSERT_EQUAL(0u,ring_view(r).head);
+    TEST_ASSERT_EQUAL(0u,ring_view(r).tail); TEST_ASSERT_EQUAL(0u,ring_view(r).dropped);
 }
 static void complete_enum_names_and_invalid_values(void)
 {
@@ -144,18 +149,19 @@ static nn2_app_seq_config_t config(model_t *m,nn2_core_ring_t *r)
         .clock={now,delay,m}, .log={log_msg,m}, .ring=r, .channel=9u, .settle_us=73u };
     return c;
 }
-static void initialize(model_t *m,nn2_core_ring_t *r,nn2_app_sequencer_t *s)
+static void initialize(model_t *m,nn2_core_ring_storage_t *rs,nn2_core_ring_t **r,
+    nn2_app_seq_storage_t *ss,nn2_app_sequencer_t **s)
 {
     memset(m,0,sizeof(*m)); m->raw=1234u;
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(r));
-    nn2_app_seq_config_t c=config(m,r);
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_init(s,&c));
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(rs,r));
+    nn2_app_seq_config_t c=config(m,*r);
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_init(ss,s,&c));
 }
 static void seq_each_missing_mandatory_and_null_operation(void)
 {
-    model_t m; nn2_core_ring_t r; nn2_app_sequencer_t s;
-    initialize(&m,&r,&s);
-    nn2_app_seq_config_t c=config(&m,&r),bad;
+    model_t m; DECLARE_RING(r); DECLARE_SEQ(s);
+    initialize(&m,&r_storage,&r,&s_storage,&s);
+    nn2_app_seq_config_t c=config(&m,r),bad;
     for (int i=0;i<6;++i) {
         bad=c;
         switch(i) {
@@ -163,53 +169,53 @@ static void seq_each_missing_mandatory_and_null_operation(void)
         case 2: bad.adc.read=NULL; break; case 3: bad.clock.now_us=NULL; break;
         case 4: bad.ring=NULL; break; default: break;
         }
-        TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_app_sequencer_init(&s,i==5?NULL:&bad));
-        TEST_ASSERT_EQUAL(NN2_APP_SEQ_IDLE,s.state);
+        TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_app_sequencer_init(&s_storage,&s,i==5?NULL:&bad));
+        TEST_ASSERT_EQUAL(NN2_APP_SEQ_IDLE,seq_view(s).state);
         TEST_ASSERT_EQUAL(1234u,m.raw); TEST_ASSERT_EQUAL(0u,m.on);
     }
-    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_app_sequencer_init(NULL,&c));
+    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_app_sequencer_init(NULL,&s,&c));
     TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_app_sequencer_step(NULL));
     TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_app_sequencer_run_cycle(NULL));
     TEST_ASSERT_EQUAL(NN2_ERR_INVALID_ARG,nn2_app_sequencer_reset(NULL));
     TEST_ASSERT_EQUAL(NN2_APP_SEQ_FAULT,nn2_app_sequencer_state(NULL));
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(&s));
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(s));
 }
 static void seq_exact_order_channel_fields_and_publication(void)
 {
-    model_t m; nn2_core_ring_t r; nn2_app_sequencer_t s; nn2_core_sample_t out;
-    initialize(&m,&r,&s);
+    model_t m; DECLARE_RING(r); DECLARE_SEQ(s); nn2_core_sample_t out;
+    initialize(&m,&r_storage,&r,&s_storage,&s);
     for (unsigned i=0;i<3u;++i) {
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_step(&s));
-        TEST_ASSERT_EQUAL(0u,r.count);
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_step(s));
+        TEST_ASSERT_EQUAL(0u,ring_view(r).count);
     }
     TEST_ASSERT_EQUAL_STRING("NTDAT",m.trace);
-    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_STATE,nn2_app_sequencer_run_cycle(&s));
+    TEST_ASSERT_EQUAL(NN2_ERR_INVALID_STATE,nn2_app_sequencer_run_cycle(s));
     TEST_ASSERT_EQUAL(0u,m.off);
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_step(&s));
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_step(s));
     TEST_ASSERT_EQUAL_STRING("NTDATF",m.trace);
-    TEST_ASSERT_EQUAL(1u,r.count); TEST_ASSERT_EQUAL(1u,s.cycles_ok);
+    TEST_ASSERT_EQUAL(1u,ring_view(r).count); TEST_ASSERT_EQUAL(1u,seq_view(s).cycles_ok);
     TEST_ASSERT_EQUAL(9u,m.on_ch); TEST_ASSERT_EQUAL(9u,m.off_ch); TEST_ASSERT_EQUAL(9u,m.adc_ch);
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(&r,&out));
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(r,&out));
     TEST_ASSERT_EQUAL(0u,out.seq); TEST_ASSERT_EQUAL(1234u,out.raw);
     TEST_ASSERT_EQUAL(9u,out.channel); TEST_ASSERT_EQUAL(NN2_SAMPLE_SRC_FAKE,out.src);
     TEST_ASSERT_EQUAL_UINT64(10u,out.t_led_on_us); TEST_ASSERT_EQUAL_UINT64(93u,out.t_sample_us);
 }
 static void seq_optional_callbacks_zero_wait_and_null_contexts(void)
 {
-    nn2_core_ring_t r; nn2_app_sequencer_t s;
+    DECLARE_RING(r); DECLARE_SEQ(s);
     for (unsigned option=0;option<3u;++option) {
         memset(&null_context_model,0,sizeof(null_context_model));
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r));
-        nn2_app_seq_config_t c=config(NULL,&r);
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r_storage,&r));
+        nn2_app_seq_config_t c=config(NULL,r);
         if(option!=2u) c.log.write=NULL;
         if(option==0u) c.clock.delay_us=NULL;
         if(option==1u) c.settle_us=0u;
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_init(&s,&c));
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(&s));
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_init(&s_storage,&s,&c));
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(s));
         TEST_ASSERT_EQUAL(option==2u?1u:0u,null_context_model.delay);
         /* Optional logging is also safe on error. */
         null_context_model.adc_error=NN2_ERR_TIMEOUT;
-        TEST_ASSERT_EQUAL(NN2_ERR_TIMEOUT,nn2_app_sequencer_run_cycle(&s));
+        TEST_ASSERT_EQUAL(NN2_ERR_TIMEOUT,nn2_app_sequencer_run_cycle(s));
         TEST_ASSERT_EQUAL(option==2u?1u:0u,null_context_model.logs);
     }
 }
@@ -225,69 +231,71 @@ static void assert_fault_terminal(nn2_app_sequencer_t *s,model_t *m)
 static void seq_primary_errors_cleanup_retry_and_recovery(void)
 {
     for(unsigned phase=0;phase<3u;++phase) {
-        model_t m; nn2_core_ring_t r; nn2_app_sequencer_t s; nn2_core_sample_t out;
-        initialize(&m,&r,&s);
+        model_t m; DECLARE_RING(r); DECLARE_SEQ(s); nn2_core_sample_t out;
+        initialize(&m,&r_storage,&r,&s_storage,&s);
         if(phase==0u) m.on_error=NN2_ERR_TIMEOUT;
         if(phase==1u) m.adc_error=NN2_ERR_TIMEOUT;
         m.off_error=NN2_ERR_IO; m.fail_off_remaining=phase==2u?1u:3u;
-        TEST_ASSERT_EQUAL(phase==2u?NN2_ERR_IO:NN2_ERR_TIMEOUT,nn2_app_sequencer_run_cycle(&s));
-        TEST_ASSERT_EQUAL(phase==2u?NN2_ERR_IO:NN2_ERR_TIMEOUT,s.last_error);
-        TEST_ASSERT_EQUAL(phase==2u?0u:1u,s.off_failures);
+        TEST_ASSERT_EQUAL(phase==2u?NN2_ERR_IO:NN2_ERR_TIMEOUT,nn2_app_sequencer_run_cycle(s));
+        TEST_ASSERT_EQUAL(phase==2u?NN2_ERR_IO:NN2_ERR_TIMEOUT,seq_view(s).last_error);
+        TEST_ASSERT_EQUAL(phase==2u?0u:1u,seq_view(s).off_failures);
         TEST_ASSERT_EQUAL(phase==2u?2u:1u,m.off);
-        TEST_ASSERT_EQUAL(0u,r.count); TEST_ASSERT_EQUAL(0u,s.cycles_ok);
-        TEST_ASSERT_EQUAL(0u,s.next_seq); TEST_ASSERT_EQUAL(1u,s.faults);
-        assert_fault_terminal(&s,&m);
+        TEST_ASSERT_EQUAL(0u,ring_view(r).count); TEST_ASSERT_EQUAL(0u,seq_view(s).cycles_ok);
+        TEST_ASSERT_EQUAL(0u,seq_view(s).next_seq); TEST_ASSERT_EQUAL(1u,seq_view(s).faults);
+        assert_fault_terminal(s,&m);
         if(phase!=2u) {
             for(unsigned i=0;i<2u;++i) {
-                TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_app_sequencer_reset(&s));
-                TEST_ASSERT_EQUAL(NN2_ERR_IO,s.last_error);
-                assert_fault_terminal(&s,&m);
+                TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_app_sequencer_reset(s));
+                TEST_ASSERT_EQUAL(NN2_ERR_IO,seq_view(s).last_error);
+                assert_fault_terminal(s,&m);
             }
-            TEST_ASSERT_EQUAL(3u,s.off_failures); TEST_ASSERT_EQUAL(1u,s.faults);
+            TEST_ASSERT_EQUAL(3u,seq_view(s).off_failures); TEST_ASSERT_EQUAL(1u,seq_view(s).faults);
         }
         m.on_error=NN2_OK; m.adc_error=NN2_OK; m.raw=9999u;
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_reset(&s));
-        TEST_ASSERT_EQUAL(NN2_OK,s.last_error); TEST_ASSERT_EQUAL(NN2_APP_SEQ_IDLE,s.state);
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(&s));
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(&r,&out));
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_reset(s));
+        TEST_ASSERT_EQUAL(NN2_OK,seq_view(s).last_error); TEST_ASSERT_EQUAL(NN2_APP_SEQ_IDLE,seq_view(s).state);
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(s));
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(r,&out));
         TEST_ASSERT_EQUAL(9999u,out.raw); TEST_ASSERT_EQUAL(0u,out.seq);
-        TEST_ASSERT_EQUAL(0u,r.count); TEST_ASSERT_EQUAL(1u,s.cycles_ok);
-        TEST_ASSERT_EQUAL(1u,s.faults);
+        TEST_ASSERT_EQUAL(0u,ring_view(r).count); TEST_ASSERT_EQUAL(1u,seq_view(s).cycles_ok);
+        TEST_ASSERT_EQUAL(1u,seq_view(s).faults);
     }
 }
 static void seq_full_fifo_cycle_and_unsigned_overflow(void)
 {
-    model_t m; nn2_core_ring_t r; nn2_app_sequencer_t s; nn2_core_sample_t out;
-    initialize(&m,&r,&s);
+    model_t m; DECLARE_RING(r); DECLARE_SEQ(s); nn2_core_sample_t out;
+    initialize(&m,&r_storage,&r,&s_storage,&s);
     for(unsigned i=0;i<NN2_CORE_RING_CAPACITY+3u;++i)
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(&s));
-    TEST_ASSERT_EQUAL(NN2_CORE_RING_CAPACITY,r.count); TEST_ASSERT_EQUAL(3u,r.dropped);
-    TEST_ASSERT_EQUAL(NN2_CORE_RING_CAPACITY+3u,s.cycles_ok); TEST_ASSERT_EQUAL(0u,s.faults);
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(s));
+    TEST_ASSERT_EQUAL(NN2_CORE_RING_CAPACITY,ring_view(r).count); TEST_ASSERT_EQUAL(3u,ring_view(r).dropped);
+    TEST_ASSERT_EQUAL(NN2_CORE_RING_CAPACITY+3u,seq_view(s).cycles_ok); TEST_ASSERT_EQUAL(0u,seq_view(s).faults);
     for(unsigned i=0;i<NN2_CORE_RING_CAPACITY;++i) {
-        TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(&r,&out));
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(r,&out));
         TEST_ASSERT_EQUAL(i,out.seq); TEST_ASSERT_EQUAL(1234u+i,out.raw);
         TEST_ASSERT_EQUAL_UINT64(10u+93u*i,out.t_led_on_us);
         TEST_ASSERT_EQUAL_UINT64(93u+93u*i,out.t_sample_us);
     }
-    s.next_seq=UINT32_MAX; s.cycles_ok=UINT32_MAX;
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(&s));
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(&r,&out));
+    nn2_app_seq_internal_t boundary=seq_view(s);
+    boundary.next_seq=UINT32_MAX; boundary.cycles_ok=UINT32_MAX;
+    nn2_app_seq_save(s,&boundary);
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(s));
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_pop(r,&out));
     TEST_ASSERT_EQUAL_UINT32(UINT32_MAX,out.seq);
-    TEST_ASSERT_EQUAL(0u,s.next_seq); TEST_ASSERT_EQUAL(0u,s.cycles_ok);
+    TEST_ASSERT_EQUAL(0u,seq_view(s).next_seq); TEST_ASSERT_EQUAL(0u,seq_view(s).cycles_ok);
 }
 static void seq_init_copies_config_and_reinit_at_quiescence(void)
 {
-    model_t m={0}; nn2_core_ring_t r; nn2_app_sequencer_t s;
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r));
-    nn2_app_seq_config_t c=config(&m,&r);
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_init(&s,&c));
+    model_t m={0}; DECLARE_RING(r); DECLARE_SEQ(s);
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_core_ring_init(&r_storage,&r));
+    nn2_app_seq_config_t c=config(&m,r);
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_init(&s_storage,&s,&c));
     c.channel=77u; c.led.on=NULL;
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(&s));
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_run_cycle(s));
     TEST_ASSERT_EQUAL(9u,m.on_ch);
-    c=config(&m,&r);
-    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_init(&s,&c));
-    TEST_ASSERT_EQUAL(0u,s.cycles_ok); TEST_ASSERT_EQUAL(0u,s.next_seq);
-    TEST_ASSERT_EQUAL(1u,r.count); /* Ring lifetime is independent. */
+    c=config(&m,r);
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_app_sequencer_init(&s_storage,&s,&c));
+    TEST_ASSERT_EQUAL(0u,seq_view(s).cycles_ok); TEST_ASSERT_EQUAL(0u,seq_view(s).next_seq);
+    TEST_ASSERT_EQUAL(1u,ring_view(r).count); /* Ring lifetime is independent. */
 }
 void test_contract_suite(void)
 {

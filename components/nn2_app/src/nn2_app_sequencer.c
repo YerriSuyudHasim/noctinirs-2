@@ -1,14 +1,14 @@
-#include "nn2_app_sequencer.h"
+#include "nn2_app_sequencer_internal.h"
 #include <string.h>
 
-static void seq_log(const nn2_app_sequencer_t *seq, nn2_log_level_t lvl, const char *msg)
+static void seq_log(const nn2_app_seq_internal_t *seq, nn2_log_level_t lvl, const char *msg)
 {
     if (seq->cfg.log.write != NULL) {
         seq->cfg.log.write(seq->cfg.log.ctx, lvl, msg);
     }
 }
 
-static nn2_status_t seq_fault(nn2_app_sequencer_t *seq, nn2_status_t err, const char *msg)
+static nn2_status_t seq_fault(nn2_app_seq_internal_t *seq, nn2_status_t err, const char *msg)
 {
     /* Fail-safe: request LED off on every error exit. The original error is
      * returned; a failed off() is additionally logged and counted. The
@@ -25,20 +25,7 @@ static nn2_status_t seq_fault(nn2_app_sequencer_t *seq, nn2_status_t err, const 
     return err;
 }
 
-nn2_status_t nn2_app_sequencer_init(nn2_app_sequencer_t *seq, const nn2_app_seq_config_t *cfg)
-{
-    if (seq == NULL || cfg == NULL || cfg->ring == NULL || cfg->led.on == NULL ||
-        cfg->led.off == NULL || cfg->adc.read == NULL || cfg->clock.now_us == NULL) {
-        return NN2_ERR_INVALID_ARG;
-    }
-    memset(seq, 0, sizeof(*seq));
-    seq->cfg = *cfg;
-    seq->state = NN2_APP_SEQ_IDLE;
-    seq->last_error = NN2_OK;
-    return NN2_OK;
-}
-
-nn2_status_t nn2_app_sequencer_step(nn2_app_sequencer_t *seq)
+static nn2_status_t seq_step(nn2_app_seq_internal_t *seq)
 {
     nn2_status_t st;
     if (seq == NULL) {
@@ -98,7 +85,7 @@ nn2_status_t nn2_app_sequencer_step(nn2_app_sequencer_t *seq)
     }
 }
 
-nn2_status_t nn2_app_sequencer_run_cycle(nn2_app_sequencer_t *seq)
+static nn2_status_t seq_run_cycle(nn2_app_seq_internal_t *seq)
 {
     if (seq == NULL) {
         return NN2_ERR_INVALID_ARG;
@@ -107,7 +94,7 @@ nn2_status_t nn2_app_sequencer_run_cycle(nn2_app_sequencer_t *seq)
         return NN2_ERR_INVALID_STATE;
     }
     do {
-        nn2_status_t st = nn2_app_sequencer_step(seq);
+        nn2_status_t st = seq_step(seq);
         if (st != NN2_OK) {
             return st;
         }
@@ -115,7 +102,7 @@ nn2_status_t nn2_app_sequencer_run_cycle(nn2_app_sequencer_t *seq)
     return NN2_OK;
 }
 
-nn2_status_t nn2_app_sequencer_reset(nn2_app_sequencer_t *seq)
+static nn2_status_t seq_reset(nn2_app_seq_internal_t *seq)
 {
     if (seq == NULL) {
         return NN2_ERR_INVALID_ARG;
@@ -135,9 +122,72 @@ nn2_status_t nn2_app_sequencer_reset(nn2_app_sequencer_t *seq)
     return NN2_OK;
 }
 
+nn2_status_t nn2_app_sequencer_init(nn2_app_seq_storage_t *storage,
+    nn2_app_sequencer_t **out, const nn2_app_seq_config_t *cfg)
+{
+    if (storage == NULL || out == NULL || cfg == NULL || cfg->ring == NULL ||
+        cfg->led.on == NULL || cfg->led.off == NULL || cfg->adc.read == NULL ||
+        cfg->clock.now_us == NULL) return NN2_ERR_INVALID_ARG;
+    nn2_app_seq_internal_t state = {0};
+    state.cfg = *cfg;
+    state.state = NN2_APP_SEQ_IDLE;
+    state.last_error = NN2_OK;
+    nn2_app_sequencer_t *handle = (nn2_app_sequencer_t *)(void *)storage;
+    memset(storage->opaque, 0, sizeof(storage->opaque));
+    nn2_app_seq_save(handle, &state);
+    *out = handle;
+    return NN2_OK;
+}
+
+nn2_status_t nn2_app_sequencer_step(nn2_app_sequencer_t *seq)
+{
+    if (seq == NULL) return NN2_ERR_INVALID_ARG;
+    nn2_app_seq_internal_t state;
+    nn2_app_seq_load(seq, &state);
+    nn2_status_t status = seq_step(&state);
+    nn2_app_seq_save(seq, &state);
+    return status;
+}
+
+nn2_status_t nn2_app_sequencer_run_cycle(nn2_app_sequencer_t *seq)
+{
+    if (seq == NULL) return NN2_ERR_INVALID_ARG;
+    nn2_app_seq_internal_t state;
+    nn2_app_seq_load(seq, &state);
+    nn2_status_t status = seq_run_cycle(&state);
+    nn2_app_seq_save(seq, &state);
+    return status;
+}
+
+nn2_status_t nn2_app_sequencer_reset(nn2_app_sequencer_t *seq)
+{
+    if (seq == NULL) return NN2_ERR_INVALID_ARG;
+    nn2_app_seq_internal_t state;
+    nn2_app_seq_load(seq, &state);
+    nn2_status_t status = seq_reset(&state);
+    nn2_app_seq_save(seq, &state);
+    return status;
+}
+
+nn2_status_t nn2_app_sequencer_observe(const nn2_app_sequencer_t *seq,
+    nn2_app_seq_observation_t *out)
+{
+    if (seq == NULL || out == NULL) return NN2_ERR_INVALID_ARG;
+    nn2_app_seq_internal_t state;
+    nn2_app_seq_load(seq, &state);
+    nn2_app_seq_observation_t observation = { .state=state.state, .next_seq=state.next_seq,
+        .cycles_ok=state.cycles_ok, .faults=state.faults, .off_failures=state.off_failures,
+        .last_error=state.last_error };
+    *out = observation;
+    return NN2_OK;
+}
+
 nn2_app_seq_state_t nn2_app_sequencer_state(const nn2_app_sequencer_t *seq)
 {
-    return (seq == NULL) ? NN2_APP_SEQ_FAULT : seq->state;
+    if (seq == NULL) return NN2_APP_SEQ_FAULT;
+    nn2_app_seq_internal_t state;
+    nn2_app_seq_load(seq, &state);
+    return state.state;
 }
 
 const char *nn2_app_seq_state_str(nn2_app_seq_state_t state)

@@ -1,6 +1,6 @@
 /* Concrete API contract: docs/ISSUE13_COMPONENT_CONTRACT.md.
  * Caller-owned typed storage, exclusive task context, no ISR/reentry.
- * Public state is observational; opaque-handle assessment remains pending. */
+ * Value/port contracts are separate from opaque operational module handles. */
 /* Clock / timebase port (ADR-0001 3.6 "clock").
  * now_us(): monotonic 64-bit microseconds, any task context, nonblocking.
  * delay_us(): busy/short wait, task context only; may be NULL (no settle delay).

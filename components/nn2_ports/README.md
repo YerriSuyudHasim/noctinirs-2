@@ -11,4 +11,4 @@ Header-only port contracts (ADR-0001 3.4/3.6): each port is a struct of function
 
 Timing figures in headers are expectations to be measured (Class H), not guarantees. Status: DRAFT (M1).
 
-Concrete ownership, lifecycle, statuses, overflow, timing and acceptance gates: [Issue #13 contract](../../docs/ISSUE13_COMPONENT_CONTRACT.md). Public-struct representation requires explicit Architect assessment against ADR-0001; no exception is self-approved.
+Concrete ownership, lifecycle, statuses, overflow, timing and acceptance gates: [Issue #13 contract](../../docs/ISSUE13_COMPONENT_CONTRACT.md). Opaque caller storage uses typed memcpy snapshots; bounded Architect/RTOS delta review remains required, with no author self-approval.

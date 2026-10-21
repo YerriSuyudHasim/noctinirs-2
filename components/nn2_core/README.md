@@ -7,4 +7,4 @@ Pure C11 domain types and algorithms (ADR-0001 3.1). No ESP-IDF/FreeRTOS include
 
 Status: DRAFT (M1). Host tests: `test/host`.
 
-Concrete ownership, lifecycle, statuses, overflow, timing and acceptance gates: [Issue #13 contract](../../docs/ISSUE13_COMPONENT_CONTRACT.md). Public-struct representation requires explicit Architect assessment against ADR-0001; no exception is self-approved.
+Concrete ownership, lifecycle, statuses, overflow, timing and acceptance gates: [Issue #13 contract](../../docs/ISSUE13_COMPONENT_CONTRACT.md). Opaque caller storage uses typed memcpy snapshots; bounded Architect/RTOS delta review remains required, with no author self-approval.

@@ -7,6 +7,7 @@ int main(void)
     test_ring_suite();
     test_sequencer_suite();
     test_contract_suite();
+    test_storage_suite();
     int result = UNITY_END();
     return (Unity.NumberOfTests > 0u && Unity.TestIgnores == 0u && result == 0) ? 0 : 1;
 }

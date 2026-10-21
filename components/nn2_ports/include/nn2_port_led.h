@@ -1,6 +1,6 @@
 /* Concrete API contract: docs/ISSUE13_COMPONENT_CONTRACT.md.
  * Caller-owned typed storage, exclusive task context, no ISR/reentry.
- * Public state is observational; opaque-handle assessment remains pending. */
+ * Value/port contracts are separate from opaque operational module handles. */
 /* LED / emitter port (ADR-0001 3.6 "emitter").
  * Caller context: task only (not ISR). Nonblocking. Not reentrant per instance.
  * Fail-safe: implementations must treat off() as always safe to call, including

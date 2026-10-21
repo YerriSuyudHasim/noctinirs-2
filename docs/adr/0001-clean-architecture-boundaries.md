@@ -5,7 +5,7 @@
 | ID | ADR-0001 |
 | Title | Clean architecture layer boundaries (Core / Application / Ports / Adapters) |
 | Status | **Accepted** (bounded static architecture framework; not product implementation approval) |
-| Date | 2026-10-18 (Owner decision; recorded 2026-10-19, rev 4) |
+| Date | 2026-10-21 (A2 Owner clarification record, rev 5; original bounded acceptance 2026-10-18) |
 | Issue | #3 (M0.3 — Clean Architecture ADR) |
 | Author role | Architect (draft) |
 | Independent reviewer | Group 2 Independent Technical Reviewer; separately attributed reports linked in Section 0 (not the implementation author) |
@@ -200,6 +200,45 @@ Short examples:
 - ✘ `nn2_app_session.c` calls `xQueueSend`. Queueing belongs to an Adapter behind a port.
 - ✔ `nn2_adapter_adc_esp.c` includes `driver/spi_master.h` and implements `nn2_port_adc`.
 
+### Bounded A2 Owner decision: pinned standard-library implementation chain
+
+The [actual Human Owner A2 decision](https://github.com/YerriSuyudHasim/noctinirs-2/pull/15#issuecomment-6306981230) (2026-10-21) clarifies §§3.3/3.10 solely for the Issue #13 / PR #15
+0.1.x ring/sequencer slice on ESP32-S3, ESP-IDF v6.1 commit
+`fff9895c82d744c7237be8847347bdd1b07c6643`, Xtensa GCC
+`esp-15.2.0_20251204` and image
+`espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c`.
+Permitted C standard headers may transitively reach the unmodified
+`components/esp_libc/platform_include/sys/cdefs.h` shim and generated `sdkconfig.h`
+**solely for standard-library implementation configuration**. The assessed chain,
+including `<stdint.h>`, is retained in [baseline exact-source target evidence](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39531735121/artifacts/12315877257).
+Reviewed shim SHA-256: `45151a90d09f8e7d6b8acab050f2e15686e7fdca70d29b298df88af16d4d884a`.
+
+All decision conditions remain binding:
+
+- Product-owned inner source/headers must not include SDK configuration/platform
+  headers, reference CONFIG_* symbols, select conditional SDK fallbacks, depend
+  on framework/RTOS/driver APIs or adopt generated inner headers.
+- SDK-free isolated host compilation, strict C11 guard/enforcement, independent
+  header probes and complete host/target dependencies, commands, search roots,
+  environment and configuration evidence remain required. Broad IDF-inherited
+  target roots are not target isolation.
+- No fake/shadow standard headers, altered SDK shim, hidden dependency evidence,
+  weakened scanner/manifest/C11/build control or warning suppression is allowed.
+- Only this identified standard-library chain, slice and pinned build are covered.
+  SDK/toolchain/configuration changes, changed shim bytes or additional resolved
+  platform headers require fresh Architect/Verifier assessment and any additional
+  policy-required decision; future modules inherit no automatic waiver.
+- R1/R2 retain their original conditions. No blanket transitive exception or
+  timing/runtime/hardware/safety/clinical approval follows.
+
+A1 still requires conforming opaque operational state with valid C11 caller storage,
+alignment/effective type/lifetime and no heap; the proposed public-state exception
+was rejected. D1 requires conditional/unmeasured blocking wording. This reviewable
+source record is **not independently accepted merely because the design decision
+exists**. Historical findings/evidence remain; changed candidates require fresh
+applicable exact-head checks and non-author review. N5/deadline and separate
+settings/ready/merge/issue/deletion/release/hardware/automation authority are unchanged.
+
 ### 3.4 C11 conventions
 
 | Topic | Rule (accepted static framework) |
@@ -303,10 +342,16 @@ The Verifier owns mechanical evidence; the Architect owns dependency interpretat
 | Literal direct includes | The integrated Python scanner performs PR #38's lexical/path normalization and derives inward edges and forbidden patterns from the canonical manifest. It is not a full preprocessor. | Verifier runs the exact-head gate/fixtures; Reviewer compares supported patterns with Section 3.3. Conservative scanning can flag inactive preprocessor branches (false positives); rewrite or request a reviewed exception, never bypass CI. |
 | Macro-expanded includes (G3), macro-built platform calls | No expansion guarantee; a literal scan can miss them (false negatives). | Firmware/Verifier compile all inner source and public headers on host with only permitted include roots; exercise configuration branches. Reviewer inspects macros and call targets. Disabled/unbuilt branches remain manual risk. |
 | `__has_include` | May hide an outward include or select a fallback that makes an isolated host build pass. No Class S guarantee. | Reviewer inspects every conditional include/probe and supported configuration; Verifier builds both relevant branches where executable. Conditional platform dependencies in inner layers are forbidden, even if absent on host. |
-| Generated headers (G5) | Scanner sees only files present when run; generation can occur later. | Generated headers in inner layers are unsupported by default. Firmware must propose an ADR exception identifying generator, reproducibility, output roots, provenance and post-generation scan/build before adoption. `sdkconfig.h` remains forbidden. |
+| Generated headers (G5) | Scanner sees only files present when run; generation can occur later. | Generated headers in inner layers are unsupported by default. Firmware must propose an ADR exception identifying generator, reproducibility, output roots, provenance and post-generation scan/build before adoption. Product-owned `sdkconfig.h` dependencies remain forbidden; the sole pinned standard-library implementation chain is distinguished by the bounded A2 Owner decision above. |
 | Transitive includes (G4) | Direct scan does not compute a transitive graph. PR #38's explicit REQUIRES audit checks declared component names only. | Verifier's future product host build must use restricted include roots and retain compiler `-M`/dependency output including system headers (`-MM` alone can omit `-isystem` headers). Class B compile commands/dependency files are reviewed against allowed roots. Link symbols/callback targets remain manual architecture review. |
 | Include directories / search order | A legal header name can resolve to an unintended platform/header shadow. | Firmware records compiler, working directory, `-I`, `-isystem`, `-iquote`, forced includes, sysroot and environment (`CPATH` etc.). Verifier retains compile commands and resolved dependencies; Reviewer checks provenance/search order, system-header classification and mocks. Host isolation is complementary, not proof across target configurations. |
 | Build-generated/implicit dependencies | Textual CMake audit cannot evaluate arbitrary toolchain files, target mutations, Component Manager or build graph generators. PR #38 deliberately rejects unsupported component syntax. | Reviewer audits root/toolchain/build changes and generated dependency graph. Verifier performs clean host/target builds of supported configurations and retains generated evidence; new dynamic mechanisms require a reviewed contract extension. |
+
+The bounded A2 decision does not remove the standard-header/transitive review obligation.
+The literal scanner remains unchanged: product includes of `sdkconfig.h` still fail;
+only the identified libc implementation chain is conditionally permitted. Each new
+candidate must retain its complete target graph and check that no additional platform
+header or product CONFIG_* dependence has appeared.
 
 **What is executed now:** Class S enforcement is preserved through canonical policy acquisition; manifest/detection regressions, synthetic C11 host/target checks and actual IDF fixture are automated. **What is required when product layers land:** isolated host build of all inner TUs/headers, retained full compiler dependencies and compile-command review, branch/configuration coverage and port acceptance tests. No product dependency-graph checker or host unit suite is introduced here. **Deferred/unsupported:** comprehensive preprocessor/CMake interpretation, exhaustive feature-branch expansion and automated link/callback reachability. Residual risk is explicit manual architecture review until a separately reviewed implementation closes it. Class S success alone cannot close G3/G4/G5 or prove absence of transitive/platform dependencies.
 

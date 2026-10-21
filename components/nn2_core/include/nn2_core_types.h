@@ -1,6 +1,6 @@
 /* Concrete API contract: docs/ISSUE13_COMPONENT_CONTRACT.md.
  * Caller-owned typed storage, exclusive task context, no ISR/reentry.
- * Public state is observational; opaque-handle assessment remains pending. */
+ * Value/port contracts are separate from opaque operational module handles. */
 /* NoctiNIRS 2 Core types (ADR-0001 Core layer). Pure C11, no platform headers. */
 #ifndef NN2_CORE_TYPES_H
 #define NN2_CORE_TYPES_H

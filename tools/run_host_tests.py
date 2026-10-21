@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 
@@ -31,7 +32,7 @@ def execute(root, build, evidence):
     evidence.mkdir(parents=True, exist_ok=True)
     if build.exists():
         raise RuntimeError('Use a new clean build location: ' + str(build))
-    if run(['cmake', '-S', str(root / 'test/host'), '-B', str(build), '-G', 'Ninja'], root,
+    if run(['cmake', '-S', str(root / 'test/host'), '-B', str(build), '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release'], root,
            evidence / 'configure.log'):
         raise RuntimeError('Host configure failed')
     if run(['cmake', '--build', str(build), '--verbose'], root, evidence / 'build.log'):
@@ -45,6 +46,39 @@ def execute(root, build, evidence):
               'result': 'PASS' if rc == 0 and valid else 'FAIL'}
     (evidence / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
     return result
+
+
+def check_public_opacity(build, evidence):
+    """Use the actual isolated product command: public fields must not compile."""
+    commands = json.loads((build / 'compile_commands.json').read_text())
+    entry = next(c for c in commands if c['file'].endswith('/nn2_core_ring.c'))
+    original = entry.get('arguments') or shlex.split(entry['command'])
+    base = []
+    skip = False
+    for token in original:
+        if skip:
+            skip = False
+        elif token in ('-o', '-MF', '-MT', '-MQ'):
+            skip = True
+        elif token not in ('-c', '-MD', '-MMD', '-MP', entry['file']):
+            base.append(token)
+    cases = {
+        'public-control': ('#include "nn2_core_ring.h"\n#include "nn2_app_sequencer.h"\n'
+                           'int control(nn2_core_ring_t *r, nn2_app_sequencer_t *s) { return r != 0 && s != 0; }\n', True),
+        'ring-incomplete': ('#include "nn2_core_ring.h"\nint invalid(nn2_core_ring_t *r) { return (int)r->count; }\n', False),
+        'seq-incomplete': ('#include "nn2_app_sequencer.h"\nint invalid(nn2_app_sequencer_t *s) { return s->cfg.channel; }\n', False),
+    }
+    results = {}
+    for name, (source, should_compile) in cases.items():
+        path = evidence / (name + '.c')
+        path.write_text(source)
+        rc = run(base + ['-fsyntax-only', str(path)], Path(entry['directory']), evidence / (name + '.log'))
+        if (rc == 0) != should_compile:
+            raise RuntimeError('Public opacity probe unexpected result: ' + name)
+        if not should_compile and 'incomplete' not in (evidence / (name + '.log')).read_text().lower():
+            raise RuntimeError('Opacity probe failed for an unrelated reason: ' + name)
+        results[name] = {'process_exit': rc, 'expected_compile': should_compile}
+    (evidence / 'public-opacity.json').write_text(json.dumps(results, indent=2) + '\n')
 
 
 def main():
@@ -70,6 +104,7 @@ def main():
     result = execute(ROOT, build, evidence)
     if result['result'] != 'PASS':
         return 1
+    check_public_opacity(build, evidence)
     if args.failure_controls:
         controls = {}
         for kind in ('assertion-failure', 'zero-tests'):
@@ -80,14 +115,14 @@ def main():
             if kind == 'assertion-failure':
                 path = isolated / 'test/host/test_ring.c'
                 source = path.read_text()
-                old = 'nn2_core_ring_init(&r) == NN2_OK'
+                old = 'nn2_core_ring_init(&r_storage, &r) == NN2_OK'
                 if old not in source:
                     raise RuntimeError('Failure control anchor missing')
-                path.write_text(source.replace(old, 'nn2_core_ring_init(&r) == NN2_ERR_IO', 1))
+                path.write_text(source.replace(old, 'nn2_core_ring_init(&r_storage, &r) == NN2_ERR_IO', 1))
             else:
                 path = isolated / 'test/host/test_main.c'
                 source = path.read_text()
-                for suite in ('ring', 'sequencer', 'contract'):
+                for suite in ('ring', 'sequencer', 'contract', 'storage'):
                     source = source.replace('    test_' + suite + '_suite();', '')
                 path.write_text(source)
             control = execute(isolated, evidence / kind / 'build', evidence / kind)
