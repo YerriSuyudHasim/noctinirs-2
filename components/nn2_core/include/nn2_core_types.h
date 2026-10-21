@@ -1,3 +1,6 @@
+/* Concrete API contract: docs/ISSUE13_COMPONENT_CONTRACT.md.
+ * Caller-owned typed storage, exclusive task context, no ISR/reentry.
+ * Public state is observational; opaque-handle assessment remains pending. */
 /* NoctiNIRS 2 Core types (ADR-0001 Core layer). Pure C11, no platform headers. */
 #ifndef NN2_CORE_TYPES_H
 #define NN2_CORE_TYPES_H
@@ -39,11 +42,11 @@ typedef enum {
 
 /** One raw acquisition record. Values are raw counts; no physical/clinical meaning. */
 typedef struct {
-    uint32_t seq;          /**< monotonically increasing cycle number */
+    uint32_t seq;          /**< cycle number, wraps modulo 2^32 */
     uint8_t  channel;      /**< logical emitter/ADC channel index */
     uint32_t raw;          /**< raw ADC counts as delivered by the adc port */
-    uint64_t t_led_on_us;  /**< timebase value when emitter was switched on */
-    uint64_t t_sample_us;  /**< timebase value when sample was taken */
+    uint64_t t_led_on_us;  /**< timebase after on() returned OK, not a physical edge */
+    uint64_t t_sample_us;  /**< timebase after read() returned OK, not conversion edge */
     nn2_sample_src_t src;  /**< provenance of raw; copied from the adc port */
 } nn2_core_sample_t;
 

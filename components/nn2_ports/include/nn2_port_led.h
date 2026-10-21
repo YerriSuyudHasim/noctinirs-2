@@ -1,7 +1,11 @@
+/* Concrete API contract: docs/ISSUE13_COMPONENT_CONTRACT.md.
+ * Caller-owned typed storage, exclusive task context, no ISR/reentry.
+ * Public state is observational; opaque-handle assessment remains pending. */
 /* LED / emitter port (ADR-0001 3.6 "emitter").
  * Caller context: task only (not ISR). Nonblocking. Not reentrant per instance.
  * Fail-safe: implementations must treat off() as always safe to call, including
  * after a failed on(). Drive limits/pins are adapter configuration, never Core/App.
+ * off() success alone never proves a physical safe state.
  * Timing expectation (to be measured, not guaranteed): on()/off() return < 50 us. */
 #ifndef NN2_PORT_LED_H
 #define NN2_PORT_LED_H

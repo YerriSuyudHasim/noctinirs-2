@@ -56,37 +56,37 @@ static void seq_init_rejects_missing_ports(void)
     nn2_app_sequencer_t s;
     nn2_app_seq_config_t cfg;
     memset(&cfg, 0, sizeof(cfg));
-    NN2_CHECK(nn2_app_sequencer_init(&s, &cfg) == NN2_ERR_INVALID_ARG);
-    NN2_CHECK(nn2_app_sequencer_init(NULL, &cfg) == NN2_ERR_INVALID_ARG);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_init(&s, &cfg) == NN2_ERR_INVALID_ARG);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_init(NULL, &cfg) == NN2_ERR_INVALID_ARG);
 }
 
 static void seq_step_order(void)
 {
     mock_t m; nn2_app_sequencer_t s; setup(&m, &s);
-    NN2_CHECK(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_IDLE);
-    NN2_CHECK(nn2_app_sequencer_step(&s) == NN2_OK);
-    NN2_CHECK(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_LED_ON);
-    NN2_CHECK(nn2_app_sequencer_step(&s) == NN2_OK);
-    NN2_CHECK(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_SAMPLE);
-    NN2_CHECK(nn2_app_sequencer_step(&s) == NN2_OK);
-    NN2_CHECK(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_LED_OFF);
-    NN2_CHECK(nn2_app_sequencer_step(&s) == NN2_OK);
-    NN2_CHECK(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_IDLE);
-    NN2_CHECK(strcmp(m.trace, "NDAF") == 0);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_IDLE);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_step(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_LED_ON);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_step(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_SAMPLE);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_step(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_LED_OFF);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_step(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_IDLE);
+    TEST_ASSERT_TRUE(strcmp(m.trace, "NDAF") == 0);
 }
 
 static void seq_cycles_produce_samples(void)
 {
     mock_t m; nn2_app_sequencer_t s; nn2_core_sample_t out; setup(&m, &s);
-    for (int i = 0; i < 3; i++) NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
-    NN2_CHECK(s.cycles_ok == 3u);
-    NN2_CHECK(nn2_core_ring_count(&g_ring) == 3u);
-    NN2_CHECK(m.led_lit == 0);
+    for (int i = 0; i < 3; i++) TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(s.cycles_ok == 3u);
+    TEST_ASSERT_TRUE(nn2_core_ring_count(&g_ring) == 3u);
+    TEST_ASSERT_TRUE(m.led_lit == 0);
     for (uint32_t i = 0; i < 3u; i++) {
-        NN2_CHECK(nn2_core_ring_pop(&g_ring, &out) == NN2_OK);
-        NN2_CHECK(out.seq == i);
-        NN2_CHECK(out.raw == 100u + i);
-        NN2_CHECK(out.t_sample_us >= out.t_led_on_us + 500u);
+        TEST_ASSERT_TRUE(nn2_core_ring_pop(&g_ring, &out) == NN2_OK);
+        TEST_ASSERT_TRUE(out.seq == i);
+        TEST_ASSERT_TRUE(out.raw == 100u + i);
+        TEST_ASSERT_TRUE(out.t_sample_us >= out.t_led_on_us + 500u);
     }
 }
 
@@ -94,117 +94,117 @@ static void seq_adc_fail_turns_led_off(void)
 {
     mock_t m; nn2_app_sequencer_t s; setup(&m, &s);
     m.fail_adc = NN2_ERR_IO;
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
-    NN2_CHECK(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_FAULT);
-    NN2_CHECK(m.led_lit == 0);
-    NN2_CHECK(m.led_off == 1);
-    NN2_CHECK(s.faults == 1u);
-    NN2_CHECK(m.logs >= 1);
-    NN2_CHECK(nn2_core_ring_count(&g_ring) == 0u);
-    NN2_CHECK(nn2_app_sequencer_step(&s) == NN2_ERR_INVALID_STATE);
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_INVALID_STATE);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_FAULT);
+    TEST_ASSERT_TRUE(m.led_lit == 0);
+    TEST_ASSERT_TRUE(m.led_off == 1);
+    TEST_ASSERT_TRUE(s.faults == 1u);
+    TEST_ASSERT_TRUE(m.logs >= 1);
+    TEST_ASSERT_TRUE(nn2_core_ring_count(&g_ring) == 0u);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_step(&s) == NN2_ERR_INVALID_STATE);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_INVALID_STATE);
 }
 
 static void seq_led_on_fail_and_reset(void)
 {
     mock_t m; nn2_app_sequencer_t s; setup(&m, &s);
     m.fail_on = NN2_ERR_IO;
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
-    NN2_CHECK(m.led_off == 1);
-    NN2_CHECK(m.adc_reads == 0);
-    NN2_CHECK(m.led_lit == 0);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
+    TEST_ASSERT_TRUE(m.led_off == 1);
+    TEST_ASSERT_TRUE(m.adc_reads == 0);
+    TEST_ASSERT_TRUE(m.led_lit == 0);
     m.fail_on = NN2_OK;
-    NN2_CHECK(nn2_app_sequencer_reset(&s) == NN2_OK);
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
-    NN2_CHECK(nn2_core_ring_count(&g_ring) == 1u);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_reset(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(nn2_core_ring_count(&g_ring) == 1u);
 }
 
 static void seq_led_off_fail_is_fault(void)
 {
     mock_t m; nn2_app_sequencer_t s; setup(&m, &s);
     m.fail_off = NN2_ERR_IO;
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
-    NN2_CHECK(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_FAULT);
-    NN2_CHECK(nn2_core_ring_count(&g_ring) == 0u);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_FAULT);
+    TEST_ASSERT_TRUE(nn2_core_ring_count(&g_ring) == 0u);
     /* step-off failed + fail-safe retry failed: exactly 2 off() calls, LED still lit */
-    NN2_CHECK(m.led_off == 2);
-    NN2_CHECK(m.led_lit == 1);
-    NN2_CHECK(s.off_failures == 1u);
+    TEST_ASSERT_TRUE(m.led_off == 2);
+    TEST_ASSERT_TRUE(m.led_lit == 1);
+    TEST_ASSERT_TRUE(s.off_failures == 1u);
 }
 
 static void seq_reset_after_failed_off_stays_fault(void)
 {
     mock_t m; nn2_app_sequencer_t s; setup(&m, &s);
     m.fail_off = NN2_ERR_IO;
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
-    NN2_CHECK(nn2_app_sequencer_reset(&s) == NN2_ERR_IO);
-    NN2_CHECK(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_FAULT);
-    NN2_CHECK(s.last_error == NN2_ERR_IO);
-    NN2_CHECK(m.led_off == 3);
-    NN2_CHECK(m.led_lit == 1);
-    NN2_CHECK(m.led_on == 1); /* no further on() while in FAULT */
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_INVALID_STATE);
-    NN2_CHECK(m.led_on == 1);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_reset(&s) == NN2_ERR_IO);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_FAULT);
+    TEST_ASSERT_TRUE(s.last_error == NN2_ERR_IO);
+    TEST_ASSERT_TRUE(m.led_off == 3);
+    TEST_ASSERT_TRUE(m.led_lit == 1);
+    TEST_ASSERT_TRUE(m.led_on == 1); /* no further on() while in FAULT */
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_INVALID_STATE);
+    TEST_ASSERT_TRUE(m.led_on == 1);
 }
 
 static void seq_reset_success_clears_last_error(void)
 {
     mock_t m; nn2_app_sequencer_t s; setup(&m, &s);
     m.fail_adc = NN2_ERR_IO;
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
-    NN2_CHECK(s.last_error == NN2_ERR_IO);
-    NN2_CHECK(m.led_off == 1);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_ERR_IO);
+    TEST_ASSERT_TRUE(s.last_error == NN2_ERR_IO);
+    TEST_ASSERT_TRUE(m.led_off == 1);
     m.fail_adc = NN2_OK;
-    NN2_CHECK(nn2_app_sequencer_reset(&s) == NN2_OK);
-    NN2_CHECK(m.led_off == 2);
-    NN2_CHECK(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_IDLE);
-    NN2_CHECK(s.last_error == NN2_OK);
-    NN2_CHECK(m.led_lit == 0);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_reset(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(m.led_off == 2);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_state(&s) == NN2_APP_SEQ_IDLE);
+    TEST_ASSERT_TRUE(s.last_error == NN2_OK);
+    TEST_ASSERT_TRUE(m.led_lit == 0);
 }
 
 static void seq_sample_carries_fake_provenance(void)
 {
     mock_t m; nn2_app_sequencer_t s; nn2_core_sample_t out; setup(&m, &s);
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
-    NN2_CHECK(nn2_core_ring_pop(&g_ring, &out) == NN2_OK);
-    NN2_CHECK(out.src == NN2_SAMPLE_SRC_FAKE);
-    NN2_CHECK(nn2_core_sample_src_str(out.src)[0] == 'F');
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(nn2_core_ring_pop(&g_ring, &out) == NN2_OK);
+    TEST_ASSERT_TRUE(out.src == NN2_SAMPLE_SRC_FAKE);
+    TEST_ASSERT_TRUE(nn2_core_sample_src_str(out.src)[0] == 'F');
 }
 
 static void seq_zero_init_provenance_is_unknown(void)
 {
     nn2_core_sample_t z; nn2_port_adc_t a;
     memset(&z, 0, sizeof(z)); memset(&a, 0, sizeof(a));
-    NN2_CHECK(z.src == NN2_SAMPLE_SRC_UNKNOWN);
-    NN2_CHECK(a.source == NN2_SAMPLE_SRC_UNKNOWN);
-    NN2_CHECK(NN2_SAMPLE_SRC_UNKNOWN == 0);
+    TEST_ASSERT_TRUE(z.src == NN2_SAMPLE_SRC_UNKNOWN);
+    TEST_ASSERT_TRUE(a.source == NN2_SAMPLE_SRC_UNKNOWN);
+    TEST_ASSERT_TRUE(NN2_SAMPLE_SRC_UNKNOWN == 0);
     mock_t m; nn2_app_sequencer_t s; nn2_core_sample_t out; setup(&m, &s);
     s.cfg.adc.source = NN2_SAMPLE_SRC_UNKNOWN; /* port that declares nothing */
-    NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
-    NN2_CHECK(nn2_core_ring_pop(&g_ring, &out) == NN2_OK);
-    NN2_CHECK(out.src == NN2_SAMPLE_SRC_UNKNOWN);
+    TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(nn2_core_ring_pop(&g_ring, &out) == NN2_OK);
+    TEST_ASSERT_TRUE(out.src == NN2_SAMPLE_SRC_UNKNOWN);
 }
 
 static void seq_ring_full_drops_not_fault(void)
 {
     mock_t m; nn2_app_sequencer_t s; setup(&m, &s);
     for (uint32_t i = 0; i < NN2_CORE_RING_CAPACITY + 2u; i++)
-        NN2_CHECK(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
-    NN2_CHECK(g_ring.dropped == 2u);
-    NN2_CHECK(s.faults == 0u);
+        TEST_ASSERT_TRUE(nn2_app_sequencer_run_cycle(&s) == NN2_OK);
+    TEST_ASSERT_TRUE(g_ring.dropped == 2u);
+    TEST_ASSERT_TRUE(s.faults == 0u);
 }
 
 void test_sequencer_suite(void)
 {
-    NN2_RUN(seq_init_rejects_missing_ports);
-    NN2_RUN(seq_step_order);
-    NN2_RUN(seq_cycles_produce_samples);
-    NN2_RUN(seq_adc_fail_turns_led_off);
-    NN2_RUN(seq_led_on_fail_and_reset);
-    NN2_RUN(seq_led_off_fail_is_fault);
-    NN2_RUN(seq_ring_full_drops_not_fault);
-    NN2_RUN(seq_reset_after_failed_off_stays_fault);
-    NN2_RUN(seq_reset_success_clears_last_error);
-    NN2_RUN(seq_sample_carries_fake_provenance);
-    NN2_RUN(seq_zero_init_provenance_is_unknown);
+    RUN_TEST(seq_init_rejects_missing_ports);
+    RUN_TEST(seq_step_order);
+    RUN_TEST(seq_cycles_produce_samples);
+    RUN_TEST(seq_adc_fail_turns_led_off);
+    RUN_TEST(seq_led_on_fail_and_reset);
+    RUN_TEST(seq_led_off_fail_is_fault);
+    RUN_TEST(seq_ring_full_drops_not_fault);
+    RUN_TEST(seq_reset_after_failed_off_stays_fault);
+    RUN_TEST(seq_reset_success_clears_last_error);
+    RUN_TEST(seq_sample_carries_fake_provenance);
+    RUN_TEST(seq_zero_init_provenance_is_unknown);
 }

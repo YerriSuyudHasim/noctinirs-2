@@ -1,3 +1,6 @@
+/* Concrete API contract: docs/ISSUE13_COMPONENT_CONTRACT.md.
+ * Caller-owned typed storage, exclusive task context, no ISR/reentry.
+ * Public state is observational; opaque-handle assessment remains pending. */
 /* ADC sampler port (ADR-0001 3.6 "adc"), pull model, one conversion per call.
  * Caller context: task only. Blocking for at most one conversion.
  * Output: raw counts written to *raw_out only on NN2_OK.

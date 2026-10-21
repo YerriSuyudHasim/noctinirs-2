@@ -120,7 +120,8 @@ nn2_status_t nn2_app_sequencer_reset(nn2_app_sequencer_t *seq)
     if (seq == NULL) {
         return NN2_ERR_INVALID_ARG;
     }
-    /* Leave FAULT only if the LED is confirmed off. */
+    /* Leave FAULT only after the injected off() reports success.
+     * This status alone cannot establish a physical safe state. */
     nn2_status_t st = seq->cfg.led.off(seq->cfg.led.ctx, seq->cfg.channel);
     if (st != NN2_OK) {
         seq->off_failures++;

@@ -1,3 +1,6 @@
+/* Concrete API contract: docs/ISSUE13_COMPONENT_CONTRACT.md.
+ * Caller-owned typed storage, exclusive task context, no ISR/reentry.
+ * Public state is observational; opaque-handle assessment remains pending. */
 /* Logger port (ADR-0001 3.6 "log"). Task context only, never ISR.
  * msg is borrowed for the duration of the call. May be NULL-function (logging off). */
 #ifndef NN2_PORT_LOG_H

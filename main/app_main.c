@@ -58,6 +58,6 @@ void app_main(void)
         }
         vTaskDelay(pdMS_TO_TICKS(100)); /* blocking (not busy) bounded inter-cycle delay */
     }
-    ESP_LOGI(TAG, "done: cycles_ok=%" PRIu32 " faults=%" PRIu32 " dropped=%" PRIu32,
-             s_seq.cycles_ok, s_seq.faults, s_ring.dropped);
+    ESP_LOGI(TAG, "done: cycles_ok=%" PRIu32 " faults=%" PRIu32 " off_failures=%" PRIu32 " dropped=%" PRIu32,
+             s_seq.cycles_ok, s_seq.faults, s_seq.off_failures, s_ring.dropped);
 }

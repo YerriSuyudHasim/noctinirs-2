@@ -1,3 +1,6 @@
+/* Concrete API contract: docs/ISSUE13_COMPONENT_CONTRACT.md.
+ * Caller-owned typed storage, exclusive task context, no ISR/reentry.
+ * Public state is observational; opaque-handle assessment remains pending. */
 /* Acquisition sequencer: IDLE -> LED_ON -> SAMPLE -> LED_OFF -> IDLE.
  * Ports are injected; no platform includes. Single-context use only.
  * On any port error the sequencer requests LED off (fail-safe) and enters FAULT;

@@ -1,11 +1,12 @@
 #include "nn2_test.h"
-
-int nn2_t_run = 0, nn2_t_fail = 0;
-
+void setUp(void) {}
+void tearDown(void) {}
 int main(void)
 {
+    UNITY_BEGIN();
     test_ring_suite();
     test_sequencer_suite();
-    printf("TESTS RUN: %d, FAILED: %d\n", nn2_t_run, nn2_t_fail);
-    return (nn2_t_run > 0 && nn2_t_fail == 0) ? 0 : 1;
+    test_contract_suite();
+    int result = UNITY_END();
+    return (Unity.NumberOfTests > 0u && Unity.TestIgnores == 0u && result == 0) ? 0 : 1;
 }

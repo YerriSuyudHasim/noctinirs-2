@@ -1,20 +1,57 @@
-# Class U host unit tests (no ESP-IDF). Build:
-#   cmake -S test/host -B build-host && cmake --build build-host && ctest --test-dir build-host -V
+# Product Class U; no IDF roots or conditional platform fallback.
 cmake_minimum_required(VERSION 3.16)
 project(nn2_host_tests C)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
-set(ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../..)
-add_executable(nn2_host_tests
-    test_main.c test_ring.c test_sequencer.c
-    ${ROOT}/components/nn2_core/src/nn2_core_ring.c
-    ${ROOT}/components/nn2_core/src/nn2_core_status.c
-    ${ROOT}/components/nn2_app/src/nn2_app_sequencer.c)
-target_include_directories(nn2_host_tests PRIVATE
-    ${ROOT}/components/nn2_core/include
-    ${ROOT}/components/nn2_ports/include
-    ${ROOT}/components/nn2_app/include)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+get_filename_component(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+include("${ROOT}/cmake/nn2_c11.cmake")
+set(INNER_ROOTS
+    "${ROOT}/components/nn2_core/include"
+    "${ROOT}/components/nn2_ports/include"
+    "${ROOT}/components/nn2_app/include")
+add_library(nn2_behavior STATIC
+    "${ROOT}/components/nn2_core/src/nn2_core_ring.c"
+    "${ROOT}/components/nn2_core/src/nn2_core_status.c"
+    "${ROOT}/components/nn2_app/src/nn2_app_sequencer.c")
+target_include_directories(nn2_behavior PUBLIC ${INNER_ROOTS})
+target_compile_options(nn2_behavior PRIVATE -Wall -Wextra -Werror -pedantic)
+nn2_require_c11(nn2_behavior)
+add_library(unity STATIC unity/unity.c)
+target_include_directories(unity PUBLIC unity)
+nn2_require_c11(unity)
+add_executable(nn2_host_tests test_main.c test_ring.c test_sequencer.c test_contract.c)
+target_link_libraries(nn2_host_tests PRIVATE nn2_behavior unity)
 target_compile_options(nn2_host_tests PRIVATE -Wall -Wextra -Werror -pedantic)
+nn2_require_c11(nn2_host_tests)
+
+# Each header gets fresh preprocessor state. Intentional combined probes follow.
+file(GLOB_RECURSE headers CONFIGURE_DEPENDS "${ROOT}/components/*.h")
+file(WRITE "${CMAKE_BINARY_DIR}/host_headers.tsv" "header\tprobe\n")
+foreach(header IN LISTS headers)
+    file(RELATIVE_PATH relative "${ROOT}" "${header}")
+    string(SHA256 identity "${relative}")
+    set(probe "${CMAKE_BINARY_DIR}/header_${identity}.c")
+    file(WRITE "${probe}" "#include \"${header}\"\n_Static_assert(sizeof(int) >= 2, \"C11\");\n")
+    add_library(header_${identity} OBJECT "${probe}")
+    target_include_directories(header_${identity} PRIVATE ${INNER_ROOTS})
+    target_compile_options(header_${identity} PRIVATE -Wall -Wextra -Werror -pedantic)
+    nn2_require_c11(header_${identity})
+    file(APPEND "${CMAKE_BINARY_DIR}/host_headers.tsv" "${relative}\t${probe}\n")
+endforeach()
+foreach(order IN ITEMS forward reverse)
+    set(ordered ${headers})
+    if(order STREQUAL "reverse")
+        list(REVERSE ordered)
+    endif()
+    set(probe "${CMAKE_BINARY_DIR}/combined_${order}.c")
+    file(WRITE "${probe}" "/* Intentional include-order probe. */\n")
+    foreach(header IN LISTS ordered)
+        file(APPEND "${probe}" "#include \"${header}\"\n")
+    endforeach()
+    file(APPEND "${probe}" "_Static_assert(sizeof(int) >= 2, \"C11\");\n")
+    add_library(combined_${order} OBJECT "${probe}")
+    target_include_directories(combined_${order} PRIVATE ${INNER_ROOTS})
+    target_compile_options(combined_${order} PRIVATE -Wall -Wextra -Werror -pedantic)
+    nn2_require_c11(combined_${order})
+endforeach()
 enable_testing()
 add_test(NAME nn2_host_tests COMMAND nn2_host_tests)

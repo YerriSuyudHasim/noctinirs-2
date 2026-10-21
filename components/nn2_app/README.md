@@ -10,3 +10,5 @@ Acquisition sequencer state machine `IDLE -> LED_ON -> SAMPLE -> LED_OFF -> IDLE
 - Single-context; no synchronization (RTOS review item Q-4).
 
 Status: DRAFT (M1). Host tests: `test/host`.
+
+Concrete ownership, lifecycle, statuses, overflow, timing and acceptance gates: [Issue #13 contract](../../docs/ISSUE13_COMPONENT_CONTRACT.md). Public-struct representation requires explicit Architect assessment against ADR-0001; no exception is self-approved.

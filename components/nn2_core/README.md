@@ -6,3 +6,5 @@ Pure C11 domain types and algorithms (ADR-0001 3.1). No ESP-IDF/FreeRTOS include
 - `nn2_core_ring.h`: fixed-capacity (16) sample ring, caller-owned storage, no heap, drop-and-count when full. Not thread-safe (RTOS review item).
 
 Status: DRAFT (M1). Host tests: `test/host`.
+
+Concrete ownership, lifecycle, statuses, overflow, timing and acceptance gates: [Issue #13 contract](../../docs/ISSUE13_COMPONENT_CONTRACT.md). Public-struct representation requires explicit Architect assessment against ADR-0001; no exception is self-approved.

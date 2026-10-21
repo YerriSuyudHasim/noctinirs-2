@@ -1,3 +1,6 @@
+/* Concrete API contract: docs/ISSUE13_COMPONENT_CONTRACT.md.
+ * Caller-owned typed storage, exclusive task context, no ISR/reentry.
+ * Public state is observational; opaque-handle assessment remains pending. */
 /* Fixed-capacity sample ring buffer. Caller owns storage; no heap; not thread-safe
  * (single producer/consumer in one context; concurrency strategy is an RTOS review item). */
 #ifndef NN2_CORE_RING_H
