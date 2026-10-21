@@ -6,7 +6,8 @@ name: Firmware build
 #   esp-idf-build          -> Class B (build) only
 # A successful build is NOT hardware validation, NOT unit/integration evidence,
 # and says nothing about timing, electrical behaviour, safety, or clinical validity.
-# Contract fixtures verify tooling; no product Class U suite exists yet.
+#   host-unit-tests        -> Class U (host unit) only; Core + Application with mock ports
+# Contract fixtures verify tooling separately from product Class U.
 
 on:
   push:
@@ -187,6 +188,7 @@ jobs:
           idf.py set-target esp32s3 2>&1 | tee evidence/set-target.log
           idf.py build 2>&1 | tee evidence/build.log
           idf.py size 2>&1 | tee evidence/size.txt
+          python3 tools/collect_inner_build.py --build build --evidence evidence/product-dependencies --mode idf 2>&1 | tee evidence/product-dependency-coverage.log
 
       - name: Verify C11 using the pinned target compiler
         run: |
@@ -242,6 +244,40 @@ jobs:
             build/*.map
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
+
+  host-unit-tests:
+    # Product Class U: production Core/Application linked with deterministic mocks.
+    name: class-u-host-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Execute product behavior and isolated failure controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-u
+          { echo "SOURCE_SHA=$SOURCE_SHA"; date -u +%Y-%m-%dT%H:%M:%SZ; gcc --version; cmake --version; ninja --version; } > evidence-u/toolchain.txt
+          python3 tools/run_host_tests.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence "$GITHUB_WORKSPACE/evidence-u" --failure-controls 2>&1 | tee evidence-u/runner.log
+          python3 tools/collect_inner_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/product-dependencies --mode host 2>&1 | tee evidence-u/dependency-coverage.log
+          python3 tools/layer_contract.py detect | tee evidence-u/layer-state.txt
+          python3 tools/class-s-gate.py . 2>&1 | tee evidence-u/real-layer-gate.log
+          cat evidence-u/result.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Hash product host evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p evidence-u
+          find evidence-u -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence-u/EVIDENCE_SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: class-u-host-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          include-hidden-files: true
+          if-no-files-found: error
+          path: evidence-u/
 
   class-s-gate-invariant:
     # Self-check: a present layer must be gated; detection must succeed. Not conformance evidence by itself.
