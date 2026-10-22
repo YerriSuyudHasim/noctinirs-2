@@ -250,6 +250,25 @@ target_compile_options(${COMPONENT_LIB} PRIVATE -Wall)
         self.assertEqual(code, 1, text)
         self.assertIn('forbidden include nn2_ad_x.h', text)
 
+    def test_nn2_rtos_priv_requires_nn2_core_fails(self):
+        self.add_component(
+            'nn2_rtos',
+            'idf_component_register(INCLUDE_DIRS "include" PRIV_REQUIRES nn2_core)\n',
+            '#include <stdint.h>\n', header_name='nn2_rtos_config.h')
+        code, text = self.gate()
+        self.assertEqual(code, 1, text)
+        self.assertIn('nn2_rtos: forbidden CMake dependency nn2_core', text)
+
+    def test_nn2_rtos_c_source_include_nn2_core_types_fails(self):
+        directory = self.add_component(
+            'nn2_rtos',
+            'idf_component_register(SRCS "x.c" INCLUDE_DIRS "include")\n',
+            '#include <stdint.h>\n', header_name='nn2_rtos_config.h')
+        (directory / 'x.c').write_text('#include "nn2_core_types.h"\n')
+        code, text = self.gate()
+        self.assertEqual(code, 1, text)
+        self.assertIn('components/nn2_rtos/x.c: forbidden include nn2_core_types.h', text)
+
     def test_v1_manifest_still_loads_and_leaves_adapters_unmapped(self):
         policy = load_contract()
         self.assertEqual([row['name'] for row in policy['layers']], ['core', 'ports', 'app'])
