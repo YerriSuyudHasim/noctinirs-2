@@ -285,6 +285,100 @@ The Architect owns schema/path changes through an ADR revision, independent revi
 
 Any other entry is a Class S FAIL. Exact names and the split of adapter components are to be decided in the implementation issue.
 
+Section 3.5.1 records a **Proposed** amendment for those names and for `nn2_rtos`. The accepted allow-list in the table above, and `tools/layers.json`, stay as written until that amendment is accepted and a reviewed schema extension can express it.
+
+### 3.5.1 Proposed amendment: adapter layer, `nn2_ad_*`, and `nn2_rtos`
+
+| Field | Value |
+|---|---|
+| Amendment status | **Proposed** (does not modify the Accepted status in the header or Section 0) |
+| Date | 2026-10-22 |
+| Author role | Agent 02 (Architect) |
+| Authorization | Project Owner delegation to Nori on issue #33, [comment 6333953903](https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6333953903) |
+| Inputs read | `main` @ `f2d7c8cfecdc6570df155fac4d90625c16a7bf4b`; [PR #34](https://github.com/YerriSuyudHasim/noctinirs-2/pull/34) head `ac9de4a5207714b22bc102a4240ecbc5a993bae8` |
+| Reviews requested | Agent 07 (independent review of this amendment on its exact head); Agent 05 (`nn2_rtos` mapping) |
+
+This subsection extends Sections 3.1–3.5. It is binding only after independent review and a later Owner acceptance of this amendment. It authorizes no firmware edit, no flash, and no Class H claim. `tools/layer_contract.py` and `tools/class-s-gate.py` are unchanged. Their thresholds are unchanged.
+
+#### Adapter layer
+
+An ESP-IDF component that implements a platform, peripheral, or transport adapter is named `nn2_ad_<name>`, with `<name>` a short lowercase token. The component may depend on `nn2_ports`, `nn2_core`, and ESP-IDF or FreeRTOS components, and it may depend on `nn2_rtos` under the platform rule below. It does not depend on `nn2_app` or on another `nn2_ad_*` component. Another adapter is reached through a port.
+
+`nn2_core`, `nn2_ports`, and `nn2_app` do not `REQUIRES` or `PRIV_REQUIRES` any `nn2_ad_*` component and do not include an `nn2_ad_*` header. The composition root (`main`, including `app_main`) links the adapter components. An `nn2_ad_*` component may link `nn2_rtos`, as defined below. No other project component links an adapter or `nn2_rtos`.
+
+#### Both adapter prefixes are accepted
+
+No source on `main` is renamed.
+
+| Prefix | Home on `main` @ `f2d7c8cf` | Meaning under this amendment |
+|---|---|---|
+| `nn2_adapter_*` | Translation units and headers compiled into the composition root from `main/adapters/`. This includes the ADS131 adapter added in #36 (`nn2_adapter_ads131.h`, `nn2_ads131_esp.c`) and the clock, log, fake-ADC, and disabled-LED adapters. | Adapter code owned by `main`. These files are not `components/nn2_*` directories. |
+| `nn2_ad_<name>` | No such component exists on this `main`. #34 adds `nn2_ad_wifi`, `nn2_ad_cred`, and `nn2_ad_prov` under `components/`. | Component name for an adapter. Each of those three names is 11 characters. |
+
+The layout sketch `nn2_adapters_<area>` in Section 3.5 stays an illustration. The component prefix this amendment proposes is `nn2_ad_<name>`. Existing `nn2_adapter_*` files keep their names. Inner layers remain forbidden from including `nn2_adapter_*` and `nn2_adapters_*`. This amendment adds the same forbid for `nn2_ad_*` includes and for an `nn2_rtos` include from an inner layer. That extra forbid is text in this subsection. It is not yet a new `forbidden_include_regex` entry, because this amendment does not change the manifest (see below).
+
+#### Mapped adapter components
+
+Observed on PR #34 head `ac9de4a5`. `INCLUDE_DIRS` is `include` for each. Public headers are `nn2_ad_wifi.h`, `nn2_ad_cred.h`, and `nn2_ad_prov.h`.
+
+| Component | Layer | `REQUIRES` on that head | Who may depend on it |
+|---|---|---|---|
+| `nn2_ad_wifi` | Adapter | `nn2_core`, `nn2_ports`, `nn2_rtos`, `esp_wifi`, `esp_event`, `esp_netif`, `esp_timer`, `freertos` | `main` only |
+| `nn2_ad_cred` | Adapter | `nn2_core`, `nn2_ports`, `nvs_flash` | `main` only |
+| `nn2_ad_prov` | Adapter | `nn2_core`, `nn2_ports`, `esp_timer` | `main` only |
+
+#### `nn2_rtos` is platform / composition
+
+`components/nn2_rtos` is platform/composition. It is not an inner layer and not an `nn2_ad_*` adapter. On #34 @ `ac9de4a5` its `REQUIRES` list is empty (`idf_component_register` with `SRCS` and `INCLUDE_DIRS` only).
+
+**M-1 (Agent 05).** `nn2_rtos` may depend only on ESP-IDF/FreeRTOS headers and on `sdkconfig.h`. It depends on no `nn2_*` component: no `REQUIRES`, no `PRIV_REQUIRES`, and no include of an `nn2_*` header. That rules out a back edge such as `nn2_rtos` → `nn2_core` and any cycle that runs through an adapter and back into `nn2_rtos`. The empty `REQUIRES` list on #34 @ `ac9de4a5` matches this rule today. Enforcement of the rule belongs to the layers.json schema v2 tooling pull request on branch `tools/layers-schema-v2`. This amendment does not edit that tooling or the gate scripts.
+
+`nn2_rtos` owns the single RTOS config header, `components/nn2_rtos/include/nn2_rtos_config.h`. That ownership matches ADR-0003 §3.6: priority, stack, and affinity macros live in one header, and they do not live in `nn2_core`, in port headers, or in scattered driver files.
+
+| Dependent | `nn2_rtos` |
+|---|---|
+| `main` | Allowed |
+| any `nn2_ad_*` adapter | Allowed |
+| `nn2_core`, `nn2_ports`, `nn2_app` | Forbidden, including `REQUIRES`, `PRIV_REQUIRES`, and includes |
+
+#34 @ `ac9de4a5` already has the adapter edge this table allows: `components/nn2_ad_wifi/CMakeLists.txt` `REQUIRES` `nn2_rtos`, and `components/nn2_ad_wifi/nn2_ad_wifi.c` includes `nn2_rtos_config.h`. `nn2_core`, `nn2_ports`, and `nn2_app` do not list `nn2_rtos` and do not include that header. The rule is this edge. It does not add dependents beyond `main` and `nn2_ad_*`.
+
+#### N-1: duplicate `nn2_rtos_config.h` (follow-up for #34, not mapped)
+
+#34 has two headers of this name. Which file a quoted `#include "nn2_rtos_config.h"` opens depends on include order and on the quoting translation unit's directory.
+
+| Path | This amendment |
+|---|---|
+| `components/nn2_rtos/include/nn2_rtos_config.h` | The single RTOS config header, owned by `nn2_rtos` |
+| `main/adapters/nn2_rtos_config.h` | Already on `main` @ `f2d7c8cf`. ADS131 diagnostic macros (`NN2_RTOS_ADS131_*`). Follow-up **N-1** for #34. Not a second owner. Not mapped. |
+
+On that head, `main/nn2_wifi_bringup.c` includes the component header by a relative path, and `main/adapters/nn2_ads131_esp.c` includes the diagnostic header beside that translation unit. N-1 is the removal of the duplicate name. This amendment does not move the ADS131 macros.
+
+When #34 removes `main/adapters/nn2_rtos_config.h`, the `NN2_RTOS_ADS131_*` macros move into the single header `components/nn2_rtos/include/nn2_rtos_config.h`, or those macros are renamed.
+
+#### Platform tuning stays in the owning adapter
+
+Values that come from ESP-IDF or Kconfig live only in the owning adapter, as that adapter's compile definitions or as macros in that adapter's own header. Host defaults for those values live in a test-only header or in test-only flags.
+
+The values named by this rule are `NN2_WIFI_BACKOFF_FIRST_MS`, `NN2_WIFI_BACKOFF_MAX_MS`, `NN2_WIFI_BACKOFF_FACTOR`, and `NN2_WIFI_CONNECT_GUARD_MS`. On #34 @ `ac9de4a5`, `nn2_ad_wifi` injects the target numbers, and `components/nn2_core/include/nn2_wifi_limits.h` still provides `#ifndef` host defaults for the same macros. This amendment does not approve those defaults in `nn2_core`. Domain sizes that are not platform tuning (SSID and passphrase lengths in that header) are outside this paragraph. Relocating the host defaults is a #34 follow-up. It is not a change to either gate script.
+
+#### Why `tools/layers.json` is unchanged
+
+Schema v2, as `tools/layer_contract.py` validates it today, has exactly three `layers` rows, roles `core`, `ports`, and `app`, and paths `components/nn2_` plus the role. Any other count, role, path, or top-level key fails `load_contract` before `detect`. `detect` then fails every `components/nn2_*` directory outside those three paths with `unmapped component`.
+
+Adding `nn2_ad_wifi`, `nn2_ad_cred`, `nn2_ad_prov`, or `nn2_rtos` to `tools/layers.json` would fail that validation on `main` as well as on #34. That is a regression of the amendment branch by itself. This amendment leaves the manifest byte-for-byte as on `main`. The inner-layer `requires` lists, `forbidden_include_regex`, source extensions, and schema version stay put.
+
+The tables above are the Proposed map. They become gate inputs only through a later reviewed schema extension that can tell an adapter row from an inner-layer row. Until then, an unmapped `components/nn2_*` directory remains a failure of `layer_contract.py detect` and of `class-s-gate.py`.
+
+Two further facts belong in that later review, and they are recorded so this amendment is not read as permission to drop them into the current three rows:
+
+- The include scanner applies one `forbidden_include_regex` list to every manifest row. That list contains `sdkconfig.h`, `esp_*`, `freertos/*`, and `nvs.h`. `nn2_rtos` includes `sdkconfig.h` when `ESP_PLATFORM` is set. Each `nn2_ad_*` component includes ESP-IDF or FreeRTOS headers. Those includes are in bounds for an adapter or for `nn2_rtos` under this amendment, and they remain out of bounds for `nn2_core`, `nn2_ports`, and `nn2_app`.
+- The CMake scanner accepts a component file that is only one literal `idf_component_register`, with no `$` expansion. `components/nn2_ad_wifi/CMakeLists.txt` on #34 also contains `if()`, `target_compile_definitions` using `${CONFIG_...}`, and `target_compile_options`. `nn2_ad_cred`, `nn2_ad_prov`, and `nn2_rtos` each contain `target_compile_options` after registration.
+
+Neither fact is fixed here. Neither gate is weakened to ignore it.
+
+The duplicate header (N-1) and the `nn2_wifi_limits.h` host defaults are not inputs to `detect` or to `class-s-gate.py`. Stating them in this subsection does not change either verdict. `class-s-gate.py` calls `detect` before the include audit and before the `REQUIRES` audit, so an unmapped component ends the run before those audits see `nn2_ad_wifi`'s edge to `nn2_rtos`.
+
 ### 3.6 Candidate ports (proposed)
 
 | Port | Purpose | Key contract questions |
@@ -464,3 +558,4 @@ The bounded framework's independent review and Owner acceptance are recorded in 
 
 | 3 | 2026-10-17 | N6 combined integration: schema v2 owns dependency/include policy, hardened Python scanner and canonical detector replace independent gate maps; adversarial and CI propagation regressions. | **Proposed** (Owner decision required) |
 | 4 | 2026-10-19 | Record the actual 2026-10-18 Owner acceptance of the reviewed static framework, source links and retained conditions; update current decision dispositions without altering historical evidence. | **Accepted** (bounded scope in Section 0) |
+| 6 | 2026-10-22 | Proposed amendment in Section 3.5.1 (branch `docs/adr-0001-amend-adapter-layer`). The date line already assigns revision 5 to the 2026-10-21 A2 clarification in the body; this table does not reuse that number. Extends the accepted contract with an adapter layer named `nn2_ad_<name>`, keeps existing `main/adapters/nn2_adapter_*` names (including the #36 ADS131 adapter) with no source rename, maps `nn2_ad_wifi`, `nn2_ad_cred`, and `nn2_ad_prov`, and maps `nn2_rtos` as platform/composition reachable from `main` and from `nn2_ad_*` only. M-1: `nn2_rtos` may depend only on ESP-IDF/FreeRTOS headers and `sdkconfig.h`, and on no `nn2_*` component; the empty `REQUIRES` list is enforced by the schema v2 tooling pull request on branch `tools/layers-schema-v2`. N-1: removing the duplicate header moves `NN2_RTOS_ADS131_*` into that single header or renames them. `nn2_rtos` owns the single RTOS config header (ADR-0003). The duplicate `main/adapters/nn2_rtos_config.h` is #34 follow-up N-1 and is not mapped. IDF/Kconfig tuning defaults stay out of `nn2_core`. `tools/layers.json` and both gate scripts are unchanged, so #34 head `ac9de4a5` still fails `detect` with `unmapped component` until a reviewed schema extension. Refs [#34](https://github.com/YerriSuyudHasim/noctinirs-2/pull/34) and this amendment pull request. | **Proposed** |
