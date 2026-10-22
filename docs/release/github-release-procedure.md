@@ -10,10 +10,11 @@ A merge onto `main` needs all of the following, recorded on the PR or issue:
 
 1. Required CI on the exact reviewed SHA.
 2. Independent review by someone who is not the author or coauthor (Agent 07 for this change).
-3. A recorded human Owner merge approval for that SHA.
+3. Merge approval by Nori jointly with Agent 01. The Owner confirmed that delegation directly to Agent 07 at 15:24 KST on 2026-10-22.
 
 A green check, repository access, or an agent's own review is not merge
-approval. Preparation of a draft PR is not permission to merge.
+approval. Preparation of a draft PR is not permission to merge. Tags and
+GitHub Releases remain with the Owner (M) via Nori.
 
 ## Preconditions
 
@@ -21,7 +22,7 @@ approval. Preparation of a draft PR is not permission to merge.
 - The tag name equals `VERSION` exactly. For the current tree that string is `0.1.0`. A `v` prefix fails the check. Do not create the tag until the Owner chooses that spelling.
 - Release notes come from `python3 tools/render_release_notes.py --changelog CHANGELOG.md --version <tag>`. `CHANGELOG.md` is added by issue #14 / PR #42 and is absent on current `main`. Stop if the command fails. Do not write a substitute changelog.
 - Issue #46 packages are attached only when that PR is merged and the packages were built from the tagged SHA, with their checksum files. Packages from another SHA are not assets of this tag. PR #46 is still a draft.
-- Class H stays NOT RUN unless a separate Owner-authorized procedure recorded a result.
+- Class H stays NOT RUN for v0.1.0. The Owner deferred it at 15:25 KST on 2026-10-22. Flash needs the Owner's direct OK via Nori. H-COMMS-1 (#53 / PR #54) is a parked draft and is not a v0.1.0 gate.
 
 ## Tag and CI
 
