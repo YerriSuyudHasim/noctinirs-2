@@ -22,7 +22,7 @@
 
 M1 needs one durable contract between the NoctiNIRS 2 device and the LAN host: how commands arrive, how replies and frames leave, which commands are legal in which state, how the device boots into a known emitter-off state, how it reaches and leaves SafeOff, and what happens on Wi-Fi loss. Without it, the Wi-Fi adapter (#30 / PR #34), the ADS131 path (#35, merged diagnostic slice in PR #36) and the later emitter/scheduler work would each invent their own command handling, state, and fault semantics.
 
-The design was negotiated as comments on #33 (rev 1 → rev 2 → boot draft → heartbeat addendum → boot/state rev 3) and an unposted Architect rev 3.1 amendment. This file consolidates that record, applies three rev 3.1 corrections (§3.15), and closes Agent 07 blocking items B1–B3 (§11). File rev 2 (§10) records Agent 05 RTOS Class S findings S-1..S-4, the Q-17/Q-18/Q-20 resolution with Agent 03, and the time and sequencing contract (§3.16, [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56)). Status remains **Proposed**.
+The design was negotiated as comments on #33 (rev 1 → rev 2 → boot draft → heartbeat addendum → boot/state rev 3) and an unposted Architect rev 3.1 amendment. This file consolidates that record, applies three rev 3.1 corrections (§3.15), and closes Agent 07 blocking items B1–B3 (§11). File rev 2 (§10) records Agent 05 RTOS Class S findings S-1..S-4, the Q-17/Q-18/Q-20 resolution with Agent 03, the time and sequencing contract (§3.16, [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56)), the V3 study trace R1–R10 (§3.16.f), and the per-slot quality contract N1–N11 (§3.17). Status remains **Proposed**.
 
 ### 1.2 Current product state (verified at `f2d7c8c`)
 
@@ -150,7 +150,7 @@ Ports required (names **Proposed**, header prefix per `tools/layers.json`):
 ### 3.2 Transport binding
 
 1. **Host link:** UDP over Wi-Fi STA, **one socket** in `nn2_net` (Core 0), non-blocking or bounded `SO_SNDTIMEO`. TCP is rejected for M1 (F1, rev 2 §A).
-2. **Single-socket rule (C5 sub-clause):** RX is polled before every TX batch so a `safe_off` decode never waits behind `sendto`. On `ENOMEM`/`EAGAIN` the frame is dropped and `send_errors`/`frames_dropped` incremented; no spin-retry.
+2. **Single-socket rule (C5 sub-clause):** RX is polled before every TX batch so a `safe_off` decode never waits behind `sendto`. On `ENOMEM`/`EAGAIN` the frame has already consumed its `frame_sequence`. `frames_dropped` increments atomically with, or before, that release, and `send_errors` increments (§3.16.b). No spin-retry. The frame is not discarded silently.
 3. **One envelope per datagram.** Encoded size ≤ `NN2_PROTO_MAX_DGRAM` (1472 = 28 + 1440 + 4, §3.3). Never fragment. Payload `length` ≤ `NN2_PROTO_MAX_PAYLOAD` (**1440**). The cap is an `nn2_core` constant, not a Kconfig value. Oversize at encode → reject and count; never split (D3). Decode step 0 drops `size > NN2_PROTO_MAX_DGRAM`.
 4. **Host endpoint:** learned from the last valid REQUEST (no discovery in M1). While the peer lock is held, FRAMEs and SESSION_REPORT go to the lock owner only.
 5. **USB diagnostic console (L1, L2, O8):** carries #30 provisioning and diagnostics only. It never accepts host-API commands except `safe_off`. It may issue read-only diagnostic queries (status/dump), including `get_time` (§3.16.d). Any USB command that could energize an LED is **rejected at decode, before enqueue**. Non-safety USB commands post into the **same** C1 queue as UDP. If that queue is full the device returns `BUSY` and increments `usb_busy` (R-5); it does not enter FAULTED. USB `safe_off` does not use that queue (§3.9). There is no second state machine. USB activity does not refresh the host-silence timer. USB wire encoding (text line vs. binary envelope) is adapter-defined but must resolve to a registry entry with `transport = USB` and pass the same registry gate (§3.5); final encoding **TBD (Agent 03)**.
@@ -238,10 +238,10 @@ The rev 2/rev 3 header was the Agent 03 F5 layout ([#33 F5](https://github.com/Y
 
 #### 3.4.4 `session_id` and sequences
 
-- `session_id` (u32) is non-zero, random per `start_stream` from `nn2_port_random` (not incrementing), so stale-host datagrams from a previous boot do not match (F4). 0 = no session.
+- `session_id` (u32) is non-zero and drawn per `start_stream` from `nn2_port_random` (not a boot-wide increment), so a stale host datagram from a previous boot does not match (F4). It is not reused within one boot: a collision is redrawn. 0 = no session. Uniqueness is the pair `(boot_id, session_id)` (§3.16.b, R6).
 - Host→device `session_id`: 0 is always accepted. A non-zero value that differs from the current session → `INVALID_STATE` for every opcode except `safe_off`, which is always accepted (**Proposed**; Agent 03 to confirm).
-- `msg_sequence` (header) counts every device→host message in the session, across all `msg_type`s. It is not per ADC source. It wraps mod 2³²; comparisons are wrap-safe (serial-number arithmetic, signed `(int32_t)(a - b)`).
-- `frame_sequence` is **not** one counter shared across sources. It is a u32 per `(session_id, adc_source)` stream (§3.16.b). It starts at 0 on `start_stream`, increases by 1 for every frame **produced** on that stream (including a frame later dropped by D3 or by a send error), continues across RECOVERING, and does not reset there. `sample_sequence` is the per-stream DRDY counter (§3.16.b, §3.16.c) with the same reset rule. Both wrap mod 2³² with the same serial-number comparison.
+- `msg_sequence` (header) counts every device→host message in the session, across all `msg_type`s. It is not per ADC source and it is not a loss counter (§3.16.b). It wraps mod 2³²; comparisons are wrap-safe (serial-number arithmetic, signed `(int32_t)(a - b)`).
+- `frame_sequence` and `sample_sequence` follow the single rule in §3.16.b. They are not restated here.
 
 ### 3.5 Command registry
 
@@ -249,11 +249,11 @@ Single const table in `nn2_core`. Every decode resolves to exactly one row or `U
 
 | Opcode | Name | Args | RO | LED-capable | Transports | Owner-lock (P2) | Cache | HW dependency (for SIMULATED) |
 |---|---|---|---|---|---|---|---|---|
-| 0x0001 | `heartbeat` | — | ✓ | ✗ | UDP | owner only while locked | bypass | none (build-level rule) |
+| 0x0001 | `heartbeat` | `t_host:u64` opaque (§3.16.d) | ✓ | ✗ | UDP | owner only while locked | bypass | none (build-level rule) |
 | 0x0002 | `get_info` | — | ✓ | ✗ | UDP, USB (diag) | any peer (O1, P2) | bypass | board (MAC), build profile |
-| 0x0003 | `get_status` | — | ✓ | ✗ | UDP, USB (diag) | owner only while locked (Q-4) | bypass | emitter, ADC(s) (subsystem state, counters, evidence) |
+| 0x0003 | `get_status` | `t_host:u64` opaque (§3.16.d) | ✓ | ✗ | UDP, USB (diag) | owner only while locked (Q-4) | bypass | emitter, ADC(s) (subsystem state, counters, evidence) |
 | 0x0004 | `get_config` | — | ✓ | ✗ | UDP, USB (diag) | any peer (O1, P2) | bypass | none (build-level rule) |
-| 0x0005 | `get_time` | — | ✓ | ✗ | UDP, USB (diag) | any peer (no lock, §3.16.d) | bypass | none (clock and `boot_id`; bit 1 is `TS_ESTIMATED`, not SIMULATED) |
+| 0x0005 | `get_time` | `t_host:u64` opaque (§3.16.d) | ✓ | ✗ | UDP, USB (diag) | any peer (no lock, §3.16.d) | bypass | none (clock and `boot_id`; bit 1 is `TS_ESTIMATED`, not SIMULATED) |
 | 0x0010 | `start_stream` | — | ✗ | **✓** | UDP only | acquires lock | cached | emitter, ADC(s) |
 | 0x0011 | `stop_stream` | — | ✗ | ✗ | UDP | owner only | cached | emitter, ADC(s) |
 | 0x0020 | `safe_off` | — | ✗ | ✗ (safety-reducing) | UDP (any peer), USB | **bypasses lock** | bypass (C2) | emitter |
@@ -320,7 +320,8 @@ stateDiagram-v2
     STREAMING --> STOPPING: stop_stream | grace expiry
     STREAMING --> RECOVERING: transient ADS error (Core-1 SafeOff, SlotPlan idle)
     STREAMING --> FAULTED: non-transient fault
-    RECOVERING --> STOPPING: source recovered (RECOVERED_STOP, after RI) | stop_stream | grace expiry
+    RECOVERING --> STREAMING: transient return, same session (R9, §3.16.b)
+    RECOVERING --> STOPPING: RECOVERED_STOP ends the session | stop_stream | grace expiry
     RECOVERING --> FAULTED: RECOVERY_EXHAUSTED | non-transient
     STOPPING --> STOPPED: drain confirmed, SESSION_REPORT queued, lock released
     STOPPING --> FAULTED: drain timeout (COMPLETION_TIMEOUT)
@@ -355,14 +356,15 @@ The BOOT column is **Proposed** (BOOT intake exists from B1a over USB only; UDP 
 |---|---|---|---|---|---|
 | T1 | any (incl. BOOT) | `safe_off` (any UDP peer or USB) | — | §3.9 C2 sequence; release peer lock; if a session existed, SESSION_REPORT `end_reason = SAFE_OFF`; reply with evidence | SAFE_OFF (tag BOOT if from BOOT or FAULTED(BOOT), else RUNTIME) |
 | T2 | SAFE_OFF | `safe_off` | — | Idempotent: re-assert RESET#, reply OK with evidence, no new fault (R4) | SAFE_OFF |
-| T3 | STOPPED | `set_fs` / `set_led_current` | args valid (fs in set; channel 0..19; mA ≤ 50) | Store in configuration; no PCA write while STOPPED (currents applied at STARTING through the IREF choke point) | STOPPED |
+| T3 | STOPPED | `set_fs` / `set_led_current` | args valid (fs in set; channel 0..19; mA ≤ 50). A `set_fs` whose nominal SlotPlan fails the §3.17 N8 invariant is not valid | Store in configuration; no PCA write while STOPPED (currents applied at STARTING through the IREF choke point). N8 failure → `INVALID_ARG`, store unchanged | STOPPED |
 | T4 | STOPPED | `set_led_current` | mA > 50 | `INVALID_ARG`, never clamp | STOPPED |
 | T5 | STOPPED | `start_stream` | config valid; link UP; requester is UDP | `lock_owner := sender`; new random `session_id`; snapshot config (ADR-0002 §3.10); arm SlotPlan on Core 1 via bounded notify | STARTING |
 | T6 | STARTING | first slot complete | — | EVENT `STREAM_STARTED` | STREAMING |
 | T7 | STARTING | `stop_stream` (owner) / grace expiry | grace-expiry notify still matches the armed generation/deadline (§3.11); a stale notify is ignored | Cancel armed GPTimer alarm (ADR-0003 §3.8 item 3); LED off via normal path; arm the one-shot stop-confirm timer (R-4); `end_reason` HOST_STOP / LINK_LOSS. Not a blocking wait | STOPPING |
 | T8 | STREAMING | `stop_stream` (owner) / grace expiry | same stale-notify guard as T7 | Stop SlotPlan; LED off via normal stop path; arm the one-shot stop-confirm timer (R-4); `end_reason` HOST_STOP / LINK_LOSS. Not a blocking wait | STOPPING |
 | T9 | STREAMING | transient ADS error (C3) | budget N/W left | Core-1 SafeOff: RESET# + bus recovery (`nn2_led`); SlotPlan idle; no FRAMEs; in-flight FRAME flagged `ADS_INTEGRITY`/`LED_ON_MISSING` | RECOVERING |
-| T10 | RECOVERING | source recovered | within N/W | RI sequence (§3.10) as an event-driven deadline wait, not a blocking take; no resume; `end_reason = RECOVERED_STOP` | STOPPING (RI fail → FAULTED) |
+| T10 | RECOVERING | source recovered into RECOVERED_STOP | within N/W | RI sequence (§3.10) as an event-driven deadline wait, not a blocking take; end the session (§3.16.b); `end_reason = RECOVERED_STOP` | STOPPING (RI fail → FAULTED) |
+| T10b | RECOVERING | transient return to STREAMING | within N/W; not a stop, grace expiry, or a fault that ends the session | Keep `session_id` and the sequence counters; frames not sent increment `frames_dropped` (§3.16.b) | STREAMING |
 | T11 | RECOVERING | `stop_stream` (owner) / grace expiry | stale grace notify ignored (§3.11) | RI sequence as an event-driven deadline wait; `end_reason` HOST_STOP / LINK_LOSS. Grace expiry does not itself raise a fault; RI failure still → FAULTED | STOPPING (RI fail → FAULTED) |
 | T12 | RECOVERING | budget exhausted / non-transient | — | Record `RECOVERY_EXHAUSTED` | FAULTED |
 | T13 | STARTING / STREAMING / RECOVERING / STOPPING | non-transient fault (`DEADLINE_MISSED`, `COMPLETION_TIMEOUT`, `PCA_READBACK_MISMATCH`, `SAFE_OFF_FAILED`, …) | — | Core-1 internal SafeOff (RESET# + bus recovery) **before** report; record fault; release lock; SESSION_REPORT `end_reason = FAULT` if a session existed | FAULTED (RUNTIME) |
@@ -443,7 +445,7 @@ The state owner requests RI through C1. The completion wait is event-driven and 
 ### 3.11 Heartbeat and link-loss grace (closes IR-B2)
 
 - **P1 is LOCKED** (option (b), [6227124055](https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6227124055)). Fallback (a) is withdrawn.
-- **`heartbeat` (opcode 0x0001):** REQUEST payload `req_id:u32, opcode:u16`, no args. Allowed in every state; never changes state. REPLY `status = OK`, body `state:u8, link_rssi:i8, frames_dropped:u32`. Bypasses the reply cache. Refreshes the host-silence timestamp only (any other valid owner REQUEST also refreshes it). Not a liveness grant for LEDs: never starts a stream or energizes an LED. USB has no heartbeat requirement and does not refresh the timer.
+- **`heartbeat` (opcode 0x0001):** REQUEST payload `req_id:u32, opcode:u16, t_host:u64`. `t_host` is the opaque host field defined only in §3.16.d. Allowed in every state; never changes state. REPLY `status = OK`, body `state:u8, link_rssi:i8, frames_dropped:u32`, the §3.17 N11 scalar counters, and the §3.16.d echo of `t_host` with `t_rx_us` and `t_tx_us`. Bypasses the reply cache. Refreshes the host-silence timestamp only (any other valid owner REQUEST also refreshes it). Not a liveness grant for LEDs: never starts a stream or energizes an LED. USB has no heartbeat requirement and does not refresh the timer.
 - The host **must** send `heartbeat` every `NN2_HOST_HB_PERIOD_MS` while the device is STARTING, STREAMING or RECOVERING.
 - `_Static_assert(NN2_HOST_SILENCE_MS > 2 * NN2_HOST_HB_PERIOD_MS)` in the RTOS/net config header. Both values **TBD (Agent 05, Class H)**. A single lost datagram never arms the timer.
 - **Grace timer:** `NN2_HOST_GRACE_MS = 3000` (D1). Owned by `nn2_net` (Core 0, R-1). Starts at the **earlier** of a link-down event (`nn2_port_wifi_station` LINK_DOWN; `WIFI_EVENT_STA_DISCONNECTED` in the adapter, §3.14.3) or host silence > `NN2_HOST_SILENCE_MS`, while STARTING (**Proposed**, Agent 07 S1), STREAMING or RECOVERING. Arming records a `grace_generation` (and the deadline). Reset on reconnect plus a valid owner datagram (T21), which bumps that generation and cancels the timer. The `esp_timer` callback signals `nn2_net` with `xTaskNotify(..., eSetBits)` (cannot fail), not `xQueueSend` (S-3). On every grace-expiry notify, `nn2_net` re-checks the generation or deadline **before** T7, T8 or T11, because a valid owner datagram may have cancelled grace while the notify was still pending. A stale notify does not run those transitions. A matching expiry only triggers the internal `stop_stream` (R-3): enter STOPPING, send the stop + LED-off request to the Core-1 owner, and reach **STOPPED only after LED-off is confirmed** (R-4), with `end_reason = LINK_LOSS`. Grace expiry never raises a fault itself and never enters SafeOff (S-4). An emitter-off failure, an RI failure, or a stop-confirmation failure reached via T11 or T15 still escalates to FAULTED. Frame drops during grace are counted (`frames_dropped`, `send_errors`).
@@ -452,10 +454,10 @@ The state owner requests RI through C1. The completion wait is event-driven and 
 ### 3.12 RECOVERING (C3, Owner lock, Q-B1)
 
 - "Transient" = only an isolated ADS error: one SPI error, one DRDY overflow, or one integrity failure on one source. `DEADLINE_MISSED`, `COMPLETION_TIMEOUT`, `PCA_READBACK_MISMATCH`, `SAFE_OFF_FAILED` → FAULTED directly; timing and emitter faults never auto-retry.
-- Entry: Core-1 SafeOff first (RESET# + bus recovery); whole SlotPlan idles (both sources); all LEDs off; no FRAMEs; a FRAME already in flight is flagged `ADS_INTEGRITY` / `LED_ON_MISSING`; per-stream `frame_sequence` and `sample_sequence` continue and do not reset (§3.16.b).
+- Entry: Core-1 SafeOff first (RESET# + bus recovery); whole SlotPlan idles (both sources); all LEDs off; no FRAMEs; a FRAME already in flight is flagged `ADS_INTEGRITY` / `LED_ON_MISSING`. Session and counter lifetime are only the rule in §3.16.b.
 - Recovery work runs inside the affected ADS task with bounded waits ≤ 1 slot period; never in an ISR, scheduler or LED task.
 - Budget N attempts per window W: **TBD (Agent 05, Class H)**, in the single RTOS config header (ADR-0003). Exhaustion → `RECOVERY_EXHAUSTED` → FAULTED.
-- Exit is always STOPPING → STOPPED (after RI) or FAULTED. **The `RECOVERING → STREAMING` edge does not exist.** The host must send `start_stream` again.
+- A transient RECOVERING that returns to STREAMING keeps the session (T10b, §3.16.b). A path that ends in STOPPED or RECOVERED_STOP ends the session; the host must send `start_stream` for a new `session_id` (Q-B1). That is not an auto-resume of an ended session. FAULTED does not auto-recover.
 
 ### 3.13 Codes and enums (stable numeric values)
 
@@ -501,18 +503,18 @@ Link loss is **not** a fault (D1); there is no link fault code. Grace expiry doe
 
 `HOST_STOP`=0, `FAULT`=1, `SAFE_OFF`=2, `LINK_LOSS`=3 (D1), `RECOVERED_STOP`=4 (Owner, 6227272016). Values **Proposed allocation**.
 
-#### 3.13.4 Per-slot quality bitmask (u16; per frame = OR)
+#### 3.13.4 Per-slot quality
 
-0 `UNDER_K_ON`, 1 `UNDER_K_OFF`, 2 `LED_ON_MISSING`, 3 `LED_OFF_MISSING`, 4 `ADS_INTEGRITY`, 5 `STALE_EPOCH`, 6 `STARTUP_WARMUP`, 7–15 reserved (0). PARTIAL = any bit set; frames are always sent (L7). SIMULATED is carried in the header `flags`, not here (§3.3).
+The normative per-slot quality enum and `reason` bitfield are §3.17. This subsection does not keep a second bitmask. Frames are always sent (L7). SIMULATED stays in header `flags` (§3.3). The earlier OR-mask (`UNDER_K_ON`, `UNDER_K_OFF`, `LED_ON_MISSING`, `LED_OFF_MISSING`, `ADS_INTEGRITY`, `STALE_EPOCH`, `STARTUP_WARMUP`) is superseded by §3.17: count-short is `UNDER_K_*` only below `K_min`, LED commit loss is `LED_COMMIT_MISSING`, capture faults are `CRC` / `SPI` / `ADS_STATUS`, and warmup is `WARMUP`.
 
 #### 3.13.5 `get_status` content
 
-`state`, subsystem states, `session_id`, `boot_id` (§3.16.a), `uptime_us`, `first_fault` / `last_fault` (fault record or null; not cleared by `clear_fault`, L10), `fault_count`, `safe_off_evidence` (last reached), `boot_selftest_flags`, `recovery_count`, health counters (`adc_missed`/source, `sequence_gap`, `crc_bad`, `spi_errors`/source, `drdy_overflow`/source, `missed_deadline`, `completion_timeout`, `safe_off_failures`, `pca_readback_mismatch`, `frames_dropped`, `send_errors`, `under_k`, `dup_req`, `rx_malformed` (#51), `reserved_flags_rejects` (**Proposed**), `usb_busy` (**Proposed**, R-5), `overrun`/source (**Proposed**, §3.16.c)), per-device conversion/group-delay metadata constants (§3.16.c; reported, not subtracted from `timestamp_us`), `link`, `build_profile`. Counters are monotonic since boot, C11 `_Atomic uint32_t` relaxed in `nn2_core`, read through a non-locking Application snapshot (C4/C7). `overrun` is incremented from the DRDY ISR with no lock (§3.16.c). Field encoding/order **TBD (Agent 03)**.
+`state`, subsystem states, `session_id`, `boot_id` (§3.16.a), current `frame_sequence` per source, `frames_dropped`, `overrun`, `timestamp_us`, `fs`, SlotPlan id (R8, §3.16.b; any state, read-only), `uptime_us`, `first_fault` / `last_fault` (fault record or null; not cleared by `clear_fault`, L10), `fault_count`, `safe_off_evidence` (last reached), `boot_selftest_flags`, `recovery_count`, health counters (`adc_missed`/source, `sequence_gap`, `crc_bad`, `spi_errors`/source, `drdy_overflow`/source, `missed_deadline`, `completion_timeout`, `safe_off_failures`, `pca_readback_mismatch`, `frames_dropped`, `send_errors`, `under_k`, `dup_req`, `rx_malformed` (#51), `reserved_flags_rejects` (**Proposed**), `usb_busy` (**Proposed**, R-5), `overrun`/source (**Proposed**, §3.16.c), `sched_late` (**Proposed**, §3.16.c), the §3.17 N11 counters (`drdy_to_spi_latency_max_us`, `irq_to_spi` histogram, `drdy_missed`, `seq_gap`, `i2c_commit_latency_max_us`)), per-device conversion/group-delay metadata constants (§3.16.c; reported, not subtracted from `timestamp_us`), `link`, `build_profile`. `get_status` copies a snapshot of `frames_dropped`, `overrun`, and `frame_sequence` (§3.16.b). `frames_dropped` is the cross-core counter. The other health counters are monotonic since boot and use the same non-locking Application snapshot (C4/C7). `overrun` is incremented from the DRDY ISR with no lock (§3.16.c). Field encoding/order **TBD (Agent 03)**.
 
 #### 3.13.6 FRAME and SESSION_REPORT payloads
 
-- **FRAME** (D2, D3, C-c; rev 2 §6.2; time contract §3.16): `adc_source:u8` (`ADS131`=1, `ADS1299`=2; one source per frame), `slot_plan_epoch:u16`, `frame_sequence:u32` (per stream, §3.16.b), `first_sample_sequence:u32` (**Proposed**, §3.16.c), `sample_count:u16` (**Proposed**, §3.16.c), `frame_quality:u16`, `slot_count:u8`, `slots[]`; slot = `slot_index:u8, channel:u8 (logical / DARK), I_ON_mean, I_OFF_mean, n_on:u16, n_off:u16, slot_quality:u16`. Header `timestamp_us` is the latch time of that first sample (§3.16.c), never TX time. Sample width per #31, **OPEN (Agent 03 / ADR-0002)**. One FRAME per datagram (20 slots), within the 1440 B `NN2_PROTO_MAX_PAYLOAD` cap; the added sequence fields stay inside that cap; oversize → reject + count.
-- **SESSION_REPORT** (L6): `session_id`, `end_reason`, start/end `timestamp_us`, `fs`, `slot_plan_epoch`, `frames_sent`, `frames_dropped`, per-source last `frame_sequence` and `sample_sequence` (§3.16.b), per-source `overrun` delta, per-source sample counts, per-device conversion/group-delay metadata (reported, not subtracted, §3.16.c), per-session health deltas, `partial_frame_count` + per-reason counts, `faults_in_session`, `last_fault`. Sent once per session end, after the `stop_stream` REPLY, via the reserved control slot; best-effort. Encoding **TBD (Agent 03)**.
+- **FRAME** (D2, D3, C-c; rev 2 §6.2; time contract §3.16; quality §3.17): one source per datagram (`adc_source:u8`, `ADS131`=1, `ADS1299`=2) and 20 slot records. The byte layout, the i32 means, the quality block, and the 556 B size assert are only in §3.17. Header `timestamp_us` is the latch time of the first sample (§3.16.c), never TX time. Raw sample packing stays **OPEN** (Q-11, Agent 03 / ADR-0002). One FRAME per datagram, inside the 1440 B `NN2_PROTO_MAX_PAYLOAD` cap; oversize → reject + count.
+- **SESSION_REPORT** (L6, R9, N11): `session_id`, `end_reason`, start and end `timestamp_us`, `fs`, `slot_plan_epoch`, `frames_sent`, `frames_dropped`, per-source first and last `frame_sequence`, last `sample_sequence` (§3.16.b), per-source `overrun`, the other §3.17 N11 counters, per-source sample counts, per-device conversion/group-delay metadata (reported, not subtracted, §3.16.c), per-session health deltas, `partial_frame_count` + per-reason counts, `faults_in_session`, `last_fault`. The report copies the same counter snapshot as `get_status` (§3.16.b). Sent once per session end, after the `stop_stream` REPLY, via the reserved control slot; best-effort. Encoding **TBD (Agent 03)**.
 - **EVENT** (best-effort, **Proposed** set): `BOOT_COMPLETE`, `STREAM_STARTED`, `LINK_GRACE_STARTED`, `FAULT_RAISED`.
 
 ### 3.14 RTOS ownership and concurrency constraints
@@ -528,8 +530,8 @@ All values in this section are **TBD (owner Agent 05, until Class H)** unless ci
 | C3 | Transient = isolated ADS error only; N/W budget; recovery in the ADS task (§3.12). |
 | C4 | `get_*` read a snapshot; never lock Core-1 state. |
 | C5 | Two TX classes on one socket: a reserved control slot (replies, `safe_off`, SESSION_REPORT) never starved by FRAMEs; RX polled before each TX batch. |
-| C6 | FRAME producer on Core 1 never blocks: frame queue full → drop + `frames_dropped` (D3). |
-| C7 | Counters are C11 atomics in Core; no FreeRTOS primitive in Core. |
+| C6 | FRAME producer on Core 1 never blocks: frame queue full still assigns `frame_sequence`, then increments `frames_dropped`, then drops the frame (D3, §3.16.b). |
+| C7 | `frames_dropped`, `overrun`, and `frame_sequence` each have one writer or are an atomic u32 (§3.16.b). No FreeRTOS primitive in Core. |
 
 #### 3.14.2 Heartbeat / grace / stop ownership (Agent 05 review criteria, normative design constraints)
 
@@ -561,6 +563,7 @@ Numeric timeouts stay **TBD (owner Agent 05, until Class H)**. The relations are
 - `_Static_assert(NN2_STOP_CONFIRM_TIMEOUT_MS >= NN2_SLOT_PERIOD_MAX_MS + NN2_I2C_XACT_TIMEOUT_MS)` — stop confirmation covers the longest slot period plus one I2C transaction timeout.
 - `_Static_assert(NN2_SAFEOFF_RECOVERY_MS >= NN2_I2C_XACT_TIMEOUT_MS + NN2_I2C_BUS_RECOVERY_MS)` — safe-off recovery covers an I2C timeout plus bus-recovery time.
 - `_Static_assert(NN2_NET_RX_LOOP_TIMEOUT_MS * 4u <= NN2_HOST_SILENCE_MS)` — the `nn2_net` RX/loop timeout is ≤ `NN2_HOST_SILENCE_MS / 4`, so silence is detected without relying on RX traffic.
+- For every supported `fs`, `_Static_assert(NN2_OFF_WINDOW_US(fs) >= (NN2_K_TARGET + 1u) * NN2_ADC_PERIOD_US + LED_COMMIT_LATENCY_BUDGET_US + NN2_SLOT_MARGIN_US)` (§3.17 N8). The assert compares the nominal SlotPlan with the declared constant `LED_COMMIT_LATENCY_BUDGET_US`. That constant is provisional, owned by Agent 05 with Agent 04, and **NOT RUN**. The SlotPlan formula is a pure function in `nn2_core`. The platform layer supplies the budget. The assert does not read a measured latency.
 
 Worst-case emitter-on time after link loss is bounded by `NN2_HOST_SILENCE_MS` + `NN2_HOST_GRACE_MS` (3000) + `NN2_STOP_CONFIRM_TIMEOUT_MS`. That is a design bound made of those terms, not a Class H measurement.
 
@@ -601,40 +604,63 @@ Normative for file rev 2. This section is **Proposed**, same as the ADR. It does
 
 #### 3.16.a Time source
 
-`timestamp_us` is the device monotonic microsecond count since boot, read through `nn2_port_clock_t`. The ESP adapter implements that port with `esp_timer_get_time()`. The field is a u64. It does not wrap in practice (2⁶⁴ µs is longer than any boot this product will run). It resets on reboot. It is not wall-clock time and it is not the FreeRTOS tick.
+Every time value on the wire is a u64 little-endian count of `esp_timer` microseconds since boot (R1/R2). That includes `timestamp_us`, `start_timestamp_us`, `t_rx_us`, `t_tx_us`, and any other time-sync or anchor field. There is no relative stamp, no truncated stamp, and no big-endian stamp. The device reads the count through `nn2_port_clock_t`. The ESP adapter implements that port with `esp_timer_get_time()`. The count never wraps in practice: 2⁶⁴ µs is about 584 thousand years. It resets on reboot. It is not wall-clock time and it is not the FreeRTOS tick. The u64 microsecond clock is not what the VTS-T4 sequence-wrap hook advances (§7).
 
-`boot_id` is a u32 drawn once per boot from the existing random port (`nn2_port_random_t`). The host treats a changed `boot_id` as a reboot and a time-base reset. `boot_id` is reported by `get_time` (§3.16.d) and by `get_status` (§3.13.5).
+`boot_id` is a u32 drawn once per boot from the existing random port (`nn2_port_random_t`). The host treats a changed `boot_id` as a reboot and a time-base reset. `boot_id` is reported by `get_time` (§3.16.d) and by `get_status` (§3.13.5, R8).
 
 `nn2_core` and `nn2_app` do not call `esp_timer_get_time` and do not name `esp_timer`. The symbol stays in the adapter (Class S, §7).
 
-#### 3.16.b Sequence
+#### 3.16.b Sequence and session lifetime
 
-Each ADC stream (ADS131 and ADS1299) has its own `frame_sequence` and its own `sample_sequence`. Those counters are never shared across streams.
+Each ADC stream (ADS131 and ADS1299) has its own `frame_sequence`, `sample_sequence`, `overrun`, and `frames_dropped`. Those counters are never shared across streams.
 
-`frame_sequence` is a u32 per `(session_id, adc_source)` stream. It starts at 0 when `start_stream` creates the session. It increases by 1 for every frame **produced** on that stream, including a frame later dropped by the D3 queue-full rule or by a send error, so every loss is a gap in the sequence the host observes. It continues across RECOVERING and does not reset there. It wraps modulo 2³². Comparison is serial-number arithmetic: signed `(int32_t)(a - b)`.
+**One loss rule (R3, Agent 05).** There are two layers and no third. They are not added together.
 
-`sample_sequence` is a u32 per stream. The DRDY ISR increments it on every DRDY (§3.16.c). It starts at 0 at `start_stream` and does not reset across RECOVERING.
+1. Acquisition. `sample_sequence` plus the ISR `overrun` counter, as in §3.16.c. A `sample_sequence` gap equals the `overrun` delta. That gap is a missed DRDY before the latch.
+2. Frame. `frame_sequence` (u32) increments for every frame **produced**, whether or not it is sent. Any non-send (no peer, `EAGAIN`, ring full, link down, stream disabled) still consumes a `frame_sequence` and increments `frames_dropped` (u32). `frames_dropped` is incremented atomically with, or before, the release of that consumed `frame_sequence`. A frame is never discarded before its sequence is assigned, and a frame is never silently discarded.
 
-`msg_sequence` remains the per-session counter of every device→host message (§3.4.4). It is not a frame counter and it is not per source.
+Host invariants, per stream, wrap-aware (signed `(int32_t)(a - b)`):
+
+- A frame gap equals the `frames_dropped` delta.
+- Within received frames, a sample gap equals the `overrun` delta.
+- A duplicate (delta 0) or a regression (`(int32_t)(a - b) < 0`) is an error. The host counts it and reports it with its position.
+- `msg_sequence` stays the per-session count of every device→host message (§3.4.4). It is not either loss layer.
+
+**Counter ownership (Agent 05).** Each of `frames_dropped`, `overrun`, and `frame_sequence` has a single writer, or it is an atomic u32. `EAGAIN` increments run in the Core-0 net task (`nn2_net`). Ring-full increments run on Core 1. `frames_dropped` therefore has two writers and is atomic: C11 `atomic_uint_fast32_t` or `atomic_uint32_t`, with a relaxed increment. `get_status` and SESSION_REPORT take one snapshot of those counters. The `frames_dropped` field on `heartbeat` uses that same snapshot. Class S checks the atomic type, the two writers, and the snapshot (§7).
+
+**Session lifetime (R6, R9).** This is the only session rule.
+
+- `start_stream` creates a new `session_id` and resets `frame_sequence` and `sample_sequence` to 0. `timestamp_us` stays monotonic. It does not reset.
+- `boot_id` is random per boot (R6). `session_id` is not reused within that boot. The host treats `(boot_id, session_id)` as the unique session key.
+- Stream start, and any later session-metadata re-send, carries `session_id:u32`, `boot_id:u32`, `start_timestamp_us:u64`, `fs`, and the SlotPlan id/epoch (R6). `fs`, the slot timing, and the §3.17 N7 set (`K_target`, `K_min`, settle, guard, ADC rate, saturation thresholds, `warmup_frames`) also appear in `get_config` and in every session start. The host must never assume them, and it must never hard-code `K` (R10, N7).
+- A peer change marks that session metadata for re-send on the next FRAME (R8). The new peer does not depend on having seen START. `get_status` returns the live set in any state: `boot_id`, `session_id`, current `frame_sequence`, `frames_dropped`, `overrun`, `timestamp_us`, `fs`, and the SlotPlan id (§3.13.5).
+- A transient RECOVERING that returns to STREAMING keeps the session and its counters (T10b). Frames not sent in that interval increment `frames_dropped`.
+- In this contract, a fault means a fault that ends in STOPPED or RECOVERED_STOP. That end gets a new `session_id` on the next `start_stream`. `timestamp_us` stays monotonic across that boundary. An ended session is not resumed (Q-B1).
+- SESSION_REPORT carries the first and last `frame_sequence`, the start and end `timestamp_us`, `frames_dropped`, and `overrun`.
 
 Within one stream and one `boot_id`, `timestamp_us` is strictly monotonic.
-
-Host conformance, per stream, wrap-aware:
-
-- The sequence is monotonic.
-- A gap is the missing values. It is counted.
-- A duplicate (delta 0) or a regression (`(int32_t)(a - b) < 0`) is an error. The host counts it and reports it with its position.
-- "Gap-free" means there is no gap without a matching device counter. Host-observed sample gaps equal the device `overrun` delta plus counted frame drops (§3.16.c).
 
 #### 3.16.c Capture point
 
 The following points are Agent 05 Class S capture criteria. They are static design constraints. Class H for latch latency is **NOT RUN**. Q-21 is closed by the criteria at the end of this subsection. v0.1.0 states no numeric latency.
 
 1. The DRDY GPIO ISR is allocated on Core 1. It latches `esp_timer_get_time()` and the per-stream `sample_sequence` into an ISR-owned slot, then wakes the ADS task with `xTaskNotifyFromISR` or `vTaskNotifyGiveFromISR`. The ISR does no SPI, no logging, and no allocation. It never uses the FreeRTOS tick and it never uses TX time. The latched pair is handed to the ADS task with the sample. If this build has no DRDY ISR, the driver task latches at the DRDY notify with the same ISR-safe `esp_timer_get_time()` and does no other work at that point. In v0.1.0 the simulator produces frames through this same latch API, so the sequence and overrun paths run without hardware.
-2. `sample_sequence` increments on **every** DRDY. If the previous slot has not been consumed, the ISR increments that stream's `overrun` counter and the sequence still advances. `overrun` is a per-stream health counter (§3.13.5). "Gap-free" means no gap without a matching counter: the host-observed sample gaps must equal the device `overrun` delta plus counted frame drops.
+2. `sample_sequence` increments on **every** DRDY. If the previous slot has not been consumed, the ISR increments that stream's `overrun` counter and the sequence still advances. `overrun` is a per-stream health counter (§3.13.5). The sample-gap rule is only §3.16.b: a `sample_sequence` gap equals the `overrun` delta.
 3. Each ADC stream has its own latch, its own `sample_sequence`, and its own `frame_sequence`. Counters are never shared.
 4. DRDY marks end-of-conversion. The per-device conversion/group delay is a documented metadata constant, reported in `get_status` and in session metadata. Firmware does not silently subtract it from `timestamp_us`.
-5. A FRAME carries the timestamp and the `sample_sequence` of its first sample, plus a sample count. The payload adds `first_sample_sequence:u32` and `sample_count:u16` (**Proposed**). Both stay inside the 1440 B payload cap (§3.3, §3.13.6). Header `timestamp_us` on a FRAME is that first-sample latch. It is never the transmit time. Per-slot and per-sample times are derived from `timestamp_us` plus SlotPlan offsets (ADR-0002). They are not extra on-wire timestamps.
+5. A FRAME carries the **measured** DRDY latch of its first sample as header `timestamp_us`, plus that sample's `sample_sequence` and a sample count (R4/R5). The payload adds `first_sample_sequence:u32` and `sample_count:u16` (**Proposed**). Both stay inside the 1440 B payload cap (§3.3, §3.13.6). `timestamp_us` is never TX time and never a nominal or scheduled stamp. ON and OFF for one slot stay in that same FRAME and use this same anchor. Per-slot times are derived, not extra wire timestamps (§3.16.e). The formula below is the only SlotPlan formula. Periods and the default 50/50 split are ADR-0002 §3.3 and §3.5; the anchor is this measured latch, not a schedule.
+
+```text
+frame_period_us = 1000000 / fs                 // fs in {1,2,4,5,8,10}; exact integer
+slot_period_us  = frame_period_us / 20         // SLOT_COUNT = 20
+anchor_us       = FRAME timestamp_us           // measured DRDY latch of the first sample
+on_start_us     = anchor_us + k * slot_period_us
+on_centre_us    = on_start_us + slot_period_us / 4
+off_start_us    = on_start_us + slot_period_us / 2
+off_centre_us   = off_start_us + slot_period_us / 4
+```
+
+`k` is the slot index, `0 .. 19`. If scheduler lateness against that plan is measurable, `get_status` exposes it as `sched_late` (u32, **Proposed**). `sched_late` does not replace `timestamp_us`.
 6. The `get_time` stamps are taken inside `nn2_net` (§3.16.d). The host uses min-RTT filtering because Wi-Fi delay is asymmetric.
 7. Hardware edge capture (for example MCPWM capture) is a later question for Agent 04 (Q-23). It is not needed for v0.1.0.
 
@@ -649,9 +675,9 @@ The following points are Agent 05 Class S capture criteria. They are static desi
 
 #### 3.16.d Host mapping (`get_time`)
 
-Opcode `0x0005` (**Proposed**, next free system opcode; Agent 03 confirms, Q-22). The REQUEST has no arguments. The command is allowed in every state, is read-only, never changes state, bypasses the reply cache, and does not need the peer lock. Any peer may call it. A non-owner call does not refresh the silence timer; an owner call does (§3.6, §3.11). The registry row is in §3.5 and the matrix row is in §3.7.3.
+Opcode `0x0005` (**Proposed**, next free system opcode; Agent 03 confirms, Q-22). The command is allowed in every state, is read-only, never changes state, bypasses the reply cache, and does not need the peer lock. Any peer may call it. A non-owner call does not refresh the silence timer; an owner call does (§3.6, §3.11). The registry row is in §3.5 and the matrix row is in §3.7.3.
 
-REPLY body: `boot_id:u32`, `t_rx_us:u64` latched at RX dispatch inside `nn2_net`, `t_tx_us:u64` latched immediately before send. Both stamps use the device monotonic clock (§3.16.a).
+`get_time`, `heartbeat`, and `get_status` each carry an opaque host field `t_host:u64` in the REQUEST (R7). The device echoes that field unchanged. It does not interpret `t_host`. Wall clock exists only on the host. The REPLY of each of those three commands carries `t_host` together with `t_rx_us:u64` (latched at RX dispatch inside `nn2_net`) and `t_tx_us:u64` (latched immediately before send). Both device stamps are the u64 LE clock of §3.16.a. `get_time` also returns `boot_id:u32`. The host-side accuracy target is a measured value: **TBD, NOT RUN**.
 
 Host mapping, implemented by host tooling and not by device firmware: the host records `t0` at send and `t3` at receive.
 
@@ -670,8 +696,10 @@ Binary multi-byte integers are little-endian. JSON (`nn2ctl` output and the USB 
 | Field | Where | Binary | JSON |
 |---|---|---|---|
 | `timestamp_us` | Header. FRAME value is the first-sample capture time (§3.16.c) | u64 LE microseconds | integer microseconds |
-| `t_rx_us`, `t_tx_us` | `get_time` REPLY | u64 LE microseconds | integer microseconds |
-| `boot_id` | `get_time` and `get_status` | u32 LE | integer |
+| `t_rx_us`, `t_tx_us` | `get_time`, `heartbeat`, and `get_status` REPLY | u64 LE microseconds | integer microseconds |
+| `t_host` | REQUEST of those three commands; echoed in the REPLY. Opaque. Not a device clock | u64 LE | integer |
+| `start_timestamp_us` | Session metadata (R6) | u64 LE microseconds | integer microseconds |
+| `boot_id` | `get_time`, `get_status`, session metadata | u32 LE | integer |
 | `frame_sequence` | FRAME payload, per stream (§3.16.b) | u32 LE | integer |
 | `first_sample_sequence` | FRAME payload (**Proposed**) | u32 LE | integer |
 | `sample_count` | FRAME payload (**Proposed**) | u16 LE | integer |
@@ -681,9 +709,148 @@ Binary multi-byte integers are little-endian. JSON (`nn2ctl` output and the USB 
 | `host_time_unix_us` | Host mapping only. Not a device wire field | — | integer microseconds |
 | `sync_rtt_us` | Host mapping only | — | integer microseconds |
 | `drift_ppm` | Host mapping only | — | number |
+| `frames_dropped` | Per-stream counter (§3.16.b) | atomic u32 | integer |
 | `flags` bit 1 `TS_ESTIMATED` | Header, device→host | one bit | boolean or integer 0/1, never a float timestamp |
 
-### 3.17 Safety invariants
+#### 3.16.f V3 defect traceability
+
+Sources: V3 timestamp study, `reference/v3` @ `f2d7c8cf`; V2/V3/V4 study Part 2 @ `f2d7c8cf`. The studies are evidence of defects. They are not a second protocol. Each row names the one rule that prevents the defect. Study tests in §7 are named `VTS-T1`–`VTS-T16`. Those names are not the state-machine transitions T1–T23.
+
+| V3 defect | Rule that prevents it |
+|---|---|
+| 32-bit relative timestamp wraps at about 71.6 min (2³² µs) | R1/R2 (§3.16.a). Every wire time is absolute u64 LE microseconds since boot. No relative stamp and no truncated stamp. |
+| Big-endian TIME64 | R1/R2 (§3.16.a). Time fields are little-endian. No network-order timestamp. |
+| Drops invisible in the sequence | R3 (§3.16.b). A frame gap equals Δ`frames_dropped`. A sample gap equals Δ`overrun`. The sequence is assigned before the frame is released. |
+| One nominal stamp per frame | R4/R5 (§3.16.c). `timestamp_us` is the measured DRDY latch of the first sample. Slot times use the published formula from that anchor. A scheduled stamp is not used. `TS_ESTIMATED` stays set until on-target evidence is linked (Q-21). |
+| No host mapping | R7 (§3.16.d). `get_time`, `heartbeat`, and `get_status` echo opaque `t_host` with device `t_rx_us` and `t_tx_us`. Wall clock stays on the host. |
+| No re-anchor when the peer changes | R8 (§3.13.5, §3.16.b). `get_status` returns the live metadata in any state. A peer change marks that metadata for re-send on the next frame, so the new peer does not depend on having seen START. |
+| `underk_mask` set when `n_used < K_target`, so a still-valid minimum count is marked under-K; a short count can still carry a mean the host might treat as valid; ON and OFF are not identified as one slot pair; saturation and the I2C commit are not on the wire | N1–N11 (§3.17). Under-K is `n_used < K_min` (default 8). `K_min ≤ n_used < K_target` is `MINIMUM` with `BELOW_TARGET` and stays valid. A short or zero count carries the mean sentinel. ON and OFF means stay separate, with `PAIR_SAME_SLOT_OFF_AFTER_ON`. The device does not compute HbO or HbR. |
+
+### 3.17 Per-slot sample quality (N1–N11, Proposed)
+
+Normative for file rev 2. **Proposed**, same as the ADR. It does not authorize implementation, flash, or Class H. Source: V2/V3/V4 study Part 2 @ `f2d7c8cf`. The study is evidence. HbO and HbR stay on the host. The device sends separate ON and OFF means and does not compute chromophores.
+
+#### 3.17.1 One classification rule (N2, N3, N10)
+
+`K_target` and `K_min` come from `get_config` and from session-start metadata. The host never hard-codes them (N7, R10). The defaults until an amendment are `K_target` = 10 and `K_min` = 8 (ADR-0002 Q4). `K_min ≤ n_used < K_target` is a valid mean. `n_used < K_min` is not. That is the fix for the V3 defect that set `underk_mask` when `n_used < K_target`.
+
+Apply this order. The first match sets the slot `quality`. Reason bits still accumulate.
+
+1. The first `warmup_frames` frames after each session start set frame flag `WARMUP` and slot quality `WARMUP`, and they set reason bit `WARMUP` (N10). `warmup_frames` is configurable, default at least 1, and is in `get_config`. Those frames are never scientific data. The host must not use them as scientific data.
+2. A hard reason (`CRC`, `SPI`, `ADS_STATUS`, `SEQ_GAP`, `DRDY_OVERRUN`, `LED_COMMIT_MISSING`, `SESSION_BOUNDARY`) sets quality `INVALID`.
+3. `n_used < K_min`, including `n_used = 0`, on either phase sets quality `UNDER_K` and reason `UNDER_K_ON` and/or `UNDER_K_OFF`. N3 calls this outcome invalid for use: the phase has no valid mean.
+4. `K_min ≤ n_used < K_target` on either phase sets quality `MINIMUM` and reason `BELOW_TARGET`. The mean is valid.
+5. Otherwise quality is `TARGET` and the mean is valid.
+
+`UNDER_K` and `INVALID` both withhold a valid mean (N3). The enum keeps the short count apart from a capture fault. A zero or a partial mean is never sent as valid. The device writes `NN2_MEAN_INVALID` (`INT32_MIN`, `0x80000000`) into every phase mean that this rule does not mark valid. The host must not use a sentinel, and it must not use a mean whose quality is `UNDER_K`, `INVALID`, or `WARMUP`.
+
+`quality` is a u8 (**Proposed**): `TARGET`=0, `MINIMUM`=1, `UNDER_K`=2, `INVALID`=3, `WARMUP`=4.
+
+`reason` is a u16 (**Proposed**):
+
+| Bit | Name |
+|---|---|
+| 0 | `UNDER_K_ON` |
+| 1 | `UNDER_K_OFF` |
+| 2 | `CRC` |
+| 3 | `SPI` |
+| 4 | `ADS_STATUS` |
+| 5 | `SEQ_GAP` |
+| 6 | `DRDY_OVERRUN` |
+| 7 | `TIMING_LATE` |
+| 8 | `LED_COMMIT_MISSING` |
+| 9 | `SATURATED_ON` |
+| 10 | `SATURATED_OFF` |
+| 11 | `WARMUP` |
+| 12 | `SESSION_BOUNDARY` |
+| 13 | `BELOW_TARGET` |
+| 14–15 | reserved 0 |
+
+`BELOW_TARGET` is only the band `K_min ≤ n_used < K_target`. It is not under-K.
+
+#### 3.17.2 Counts, saturation, and commit (N1, N4, N5, N6)
+
+Each slot carries u8 `n_on_used`, `n_off_used`, `n_on_available`, and `n_off_available` (N1). These four counts replace `n_on:u16` and `n_off:u16`. Used and available both stay on the wire.
+
+Saturation (N4): near-rail thresholds are configurable, one high and one low per ADC source, and every raw sample is compared. Each phase sets `SATURATED_ON` or `SATURATED_OFF` and carries u8 `n_on_saturated` or `n_off_saturated`. The thresholds appear in `get_config`. A saturated sample remains inside `n_used`. Saturation alone does not invalidate the mean.
+
+Commit (N5): each slot carries u16 `on_commit_offset_us` and `off_commit_offset_us`, microseconds from slot start, and u16 `on_stable_us` and `off_stable_us`, the stable-window lengths used. The commit is the I2C completion time. It is a conservative software timestamp. It is not the optical edge.
+
+The I2C completion callback latches `esp_timer` through the same latch API as DRDY (`nn2_port_clock_t`; the adapter is what calls `esp_timer_get_time()`). The stable window starts at that latched commit plus settle. It does not start at the request time (N5, N9). A late callback is safe: the window starts at the late latch, and the slot may set `TIMING_LATE` or `UNDER_K_OFF`. An early callback, a latch earlier than the request, is not safe. That phase is `TIMING_LATE`, its mean is the sentinel, and its samples are not accepted.
+
+Pairing (N6): the ON mean and the OFF mean stay separate fields. Frame flag bit 1, `PAIR_SAME_SLOT_OFF_AFTER_ON`, means the OFF mean is the dark phase of this same slot after ON. The device does not send a subtracted net.
+
+#### 3.17.3 Config and the SlotPlan invariant (N7, N8, N9)
+
+`get_config` and every session-start record carry `K_target`, `K_min`, `settle_on_us`, `settle_off_us`, `guard_us`, `fs`, the ADC rate, the saturation thresholds, `warmup_frames`, and the declared `LED_COMMIT_LATENCY_BUDGET_US`. The host never hard-codes `K` (N7, with R10).
+
+The N8 invariant holds for every supported `fs` and the configured ADC rate:
+
+```text
+OFF_window >= (K_target + 1) * T_adc + LED_COMMIT_LATENCY_BUDGET_US + margin
+```
+
+The `_Static_assert` in §3.14.4 checks only that nominal plan against the declared constant `LED_COMMIT_LATENCY_BUDGET_US`. The constant is provisional, owned by Agent 05 with Agent 04, and **NOT RUN**. The SlotPlan formula is a pure function in `nn2_core`. The platform layer supplies the latency budget.
+
+At runtime, each slot compares the measured commit offset with the remaining window. A remainder that cannot hold the plan sets `TIMING_LATE` or `UNDER_K_OFF` under §3.17.1. The runtime check does not change the declared budget.
+
+`set_fs`, or any config write, whose nominal plan violates the invariant returns `INVALID_ARG`, stores nothing, and leaves the state unchanged (T3).
+
+Settle (N9), for ON and for OFF: `settle >= 3 * T_adc` (sinc3) + front-end settling. The front-end term is H1 and is **NOT RUN**. Agent 05 owns the window and the settle values with Agent 04. Until H1, the configured settle still contains a provisional front-end placeholder. That placeholder is not a measurement. A larger settle shrinks the OFF window. That tradeoff is Risk-4. The numbers belong on Agent 05's Class S SlotPlan budget table for PR #55. Those values are **PROVISIONAL** and **NOT RUN**.
+
+#### 3.17.4 Logging and counters (N11)
+
+While STREAMING there is no `ESP_LOG*` in the ISR, on the acquisition path, or in any Core-1 task. Other periodic logs are rate-limited. Health logs come only from one rate-limited, low-priority Core-0 task. Class S checks this ban (§7).
+
+Each counter has one writer, or it is an atomic u32 (§3.16.b). `heartbeat`, `get_status`, and SESSION_REPORT copy one snapshot. `irq_to_spi` is the SPI-start latch minus the DRDY latch.
+
+| Counter | Writer | Reported in |
+|---|---|---|
+| `drdy_to_spi_latency_max_us` | Core 1, single writer. Maximum of `irq_to_spi` | heartbeat, `get_status`, SESSION_REPORT |
+| `irq_to_spi` histogram | Core 1, single writer. p99 is derived from the histogram | `get_status`, SESSION_REPORT |
+| `drdy_missed` | Core 1, single writer. A DRDY that did not start SPI | heartbeat, `get_status`, SESSION_REPORT |
+| `overrun` | DRDY ISR, single writer (§3.16.b) | heartbeat, `get_status`, SESSION_REPORT |
+| `seq_gap` | Core 1 acquisition, single writer | heartbeat, `get_status`, SESSION_REPORT |
+| `i2c_commit_latency_max_us` | Core 1 I2C-completion owner, single writer | heartbeat, `get_status`, SESSION_REPORT |
+| `frames_dropped` | atomic u32, Core 0 and Core 1 (§3.16.b) | heartbeat, `get_status`, SESSION_REPORT |
+
+#### 3.17.5 FRAME payload size
+
+The wire mean is i32 little-endian (**Proposed**). Raw sample packing remains Q-11. The invalid-mean sentinel is `NN2_MEAN_INVALID`.
+
+```text
+prefix = 16
+  adc_source u8                 1
+  slot_plan_epoch u16           2
+  frame_sequence u32            4
+  first_sample_sequence u32     4
+  sample_count u16              2
+  frame_flags u16               2
+  slot_count u8                 1
+slot = 27
+  slot_index, channel, quality                         3 × u8
+  n_on_used, n_off_used, n_on_available, n_off_available,
+  n_on_saturated, n_off_saturated                      6 × u8
+  reason                                               u16
+  I_ON_mean, I_OFF_mean                                2 × i32
+  on_commit_offset_us, off_commit_offset_us,
+  on_stable_us, off_stable_us                          4 × u16
+payload = 16 + 20 × 27 = 556
+headroom = 1440 − 556 = 884
+```
+
+`frame_flags` bit 0 is `WARMUP`. Bit 1 is `PAIR_SAME_SLOT_OFF_AFTER_ON`. Bits 2–15 are 0 in this revision.
+
+```text
+_Static_assert(NN2_FRAME_PREFIX_SIZE + 20 * NN2_SLOT_RECORD_SIZE == 556);
+_Static_assert(NN2_FRAME_PAYLOAD_SIZE <= NN2_PROTO_MAX_PAYLOAD);
+```
+
+The layout fits. No N1–N6 field is omitted. `n_on:u16` and `n_off:u16` are replaced by the four u8 counts. The §3.13.4 mask is replaced by `quality` plus `reason`.
+
+A later packing that keeps 20 slots and stores four i32 ON means and four i32 OFF means adds 24 B per slot (slot record 51 B): `16 + 20 × 51 = 1036`, which is still ≤ 1440. That packing is not this layout. Q-11 owns it.
+
+### 3.18 Safety invariants
 
 | ID | Invariant | Enforcement |
 |---|---|---|
@@ -691,7 +858,7 @@ Binary multi-byte integers are little-endian. JSON (`nn2ctl` output and the USB 
 | INV-2 | Only `start_stream` over UDP from STOPPED can lead to LED energisation, and only via SlotPlan → DeadlineTimer → EmitterControl. | Registry LED-capable column; transport gate |
 | INV-3 | USB never turns LEDs on (O8); LED-capable commands rejected at USB decode. | Registry; Class U |
 | INV-4 | `safe_off` accepted in every state, from any UDP peer and USB, without the I2C lock on Core 0. | C2; Class U + Class S |
-| INV-5 | No auto-recovery from FAULTED or SAFE_OFF (L5, L9); no `RECOVERING → STREAMING` edge (Q-B1). | Transition table |
+| INV-5 | No auto-recovery from FAULTED or SAFE_OFF (L5, L9). A session that ends in STOPPED or RECOVERED_STOP is not resumed (Q-B1). A transient RECOVERING that returns to STREAMING keeps that session (§3.16.b). | Transition table, §3.16.b |
 | INV-6 | Entering RECOVERING or FAULTED asserts RESET# first (Core 1), report afterwards. | §3.9 |
 | INV-7 | Leaving RESET#-held states at runtime only via RI with readback, or via reboot for boot-tagged states. | §3.10, T16/T17 |
 | INV-8 | Link loss never energizes an LED. Grace expiry never itself raises a fault and never enters SafeOff; it only runs internal `stop_stream`. Emitter-off, RI, or stop-confirmation failure via T11 or T15 still escalates to FAULTED. | §3.11, T11, T15 |
@@ -774,17 +941,47 @@ Class I in this table is simulator conformance (`nn2ctl` against the simulator).
 | U | `clear_fault` FAULTED(BOOT) → restart seam, never STOPPED (#48 AC4); RUNTIME guard pass → RI → STOPPED; RI fail → FAULTED; **T16 guard fail** (active subsystem fault) → `PRECONDITION_FAILED`, not executed, RI seam not called, state unchanged (§3.7.4) | NOT RUN |
 | U | `set_led_current` 0/50/51 mA; IREF ≤ 222 (#48 AC5) | NOT RUN |
 | U | SIMULATED: enumerate all opcodes in fake profile → bit 0 = 1 and JSON `"simulated": true` (#48 AC6); mixed profile (real ADC, disabled emitter) follows §3.5 rule; FAKE-profile FRAMEs set `TS_ESTIMATED` (flags bit 1, §3.16.c) | NOT RUN |
-| U | §3.16.a / §3.16.b: `timestamp_us` strictly monotonic within a stream; `frame_sequence` gap-free when nothing is dropped and a gap visible and counted when a drop is injected; wrap at 2³² with serial-number comparison; `frame_sequence` and `sample_sequence` reset to 0 at `start_stream` and do not reset across RECOVERING | NOT RUN |
+| U | §3.16.a / §3.16.b: `timestamp_us` strictly monotonic within a stream; a frame gap equals the `frames_dropped` delta; within received frames a sample gap equals the `overrun` delta; the two deltas are not added; duplicate and regression are errors; `frame_sequence` and `sample_sequence` reset to 0 only at `start_stream`; a transient return from RECOVERING to STREAMING keeps them; the next `start_stream` after STOPPED or RECOVERED_STOP resets them. VTS-T4 (§7) supplies the wrap hooks | NOT RUN |
 | U | §3.16.d: `get_time` in every state, no state change, reply not cached, no peer lock required; REPLY carries `boot_id`, `t_rx_us`, `t_tx_us` | NOT RUN |
-| U | §3.14.4 `_Static_assert` relations hold (stop-confirm, safe-off recovery, RX/loop timeout ≤ silence/4) with values still TBD; §3.3 datagram sum assert holds | NOT RUN |
+| U | §3.14.4 `_Static_assert` relations hold (stop-confirm, safe-off recovery, RX/loop timeout ≤ silence/4, nominal SlotPlan versus `LED_COMMIT_LATENCY_BUDGET_US`) with values still TBD; §3.3 datagram sum assert holds; §3.17.5 `16 + 20 * 27 == 556` and `556 <= 1440` | NOT RUN |
 | U (fault injection, fake clock/socket/queues) | **Heartbeat loss** → silence > `NN2_HOST_SILENCE_MS` → grace → LED-off request → confirmation → STOPPED, `LINK_LOSS`; single lost heartbeat does not arm; **link-down anchor**; **reconnect during grace** → cancel, stream continues; **stale grace-expiry notify** after T21 → T7/T8/T11 not taken (S-3, R-9); **internal safety/state queue full** → RESET# + FAULTED; **non-safety USB C1 full** → `BUSY` + `usb_busy`, not FAULTED; **USB `safe_off` with C1 full** still asserts RESET# (§3.9); **stop-confirmation timeout** → FAULTED; during STOPPING, RI, and T17 waits a `safe_off` and a `heartbeat` are still serviced (S-1); peer-lock release on every path (#51 AC1) | NOT RUN |
 | S | Forbidden includes in `nn2_core`/`nn2_ports`/`nn2_app` (`tools/layers.json`); no FreeRTOS/`esp_timer` symbols in Core/App; no `portMAX_DELAY` on listed paths; timer callbacks contain only `xTaskNotify(..., eSetBits)` (not `xQueueSend`); no blocking `ulTaskNotifyTake`/`xQueueReceive` on STOPPING, RI, or T17 paths; no `gpio_reset_pin(18)`; no GPIO26 reference; no `MALLOC_CAP_SPIRAM`; no eFuse writes; DRDY ISR install only in Core-1 task init (R1); ISR latches `esp_timer_get_time` and `sample_sequence` only, then notifies (`xTaskNotifyFromISR` / `vTaskNotifyGiveFromISR`); no SPI, logging, or allocation in the ISR (§3.16.c) | NOT RUN |
 | S | §3.16.c Q-21: the DRDY ISR function is `IRAM_ATTR` and the registration uses `ESP_INTR_FLAG_IRAM` | NOT RUN |
-| I | §3.16.b / §3.16.c / §3.16.e, `nn2ctl` versus the simulator (#56): timestamps strictly monotonic within a stream; gap detection and counting; injected sample gap equals the `overrun` delta (plus counted frame drops when a drop is injected); injected duplicate (delta 0) and regression (`(int32_t)(a - b) < 0`) detected, counted, and reported with position; offset/drift estimate converges on simulated drift; JSON fields are integers except `drift_ppm`; simulator frames set `SIMULATED` and `TS_ESTIMATED` and use the same latch API | NOT RUN |
+| S | §3.16.b counter ownership: `frames_dropped` is C11 `atomic_uint32_t` or `atomic_uint_fast32_t` with a relaxed increment. The `EAGAIN` writer is the Core-0 `nn2_net` task. The ring-full writer is Core 1. `overrun` and `frame_sequence` each have one writer, or the same atomic u32. `get_status` and SESSION_REPORT copy a snapshot | NOT RUN |
+| S | §3.17 N8/N11: the SlotPlan formula in `nn2_core` does not name `esp_timer` or a measured latency; `LED_COMMIT_LATENCY_BUDGET_US` is a declared platform constant. No `ESP_LOG*` in the DRDY ISR, the acquisition path, or any Core-1 task while STREAMING. Health logs are confined to one rate-limited low-priority Core-0 task. `irq_to_spi` max and histogram have a single Core-1 writer | NOT RUN |
+| I | §3.16.b / §3.16.c / §3.16.e, `nn2ctl` versus the simulator (#56). This row is simulator evidence only (Class U/I). It is not an on-target timing claim. A sample gap equals the `overrun` delta. A frame gap equals the `frames_dropped` delta. The two deltas are not added. Duplicate (delta 0) and regression (`(int32_t)(a - b) < 0`) are detected, counted, and reported with position. JSON fields are integers except `drift_ppm`. Simulator frames set `SIMULATED` and `TS_ESTIMATED` and use the same latch API. VTS-T2 and VTS-T7 are this class | NOT RUN |
 | B | Both profiles build; SPIRAM/octal guards fail closed (negative build); Wi-Fi/lwIP affinity check fails closed (#51 AC2); size report (internal DRAM) recorded (#51 AC5) | NOT RUN |
 | Conformance | `nn2ctl` loopback against the 28 B envelope (#50, #51 AC4) | NOT RUN |
 | H | `safe_off` latency, grace/heartbeat timing on air, pre-B1 window, stack HWM, min free heap, H-ADS-PSRAM, H-COMMS-1. Owner A3 approval required. | **NOT RUN** |
 | H | §3.16.c Q-21: on-target p99.9 latch-latency distribution under Wi-Fi streaming plus NVS load (v0.1.2/v0.1.3). Acceptance is relative to one ADC sample period; the exact fraction is fixed only after this measurement. No number in v0.1.0. Owner A3 approval required. | **NOT RUN** |
+| H | DRDY/LED logic-analyser check that the FRAME anchor is the measured latch and that per-slot times match the SlotPlan formula (§3.16.c). Not a v0.1.0 gate. Owner A3 approval required. | **NOT RUN** |
+| H | Host-side drift over at least 1 h (§3.16.d). The accuracy target stays TBD. Not a v0.1.0 gate. Owner A3 approval required. | **NOT RUN** |
+| H1 | Front-end settling added to `3 * T_adc` (§3.17 N9). On hold until hardware resumes. Owner Agent 05 with Agent 04. | **NOT RUN** |
+| H2 | Optical edge versus the I2C-completion software timestamp (§3.17 N5). The commit is not the optical edge. Same hold. | **NOT RUN** |
+| H3 | Near-rail saturation thresholds against live ADC codes (§3.17 N4). Same hold. | **NOT RUN** |
+| H4 | Measured p99 I2C completion versus the declared `LED_COMMIT_LATENCY_BUDGET_US` (§3.17 N8). The constant stays provisional until this measurement. Same hold. | **NOT RUN** |
+| H5 | On-target `irq_to_spi` distribution (§3.17 N11). Same hold. | **NOT RUN** |
+
+**Study conformance map `VTS-T1`–`VTS-T16`.** These IDs match [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56). They are Agent 03 conformance oracles. They are not the state-machine transitions T1–T23 in §3.7.4, and this ADR does not reuse bare T10–T16 for them. The map does not copy study titles. Every row is **NOT RUN**. `VTS-T2` and `VTS-T7` are simulator evidence only (Class U/I). They are not an on-target timing claim. `VTS-T10`–`VTS-T16` are Class U/I as well.
+
+| ID | Oracle | Evidence |
+|---|---|---|
+| VTS-T1 | R1/R2 (§3.16.a). No 32-bit relative timestamp (the old wrap near 71.6 min), no truncated stamp, and no big-endian time. A fixture value past 2³² µs remains a u64. The u64 microsecond clock does not wrap. | Class U. **NOT RUN** |
+| VTS-T2 | R3 sample layer (§3.16.b). A `sample_sequence` gap equals the `overrun` delta: a missed DRDY before the latch. | Class U/I, simulator only. Not an on-target timing claim. **NOT RUN** |
+| VTS-T3 | R3 frame layer (§3.16.b). A `frame_sequence` gap equals the `frames_dropped` delta. On every drop path (no peer, ring full, link down, stream disabled, `EAGAIN`) `frames_dropped` increments atomically with, or before, release of the consumed `frame_sequence`. | Class U/I. **NOT RUN** |
+| VTS-T4 | Wrap hooks preset **both** `frame_sequence` and `sample_sequence` near 2³². Serial-number comparison crosses the wrap. The hook does not advance or wrap the u64 microsecond clock. A separate u64 fixture may carry a value past 2³² µs. | Class U. **NOT RUN** |
+| VTS-T5 | R4/R5 (§3.16.c). `timestamp_us` is the measured DRDY latch of the first sample, never a scheduled stamp. Per-slot times match the SlotPlan formula from that anchor. `TS_ESTIMATED` stays set. | Class U/I. **NOT RUN** |
+| VTS-T6 | R6 (§3.16.b). Session metadata carries `session_id`, `boot_id`, `start_timestamp_us`, `fs`, and the SlotPlan id/epoch. `session_id` is not reused within one boot. | Class U. **NOT RUN** |
+| VTS-T7 | R7 (§3.16.d). `get_time`, `heartbeat`, and `get_status` echo opaque `t_host` with `t_rx_us` and `t_tx_us`. Offset and RTT stay on the host. | Class U/I, simulator only. Not an on-target timing claim. **NOT RUN** |
+| VTS-T8 | R8 (§3.13.5, §3.16.b). `get_status` in any state returns `boot_id`, `session_id`, current `frame_sequence`, `frames_dropped`, `overrun`, `timestamp_us`, `fs`, and the SlotPlan id. A peer change marks that metadata for re-send on the next FRAME. | Class U/I. **NOT RUN** |
+| VTS-T9 | R9/R10. Accelerated soak of at least 2 h. A transient RECOVERING that returns to STREAMING keeps the session and its counters. A fault that ends in STOPPED or RECOVERED_STOP gets a new `session_id` on the next `start_stream`. The host takes `fs` and slot timing from the device. | Class I. **NOT RUN** |
+| VTS-T10 | N1 (§3.17). Each of 20 slots carries `n_on_used`, `n_off_used`, `n_on_available`, and `n_off_available` as u8. | Class U/I. **NOT RUN** |
+| VTS-T11 | N2 (§3.17). `n_used < K_min` sets `UNDER_K_ON` or `UNDER_K_OFF` and is not a valid mean. `K_min ≤ n_used < K_target` is `MINIMUM` with `BELOW_TARGET` and is valid. `n_used ≥ K_target` is `TARGET`. The mask is not `K_target`. | Class U/I. **NOT RUN** |
+| VTS-T12 | N3 (§3.17). A phase with `n_used < K_min` or `n_used = 0` carries `NN2_MEAN_INVALID`. The host does not use it. A numeric zero mean is valid only for `TARGET` or `MINIMUM`. | Class U/I. **NOT RUN** |
+| VTS-T13 | N4 (§3.17). Thresholds come from `get_config`. Every raw sample is compared. The slot carries the saturated counts and the `SATURATED_*` bits. | Class U/I. **NOT RUN** |
+| VTS-T14 | N5/N6 (§3.17). Commit offsets and stable lengths are present. `PAIR_SAME_SLOT_OFF_AFTER_ON` is set. ON and OFF means stay separate. The stable window starts at the latched I2C completion plus settle. | Class U/I. Simulator evidence is not an on-target timing claim. **NOT RUN** |
+| VTS-T15 | N7/N8/N9 (§3.17). `get_config` and session metadata carry `K`, settle, guard, `fs`, ADC rate, and the thresholds. The nominal-plan assert uses `LED_COMMIT_LATENCY_BUDGET_US`. A violating `set_fs` returns `INVALID_ARG`. Settle is at least `3 * T_adc` plus the provisional front-end placeholder. | Class U/I. **NOT RUN** |
+| VTS-T16 | N10/N11 (§3.17). The first `warmup_frames` frames are `WARMUP` and are not scientific data. Heartbeat, `get_status`, and SESSION_REPORT carry the N11 counters from one snapshot. | Class U/I. **NOT RUN** |
 
 ## 8. Open questions and risks
 
@@ -816,6 +1013,7 @@ Class I in this table is simulator conformance (`nn2ctl` against the simulator).
 | Risk-1 | Pre-hook window: IO18 floats HIGH via pull-up from reset to hook entry; PCA may keep last LED state | Owner (HW pull-down next rev) |
 | Risk-2 | Bonded PSRAM on IO35–37 (N16R8 with PSRAM disabled) — SI and leakage unverified | Agent 04, H-ADS-PSRAM |
 | Risk-3 | PR #34 naming (`nn2_ad_*`, `nn2_status.h`) diverges from main (`main/adapters/`, `nn2_core_types.h`) | Agent 02 / Agent 03 |
+| Risk-4 | Settle is `3 * T_adc` plus front-end settling (§3.17 N9). The front-end term is unknown until H1, and a larger settle shrinks the OFF window, which can fail the N8 invariant at high `fs`. Agent 05's Class S SlotPlan budget table on [PR #55](https://github.com/YerriSuyudHasim/noctinirs-2/pull/55) will record the numbers. Those values are **PROVISIONAL** and **NOT RUN**. | Agent 05 with Agent 04 |
 
 ## 9. References
 
@@ -824,6 +1022,8 @@ Class I in this table is simulator conformance (`nn2ctl` against the simulator).
 - `main` @ `f2d7c8cfecdc6570df155fac4d90625c16a7bf4b`: [ADR-0001](0001-clean-architecture-boundaries.md), [ADR-0002](0002-fnirs-optical-acquisition-timing.md), [ADR-0003](0003-rtos-task-topology.md), `tools/layers.json`, `components/nn2_core/include/nn2_core_types.h`, `components/nn2_ports/include/nn2_port_led.h`, `main/nn2_board_v1.c`, `main/adapters/nn2_ads131_build_guard.h`, `docs/ISSUE35_DIAGNOSTIC_CONTRACT.md`, `.github/workflows/firmware-build.yml`.
 - ESP-IDF v6.1 `fff9895c82d744c7237be8847347bdd1b07c6643`.
 - Issue [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56): time and sequencing contract (§3.16) and the later `nn2ctl` simulator conformance. Q-21 is resolved by criteria with the measurement pending. Q-22 and Q-23 in §8 stay open.
+- V3 timestamp study, `reference/v3` @ `f2d7c8cf`. Evidence of defects only (§3.16.f). Not a requirement and not a build input.
+- V2/V3/V4 study Part 2 @ `f2d7c8cf`. Evidence for N1–N11 (§3.17, §3.16.f). Not a requirement and not a build input. Study tests are `VTS-T1`–`VTS-T16` under [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56).
 - Agent 03 on Q-17/Q-18/Q-20: [PR #55 comment 6334229454](https://github.com/YerriSuyudHasim/noctinirs-2/pull/55#issuecomment-6334229454), against `702a8c4a`. Architect accepted that position with the refinements in §3.3 and §3.7.4.
 
 ## 10. Revision history
@@ -834,7 +1034,7 @@ Class I in this table is simulator conformance (`nn2ctl` against the simulator).
 | rev 2 | 2026-10-17 | Fold of Agent 03/04/05 inputs, D1–D3, C-a/b/c |
 | boot / HB addendum / rev 3 | 2026-10-17 | Boot sequence, P1 heartbeat, P2/Q-B1, R1–R5, F1 |
 | rev 3.1 (this file) | 2026-10-22 | GPIO26 caveat dropped; IO35–37 role-based + octal checks; named budgets, IO6 safe state, OSR/data-rate init inputs; IR-B1–B3 closed; 28 B header with `flags` (SIMULATED, reserved fail-closed, `RESERVED_FLAGS`); scope/non-goals; opcode ranges per subsystem; Agent 05 heartbeat/grace ownership constraints; #48/#51 alignment |
-| file rev 2 | 2026-10-22 | rev 2 — RTOS Class S S-1..S-4 (Agent 05) on `702a8c4a` + Q-17/Q-18/Q-20 resolved with Agent 03 agreement ([6334229454](https://github.com/YerriSuyudHasim/noctinirs-2/pull/55#issuecomment-6334229454)) + §3.16 time and sequencing contract for [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56); docs only. S-1 event-driven STOPPING/RI/T17 waits. S-2 USB `BUSY`/`usb_busy` versus internal queue-full FAULT, and USB `safe_off` `assert_reset` then notify. S-3 stale grace generation; `xTaskNotify(..., eSetBits)`. S-4 grace expiry does not itself raise a fault. `_Static_assert` timing relations (§3.14.4). `NN2_PROTO_MAX_DGRAM` 1472 / payload 1440 not from Kconfig; pre-CRC silent drop (`rx_malformed`); `RESERVED_FLAGS` only if `req_id` parsable; v1 `protocol_version` exact match; T16 guard does not enter RI. §3.16.a–§3.16.e: monotonic clock, `boot_id`, per-stream `frame_sequence`/`sample_sequence`, DRDY latch, `TS_ESTIMATED`, `get_time` `0x0005` (Proposed), integer JSON units. Q-21 closed by criteria (IRAM ISR, Core-1 critical-section budget TBD, p99.9 relative to one sample period, measurement NOT RUN, `TS_ESTIMATED` until the evidence is linked). |
+| file rev 2 | 2026-10-22 | rev 2 — RTOS Class S S-1..S-4 (Agent 05) on `702a8c4a` + Q-17/Q-18/Q-20 resolved with Agent 03 agreement ([6334229454](https://github.com/YerriSuyudHasim/noctinirs-2/pull/55#issuecomment-6334229454)) + §3.16 time and sequencing contract for [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56); docs only. S-1 event-driven STOPPING/RI/T17 waits. S-2 USB `BUSY`/`usb_busy` versus internal queue-full FAULT, and USB `safe_off` `assert_reset` then notify. S-3 stale grace generation; `xTaskNotify(..., eSetBits)`. S-4 grace expiry does not itself raise a fault. `_Static_assert` timing relations (§3.14.4). `NN2_PROTO_MAX_DGRAM` 1472 / payload 1440 not from Kconfig; pre-CRC silent drop (`rx_malformed`); `RESERVED_FLAGS` only if `req_id` parsable; v1 `protocol_version` exact match; T16 guard does not enter RI. §3.16.a–§3.16.f: monotonic clock, `boot_id`, the single loss rule, DRDY latch, `TS_ESTIMATED`, `get_time` `0x0005` (Proposed), integer JSON units, V3 defect trace R1–R10 (`reference/v3` @ `f2d7c8cf`). Q-21 closed by criteria (IRAM ISR, Core-1 critical-section budget TBD, p99.9 relative to one sample period, measurement NOT RUN, `TS_ESTIMATED` until the evidence is linked). Agent 05 RTOS additions on R1–R10: one loss rule; `frames_dropped` atomic across Core 0 and Core 1; measured latch anchor; fault means STOPPED or RECOVERED_STOP; VTS-T4 hooks both sequences; VTS-T2 and VTS-T7 are simulator only. Superseded earlier §3.16 text, with one rule left in each place: (1) §3.16.a "longer than any boot" becomes about 584 thousand years, and every wire time is absolute u64 LE (no relative, truncated, or big-endian stamp); the u64 clock is not the VTS-T4 wrap hook. (2) §3.16.b "continues across RECOVERING / does not reset" becomes the R9 rule: a fault ends in STOPPED or RECOVERED_STOP and the next `start_stream` gets a new `session_id`; a transient RECOVERING that returns to STREAMING keeps the session and its counters. (3) §3.16.b, §3.16.c item 2, and the §7 Class I row "sample gap equals the overrun delta plus counted frame drops" become the split: a `sample_sequence` gap equals the `overrun` delta; a `frame_sequence` gap equals the `frames_dropped` delta; on every drop path `frames_dropped` increments atomically with, or before, release of the consumed `frame_sequence`. (4) §3.16.c item 5 per-slot offsets without a formula become the measured DRDY anchor plus the published SlotPlan formula; a scheduled stamp is not used; `TS_ESTIMATED` stays set until the Q-21 evidence is linked. (5) §3.16.d "`get_time` REQUEST has no arguments" becomes `get_time`, `heartbeat`, and `get_status` carrying and echoing opaque `t_host`; the accuracy target stays TBD, NOT RUN. (6) §3.4.4, §3.11, §3.12, INV-5, the state diagram, and T10 point at that single session rule; T10b is the transient return. (7) C6/C7, §3.2 `EAGAIN`, §3.13.5, and §3.13.6 use that same loss rule, the atomic `frames_dropped` snapshot, and the R8/R9 field sets. (8) §7 names the study tests `VTS-T1`–`VTS-T16` so they stay distinct from transition-table T1–T23; `VTS-T2` and `VTS-T7` are simulator only; `VTS-T4` hooks both sequences; the Class S atomic-counter check and the Class H logic-analyser and 1 h drift rows stay NOT RUN. N1–N11 (§3.17; safety invariants move to §3.18): one classification rule (`UNDER_K` only below `K_min`; `MINIMUM`+`BELOW_TARGET` stays valid); mean sentinel `INT32_MIN`; saturation counts; I2C-completion commit through the DRDY latch API; `LED_COMMIT_LATENCY_BUDGET_US` is a declared provisional constant (NOT RUN) and the SlotPlan formula stays in core; no `ESP_LOG*` on the Core-1 streaming path; N11 counters are single-writer or atomic. FRAME payload `16 + 20 × 27 = 556` ≤ 1440. `n_on`/`n_off` u16 and the §3.13.4 mask are replaced by the §3.17 fields, not dropped. H1–H5 are Class H, NOT RUN, on hold. Risk-4 records the settle versus OFF-window tradeoff. |
 
 ## 11. Agent 07 blocking findings — traceability
 
