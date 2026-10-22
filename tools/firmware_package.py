@@ -106,8 +106,10 @@ def config(raw):
     for line in raw.decode().splitlines():
         if line.startswith('CONFIG_') and '=' in line:
             k, v = line.split('=', 1)
-            require(k not in out, 'duplicate sdkconfig key')
-            out[k] = v.strip('"')
+            # IDF6.1 emits repeated compatibility assignments; identical values are unambiguous.
+            value = v.strip('"')
+            require(k not in out or out[k] == value, 'conflicting sdkconfig assignment')
+            out[k] = value
     return out
 
 

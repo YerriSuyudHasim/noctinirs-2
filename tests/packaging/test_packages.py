@@ -176,6 +176,12 @@ class Packages(unittest.TestCase):
         self.write_meta(); (self.evidence/'sdkconfig').write_text(self.config.replace('esp32s3','esp32'))
         with self.assertRaises(ValueError): self.generate()
 
+    def test_idf_compatibility_assignments_identical_but_not_conflicting(self):
+        raw = self.config + 'CONFIG_ESP32_WIFI_IRAM_OPT=y\nCONFIG_ESP32_WIFI_IRAM_OPT=y\n'
+        self.assertEqual(pkg.config(raw.encode())['CONFIG_ESP32_WIFI_IRAM_OPT'], 'y')
+        with self.assertRaises(ValueError):
+            pkg.config((raw + 'CONFIG_ESP32_WIFI_IRAM_OPT=n\n').encode())
+
     def test_cli_failure_nonzero_and_no_subprocess_in_validation(self):
         f=copy.deepcopy(self.files); f.pop('images/noctinirs2.bin')
         p=self.archive_files(f)
