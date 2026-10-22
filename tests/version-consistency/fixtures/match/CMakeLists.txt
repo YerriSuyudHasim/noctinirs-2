@@ -1,0 +1,1 @@
+set(PROJECT_VER "0.1.0")

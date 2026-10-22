@@ -236,13 +236,19 @@ jobs:
           python3 tools/reproducible_build.py warnings evidence/build.log --output evidence/warning-count.txt
           find evidence -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/EVIDENCE_SHA256SUMS
 
+      - name: Check esp_app_desc version against VERSION
+        run: |
+          set -euo pipefail
+          python3 tools/check_version_consistency.py --root . --app-bin build/noctinirs2.bin | tee evidence/version-consistency.txt
+          sha256sum evidence/version-consistency.txt > evidence/version-consistency.sha256
+
       - name: Write step summary
         if: always()
         run: |
           {
             echo "## Class B build evidence (build only, not hardware validation)"
             echo "Source SHA: $SOURCE_SHA (event: $GITHUB_EVENT_NAME)"
-            for f in toolchain.txt target.txt SHA256SUMS size.txt warning-count.txt; do
+            for f in toolchain.txt target.txt SHA256SUMS size.txt warning-count.txt version-consistency.txt; do
               [ -f "evidence/$f" ] && { echo "### $f"; echo '```'; cat "evidence/$f"; echo '```'; }
             done
             if [ -f evidence/build.log ]; then
