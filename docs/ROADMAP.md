@@ -16,7 +16,7 @@ v0.1.1 and v0.1.2 both depend only on v0.1.0, so they can run in parallel. v0.1.
 
 | Release | Goal | Main scope | Excluded | Class H gate |
 |---|---|---|---|---|
-| [**v0.1.0** Communication Foundation](https://github.com/YerriSuyudHasim/noctinirs-2/milestone/2) | A host controls the device over Wi-Fi with the full command set. Responses that depend on hardware are simulated. | ADR-0004 host protocol; USB provisioning to NVS and STA reconnect; UDP transport (`nn2_net`); transactions keyed by `req_id` with a reply cache; full command registry; state machine and error codes; heartbeat with 3 s grace; safe-off stubs; P7 IO18 RESET# boot hook; `CONFIG_SPIRAM=n` checked at build time and at run time; `nn2ctl` host tool; CI | Real LED drive, SlotPlan timing, optical frames, streaming, ADS1299, OTA, TCP/TLS | H-COMMS-1 (emitter inactive) |
+| [**v0.1.0** Communication Foundation](https://github.com/YerriSuyudHasim/noctinirs-2/milestone/2) | A host controls the device over Wi-Fi with the full command set. Responses that depend on hardware are simulated. | ADR-0004 host protocol; USB provisioning to NVS and STA reconnect; UDP transport (`nn2_net`); transactions keyed by `req_id` with a reply cache; full command registry; state machine and error codes; heartbeat with 3 s grace; safe-off stubs; P7 IO18 RESET# boot hook; `CONFIG_SPIRAM=n` checked at build time and at run time; `nn2ctl` host tool; CI | Real LED drive, SlotPlan timing, optical frames, streaming, ADS1299, OTA, TCP/TLS | NOT RUN (deferred). H-COMMS-1 (#53/#54) is PARKED and is not a v0.1.0 gate. Historical cell: H-COMMS-1 (emitter inactive). |
 | [**v0.1.1** Deterministic LED Control](https://github.com/YerriSuyudHasim/noctinirs-2/milestone/3) | Bounded and verifiable LED drive | PCA9956B driver (IREF ≤ 222, readback); SlotPlan with 20 slots; GPTimer deadline; SafeOff C2 order; FAULTED/RECOVERING; jitter instrumentation | ADC sync, frames | H-LED-1 |
 | [**v0.1.2** Streaming Path](https://github.com/YerriSuyudHasim/noctinirs-2/milestone/4) | A loss-accounted FRAME stream | FRAME envelope and CRC; `nn2_frame` on Core 0; bounded queues and drop counters; SESSION_REPORT; host validator; SYNTHETIC and ADS131 raw sources (never mixed) | LED-synchronised capture | H-STREAM-1 |
 | [**v0.1.3** Synchronized LED-ADC Acquisition](https://github.com/YerriSuyudHasim/noctinirs-2/milestone/5) | Real optical fNIRS frames | ON/OFF capture aligned to DRDY in each slot (mean + count, K = 10); `set_fs` values {1,2,4,5,8,10}; optical FRAME payload | ADS1299, dual-rate, host app | H-SYNC-1 (fixture only, no human subject) |
@@ -24,15 +24,19 @@ v0.1.1 and v0.1.2 both depend only on v0.1.0, so they can run in parallel. v0.1.
 
 ## v0.1.0 critical path
 
-ADR-0004 PR for #33 (status: Proposed (acceptance pending); to be Accepted after IR) → protocol core (Class U) → `nn2_net` UDP transport → `nn2ctl` conformance → Class H H-COMMS-1 → tag.
+ADR-0004 PR for #33 (status: Proposed (acceptance pending); to be Accepted after IR) → protocol core (Class U) → `nn2_net` UDP transport → `nn2ctl` conformance → Class S/B/U plus Class I (simulator/CI conformance; criteria pending #56/#50) → tag.
 
-These run in parallel: the PR #34 Wi-Fi port, P7 safe boot (#49), `nn2ctl` (#50), release engineering (#52), and the H-COMMS-1 bench procedure (#53).
+Historical critical path through 2026-10-22, kept as history and no longer the v0.1.0 gate: the same chain ended in Class H H-COMMS-1 before the tag. H-COMMS-1 (#53/#54) is PARKED and is not a v0.1.0 gate, per the Owner directive of 2026-10-22 15:25 KST recorded in [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56). Class H for v0.1.0 is NOT RUN (deferred).
+
+These run in parallel: the PR #34 Wi-Fi port, P7 safe boot (#49), `nn2ctl` (#50), and release engineering (#52). Historical parallel item, now PARKED and not a v0.1.0 gate: the H-COMMS-1 bench procedure (#53/#54).
 
 Flash preconditions (D6, [#33 comment 6333972667](https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6333972667)). No board is flashed, including with the #46 packages, until all three hold:
 
 1. P7 safe boot #49 is merged.
 2. The de-energized-board bench procedure #53 is approved.
 3. The Owner has confirmed the flash directly.
+
+The three D6 items above stay as the historical rule for any later flash. They are not a v0.1.0 release gate. v0.1.0 is verified by Class S/B/U plus Class I (simulator/CI conformance; criteria pending #56/#50). Class H for v0.1.0 is NOT RUN (deferred). H-COMMS-1 (#53/#54) is PARKED.
 
 Target: **30 Oct 2026 (KST)**, with a buffer to 2 Nov 2026. The assumptions behind this date are listed in the v0.1.0 milestone.
 
