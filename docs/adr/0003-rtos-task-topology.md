@@ -28,7 +28,7 @@ This ADR is that contract: task inventory and lifecycle, Core-1 priority **order
 ### 1.2 Current product state (verified at `791e35b`)
 
 - Active firmware remains the 0.1.0 scaffold. This ADR adds no tasks, drivers, or build inputs.
-- ADR-0001 (`docs/adr/0001-clean-architecture-boundaries.md`) is **Proposed** on `main`. Its dependency rule still binds this ADR: FreeRTOS, ESP-IDF, GPTimer, and TWDT live only in adapters and the composition root.
+- ADR-0001 (`docs/adr/0001-clean-architecture-boundaries.md`) is **Accepted** on `main` via [#44](https://github.com/YerriSuyudHasim/noctinirs-2/pull/44), merge `8b61a87aa8c87c85067606ce9de80b7251551e61`. Historical text through rev 2 said **Proposed**. Its dependency rule still binds this ADR: FreeRTOS, ESP-IDF, GPTimer, and TWDT live only in adapters and the composition root.
 - ADR-0002 (`docs/adr/0002-fnirs-optical-acquisition-timing.md`) is **Accepted** on `main` via [#24](https://github.com/YerriSuyudHasim/noctinirs-2/pull/24) (squash `791e35b`). Optical geometry is not restated here.
 - Issue [#23](https://github.com/YerriSuyudHasim/noctinirs-2/issues/23) recorded the sequencing **A(+E) → C → D → B (Class H)** before any Core-1 priority ladder is frozen. This ADR is step **A** (with **E**).
 - Class H (on-target distributions, WCET, TWDT under load) is **NOT RUN**. No flash is authorized by this document.
@@ -320,7 +320,7 @@ A successful firmware build is Class **B** only. It is not Class H, not unit evi
 
 **Neutral**
 
-- ADR-0001 remains Proposed. A later Accept of ADR-0001 only needs a cross-link check, not a change to optical geometry.
+- ADR-0001 is **Accepted** on `main` via [#44](https://github.com/YerriSuyudHasim/noctinirs-2/pull/44), merge `8b61a87aa8c87c85067606ce9de80b7251551e61`. Historical text through rev 2: "ADR-0001 remains Proposed. A later Accept of ADR-0001 only needs a cross-link check, not a change to optical geometry." This status reference is that cross-link. Optical geometry is unchanged.
 - Sequence **C**, **D**, and Class **H** (**B**) are later issues. This ADR does not close them.
 
 ## 7. Affected components and interfaces (future)
@@ -357,7 +357,7 @@ This pull request’s evidence class is **static / document review** only. CI th
 | Q-5 | Wi-Fi softirq versus Core-0 frame consumer | Called out; measurement **NOT RUN** | RTOS; Class H |
 | Q-6 | SCAN_STOP versus GPTimer orphan alarms | Protocol required (§3.8, §3.10); on-target proof Class H **NOT RUN** | Firmware + RTOS |
 | Q-7 | Critical-section and I2C WCET versus DRDY spacing | Class H gate **B**; **NOT RUN**. Needs separate Owner authorization and the bring-up current band. | RTOS + Hardware |
-| Q-8 | ADR-0001 still Proposed | Cross-link only if ADR-0001 is later Accepted | Architect |
+| Q-8 | ADR-0001 status | **Accepted** via [#44](https://github.com/YerriSuyudHasim/noctinirs-2/pull/44), merge `8b61a87aa8c87c85067606ce9de80b7251551e61`. Historical text through rev 2: "still Proposed; cross-link only if later Accepted." | Architect |
 | Q-9 | Relative priority between `nn2_ads131` and `nn2_ads1299` | **OPEN**. Not frozen by this amend. | RTOS + Class H |
 | Q-10 | Dual-rate acquisition and timestamp alignment for the two ADCs | Follow-up [#31](https://github.com/YerriSuyudHasim/noctinirs-2/issues/31). M1 is fNIRS-first. Dual-rate is not an M1 blocker and is not specified here. | Later issue; not this ADR |
 
@@ -368,7 +368,7 @@ This pull request’s evidence class is **static / document review** only. CI th
 - Issue [#26](https://github.com/YerriSuyudHasim/noctinirs-2/issues/26) — scope locks (power, storage, Wi-Fi only, LED split).
 - Issue [#23](https://github.com/YerriSuyudHasim/noctinirs-2/issues/23) — sequencing A(+E) → C → D → B (Class H).
 - Issue [#24](https://github.com/YerriSuyudHasim/noctinirs-2/pull/24) — ADR-0002 Accepted; squash `791e35b`.
-- ADR-0001: `docs/adr/0001-clean-architecture-boundaries.md` (Proposed at `791e35b`).
+- ADR-0001: `docs/adr/0001-clean-architecture-boundaries.md` (**Accepted** via [#44](https://github.com/YerriSuyudHasim/noctinirs-2/pull/44), merge `8b61a87aa8c87c85067606ce9de80b7251551e61`; historical status at `791e35b` was Proposed).
 - ADR-0002: `docs/adr/0002-fnirs-optical-acquisition-timing.md` (Accepted at `791e35b`).
 - Base of the Proposed text: `main` @ `791e35b79ba8cef343280d76973fee21d3b41e42`.
 - Proposed land (squash of PR #27): `27e33d874387579986d781d547c61d8441d3631b`.
@@ -409,3 +409,4 @@ Standing rules: no merge, release, or flash without specific Owner approval; `re
 | 0 | 2026-10-16 | Initial Proposed record from #25 Owner-confirmed G1 consensus and Agent 05 §4–§6. Core-1 ordering LED > sched > ADS with numbers OPEN. Frame consumer Core 0 mid-prio Proposed, affinity OPEN. Naming `nn2_*`. M1 LAN STA transport. Class H **NOT RUN**. No firmware. | **Proposed** |
 | 1 | 2026-10-17 | Status **Proposed → Accepted** under Owner Accept write authorization `confirm_accept_write` (2026-10-17 Asia/Shanghai). Prior Proposed land SHA `27e33d874387579986d781d547c61d8441d3631b` (squash of PR #27). Agent 07 IR APPROVE on Accept PR #29 head `cbb0c9b36a3825a9bd8c1bbd756c32e6e41c6059`; squash land `6309c06bdedd01bd2430ccd62b5c4604b34f9d8a`. Topology contract is the approved design baseline for later firmware issues. Does not authorize implementation, flash, or Class H. Affinity, literal priorities, stacks, and queues stay **OPEN**. Class H / flash / WCET **NOT RUN**. No firmware. Inventory at this rev still used the sole placeholder `nn2_ads`, superseded in rev 2. | **Accepted** |
 | 2 | 2026-10-17 | Amend of Accepted content (Status unchanged). Owner dual-ADS lock via Nori on [#25](https://github.com/YerriSuyudHasim/noctinirs-2/issues/25#issuecomment-6226293188): both ADCs on Nocti board v1; sole placeholder `nn2_ads` superseded by `nn2_ads131` and `nn2_ads1299`. G1 Class S: Architect one `nn2_port_adc_t` / two adapters ([6226298179](https://github.com/YerriSuyudHasim/noctinirs-2/issues/25#issuecomment-6226298179)); RTOS ordering `nn2_led` > `nn2_sched` > {`nn2_ads131`, `nn2_ads1299`}, relative ADS priority **OPEN**, both Core-1 candidates, Wi-Fi Core 0 ([6226299155](https://github.com/YerriSuyudHasim/noctinirs-2/issues/25#issuecomment-6226299155)). Affinity, literal priorities, stacks, and queues stay **OPEN**. Dual-rate follow-up [#31](https://github.com/YerriSuyudHasim/noctinirs-2/issues/31) is not implemented here (M1 fNIRS-first; not an M1 blocker). Class H / flash / firmware **NOT RUN**. Fresh Agent 07 IR required on this head before Owner merge. | **Accepted** |
+| 3 | 2026-10-22 | Status-reference errata only ([#61](https://github.com/YerriSuyudHasim/noctinirs-2/issues/61)). ADR-0001 is **Accepted** via PR #44, merge `8b61a87aa8c87c85067606ce9de80b7251551e61`. Current status sentences in §1.2, §6, Q-8, and §10 are corrected. Historical Proposed wording stays beside those sentences. Revision rows 0–2 are unchanged. No topology, ordering, affinity, queue, TWDT, or transport decision is amended. | **Accepted** |
