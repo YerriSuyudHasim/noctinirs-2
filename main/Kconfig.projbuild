@@ -1,0 +1,26 @@
+menu "NoctiNIRS 2 (draft v0.1.0)"
+
+    choice NN2_PROFILE
+        prompt "Firmware profile"
+        default NN2_PROFILE_FAKE
+        config NN2_PROFILE_FAKE
+            bool "Fake ADC / disabled emitter baseline"
+        config NN2_PROFILE_ADS131_DIAGNOSTIC
+            bool "ADS131 diagnostic / emitter energy unavailable fixture required"
+    endchoice
+
+    config NN2_LED_SETTLE_US
+        int "Settle wait between (disabled) LED on and (fake) sample (us)"
+        range 0 1000
+        default 100
+        help
+            Short bounded busy-wait (esp_rom_delay_us) in the sequencer task.
+            Capped at 1 ms; any longer wait must become a blocking RTOS delay
+            (pending Agent 05 / RTOS review, #12).
+
+    config NN2_DEMO_CYCLES
+        int "Number of acquisition cycles to run at boot"
+        range 1 1000
+        default 5
+
+endmenu

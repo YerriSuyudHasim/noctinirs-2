@@ -4,18 +4,73 @@
 |---|---|
 | ID | ADR-0001 |
 | Title | Clean architecture layer boundaries (Core / Application / Ports / Adapters) |
-| Status | **Proposed** (not approved; not implemented) |
-| Date | 2026-10-16 (rev 1, see Revision history) |
+| Status | **Accepted** (bounded static architecture framework; not product implementation approval) |
+| Date | 2026-10-21 (A2 Owner clarification record, rev 5; original bounded acceptance 2026-10-18) |
 | Issue | #3 (M0.3 — Clean Architecture ADR) |
 | Author role | Architect (draft) |
-| Independent reviewer | TBD (must not be the author) |
+| Independent reviewer | Group 2 Independent Technical Reviewer; separately attributed reports linked in Section 0 (not the implementation author) |
 | Approver / merge | Project Owner `YerriSuyudHasim` only |
 | Decision authority | OWNER-M0-A1-001 (recorded in `project.yaml` `governance.decision_ref`) |
 | Input commit | `noctinirs-2` `main` @ `52d9f85d6ce454b7e1ef97cc7908bbae92b49d4f` (merge of PR #5) |
 | Governance input | `ai-engineering-hub` `main` @ `e645829a726b1008c46373d7ef2b25929988d7f1` (read 2026-10-16) |
 | Evidence class of this document | Static (design review only) |
 
-> This ADR describes a *target* architecture. Nothing in it is implemented at the input commit. Proposed names, paths, and interfaces are not approved until this ADR is accepted by the Project Owner after independent review.
+> This ADR describes an accepted *target* architecture, not a verified product implementation. The input-commit scaffold observations below are historical. Acceptance of the static framework does not establish runtime, hardware, timing, safety or clinical conformance.
+
+## 0. Owner decision record (bounded acceptance)
+
+**Decision: ACCEPT. Decision date: 2026-10-18 at 09:22:14 UTC.** Human Owner
+`YerriSuyudHasim` accepted the bounded static architecture framework in the
+[actual Owner decision](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6248188579),
+referring to the [decision packet](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6248048761).
+The accepted proposal is identified by complete Git tree
+`6fb344225d6ea7a489e7eaf5b18d0b5bebf3b88c`, reviewed at
+`3c24189d455cefc52143134f57cdff31528256ef` and preserved by actual #43 squash
+`d92796d73806e2e97092329be3741b3ddac19c54`.
+
+The [later final integration authorization](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6256494704)
+authorized only that integration and explicitly left ADR source recording separate.
+The [execution record](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6256587588)
+confirms exact tree preservation and post-merge CI. This revision records the existing
+decision through a separate reviewable change; it does not backdate the source edit,
+alter historical Proposed revisions, or grant merge authority to this revision.
+
+The decision's technical inputs are the [non-author integration approval](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6247562819)
+and [bounded Firmware/RTOS consultation](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6247910114).
+The later [non-author reconciliation confirmation](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43#issuecomment-6256423199)
+verifies preservation of that accepted tree; it is not an input to the earlier decision.
+These are separately attributed Owner-account relay reports, not native GitHub APPROVE
+reviews. One assigned non-author assessor held the reviewer and both consulted roles;
+they are not three independent people. Consultation recommended acceptance with no
+current static-design amendment, not approval of future concurrency or hardware code.
+
+**Accepted scope:** the Core/Application/Ports/Adapters contract, Q-10 strict C11
+enforcement design, Q-11 complementary static/compiler/manual strategy and disclosed
+residual risks, canonical N6 policy ownership, and port-interface contract template.
+The full N6 migration is merged; #39 was only its partial prerequisite. F1 remains
+**CLOSED** for the corrected independent per-header probes. **R1/R2 retain only their
+existing conditionally accepted scope**; this record accepts no new defect or broader
+exception. See the linked reports for their exact conditions.
+
+**Retained obligations:** Sections 3.6-3.10 and 9 remain binding. Macro/conditional,
+transitive/generated-header, header-shadow, root/toolchain, link/callback and
+standard-header limits remain explicit manual/deferred obligations. Actual product
+layers require isolated C11 host builds of all inner translation units/headers,
+retained full dependencies and compile commands, configuration coverage and behavior
+tests. Each atomic use needs its own RTOS/target review; implementation-specific
+tasks/ISRs, synchronization, assertion/watchdog behavior, timing and hardware parameters
+are not approved here. Production Class S is **NOT APPLICABLE (not evidence)** while
+layers are absent; tooling fixtures and Class B do not substitute for product Class U
+or physical evidence. Accepted residual limits are not unfinished Issue #11 strategy
+criteria; future product evidence has not been supplied by accepting them.
+
+**N5 restoration:** restore meaningful real `class-u-host-tests`, bound to GitHub
+Actions integration **15368**, before the first production `nn2_*` component/runtime
+merge (including #13), or **2026-10-25T01:00:00Z**, whichever is earlier. Restore at
+expiry absent a new explicit Owner-approved extension. Synthetic/empty/skipped success
+is insufficient. [Approved exception](https://github.com/YerriSuyudHasim/ai-engineering-hub/issues/2#issuecomment-6236882761).
+No issue is closed by this record. See the [Issue #11 matrix and N5 sequence](../M1_ISSUE11_ACCEPTANCE_RECORD.md)
+for review/closeout boundaries and the separate #13/#15/#40 work.
 
 ## 1. Context
 
@@ -136,7 +191,7 @@ FreeRTOS headers are forbidden both with the `freertos/` prefix (e.g. `freertos/
 
 Allowed standard headers in Core: `<stdint.h>`, `<stdbool.h>`, `<stddef.h>`, `<string.h>`, `<limits.h>`, and `<assert.h>` (static assertions). `<stdatomic.h>` is **not** machine-checked by Class S: whether it is acceptable depends on RTOS review, so any use is a **review-only (Class S manual)** item and is not counted as automated evidence.
 
-**Not detectable by include grep** (deferred): forbidden dependencies reached through macros that expand to includes or platform calls (G3), transitive includes via an allowed header (G4), and generated headers (G5). These are tracked as follow-ups G3/G4/G5; until they are closed, a Class S grep pass does not prove their absence.
+**Include detection limits (Q-11):** literal scanning is bounded evidence. G3/G4/G5 are handled by the layered verification strategy in Section 3.10; full preprocessing/transitive dependency analysis remains outside the Class S gate.
 
 Short examples:
 
@@ -145,18 +200,57 @@ Short examples:
 - ✘ `nn2_app_session.c` calls `xQueueSend`. Queueing belongs to an Adapter behind a port.
 - ✔ `nn2_adapter_adc_esp.c` includes `driver/spi_master.h` and implements `nn2_port_adc`.
 
+### Bounded A2 Owner decision: pinned standard-library implementation chain
+
+The [actual Human Owner A2 decision](https://github.com/YerriSuyudHasim/noctinirs-2/pull/15#issuecomment-6306981230) (2026-10-21) clarifies §§3.3/3.10 solely for the Issue #13 / PR #15
+0.1.x ring/sequencer slice on ESP32-S3, ESP-IDF v6.1 commit
+`fff9895c82d744c7237be8847347bdd1b07c6643`, Xtensa GCC
+`esp-15.2.0_20251204` and image
+`espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c`.
+Permitted C standard headers may transitively reach the unmodified
+`components/esp_libc/platform_include/sys/cdefs.h` shim and generated `sdkconfig.h`
+**solely for standard-library implementation configuration**. The assessed chain,
+including `<stdint.h>`, is retained in [baseline exact-source target evidence](https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39531735121/artifacts/12315877257).
+Reviewed shim SHA-256: `45151a90d09f8e7d6b8acab050f2e15686e7fdca70d29b298df88af16d4d884a`.
+
+All decision conditions remain binding:
+
+- Product-owned inner source/headers must not include SDK configuration/platform
+  headers, reference CONFIG_* symbols, select conditional SDK fallbacks, depend
+  on framework/RTOS/driver APIs or adopt generated inner headers.
+- SDK-free isolated host compilation, strict C11 guard/enforcement, independent
+  header probes and complete host/target dependencies, commands, search roots,
+  environment and configuration evidence remain required. Broad IDF-inherited
+  target roots are not target isolation.
+- No fake/shadow standard headers, altered SDK shim, hidden dependency evidence,
+  weakened scanner/manifest/C11/build control or warning suppression is allowed.
+- Only this identified standard-library chain, slice and pinned build are covered.
+  SDK/toolchain/configuration changes, changed shim bytes or additional resolved
+  platform headers require fresh Architect/Verifier assessment and any additional
+  policy-required decision; future modules inherit no automatic waiver.
+- R1/R2 retain their original conditions. No blanket transitive exception or
+  timing/runtime/hardware/safety/clinical approval follows.
+
+A1 still requires conforming opaque operational state with valid C11 caller storage,
+alignment/effective type/lifetime and no heap; the proposed public-state exception
+was rejected. D1 requires conditional/unmeasured blocking wording. This reviewable
+source record is **not independently accepted merely because the design decision
+exists**. Historical findings/evidence remain; changed candidates require fresh
+applicable exact-head checks and non-author review. N5/deadline and separate
+settings/ready/merge/issue/deletion/release/hardware/automation authority are unchanged.
+
 ### 3.4 C11 conventions
 
-| Topic | Rule (proposed) |
+| Topic | Rule (accepted static framework) |
 |---|---|
 | Prefixes | `nn2_core_*`, `nn2_app_*`, `nn2_port_*`, `nn2_adapter_*`; macros `NN2_*`; file names match prefixes. |
-| Language standard | Inner layers (`nn2_core`, `nn2_app`, `nn2_ports`) compile with `-std=c11` in both host (Class U) and target (Class B) builds. Agreement of Firmware and RTOS Specialists on this flag is an open question (Q-10). |
+| Language standard | Inner layers (`nn2_core`, `nn2_app`, `nn2_ports`) compile with `-std=c11` in both host (Class U) and target (Class B) builds. Enforced by the root build hook and compiler guard in Section 3.9 (Q-10); bounded design consultation and Owner acceptance are recorded in Section 0. Future implementation review remains required. |
 | Opaque handles | Modules expose `typedef struct nn2_x nn2_x_t;` with storage supplied by the caller (static allocation helpers or `NN2_X_STORAGE_SIZE`) to avoid heap. |
 | Errors | Functions return `nn2_status_t` (a Core-defined enum, `NN2_OK = 0`); outputs go through pointer parameters. Adapters translate `esp_err_t` at the boundary; `esp_err_t` never crosses into Ports/Application/Core. |
 | Memory | No dynamic allocation after init. Init-time allocation is allowed only in Adapters/composition root and must be documented; Core and Application do not call `malloc`/`free`. |
 | Ownership | Every buffer/handle has exactly one documented owner; borrowed pointers are valid only for the call unless the port contract states otherwise; ownership transfer is explicit in names/docs (`*_take`, `*_give`, `*_release`). |
 | Ports | A port is a `struct` of function pointers plus a `void *ctx`, e.g. `typedef struct { nn2_status_t (*read)(void *ctx, ...); void *ctx; } nn2_port_adc_t;`. Ports must not expose platform types. |
-| Port contract doc | Each port header documents: caller context (task / ISR / either), blocking or nonblocking, reentrancy, ownership of arguments, error codes, and **timing expectation stated as a requirement to be measured** (not a guarantee). |
+| Port contract doc | Use the [port interface contract template](../templates/port-interface-contract.md). Each port header documents: caller context (task / ISR / either), blocking or nonblocking, reentrancy, ownership of arguments, error codes, and **timing expectation stated as a requirement to be measured** (not a guarantee). |
 | Concurrency | Core is single-threaded and reentrant by construction (no globals with mutable state). Application state shared across contexts requires a documented synchronization strategy approved by RTOS Specialist. |
 | Const / types | Fixed-width integers; `const` for inputs; no implicit platform `int` size assumptions in wire formats. |
 
@@ -173,16 +267,13 @@ main/                       # composition root; wires adapters into app
 test/host/                  # Unity host tests with fake ports (proposed)
 ```
 
-**Normative inner-layer paths.** The following are the normative layer paths for the inner layers:
+**Canonical inner-layer definition:** [tools/layers.json](../../tools/layers.json) is the sole normative machine-readable policy for layer identities/paths, permitted component dependencies, header ownership prefixes, forbidden include patterns and scanned source/header suffixes. All dependency edges outside a row's `requires` are forbidden; self-layer includes are allowed, self `REQUIRES` is invalid. Empty `requires` means independent of other components. The diagrams, matrices, layout and examples in this ADR explain that policy and are not separately maintained gate configuration. CI detection, the single Python Class S scanner (via its shell wrapper), and the root C11 hook consume the manifest through [tools/layer_contract.py](../../tools/layer_contract.py).
 
-| Path | Layer |
-|---|---|
-| `components/nn2_core` | Core |
-| `components/nn2_app` | Application |
-| `components/nn2_ports` | Ports |
+Schema v2 has exactly `schema_version: 2`, `layers`, `source_extensions` and `forbidden_include_regex`. `layers` contains exactly one row for each semantic role `core`, `ports`, `app`, with exactly `name`, `path`, `requires` and `header_prefixes`; paths are `components/nn2_` plus the role. Dependencies reference component identities. Duplicate/unknown/self/cyclic edges, overlapping header ownership, extra/duplicate keys, repeated roles, malformed/empty policy fields, invalid regular expressions, missing/unreadable files and unsupported versions fail validation before detection or gate verdicts. JSON uses only the Python standard library. Identity/path schema checks are not an alternative dependency policy. Architectural changes to otherwise valid policy require review; regression oracles pin the intended current matrix.
 
-- Until `tools/layers.yaml` exists (to be introduced after this ADR is accepted), **this ADR is the source of truth for layer paths**. The Architect owns the layer map; CI consumes it and must not maintain an independent list.
-- Any `components/nn2_*` directory that is not in this table is a layer-map violation (**CI FAIL**), until the map is amended by a revision of this ADR (or, after acceptance, `tools/layers.yaml`). Adapter components (`nn2_adapters_<area>`) must be added to the map by name when introduced.
+The Architect owns schema/path changes through an ADR revision, independent review and Owner decision. Any new `components/nn2_*` entry (including a future adapter) requires a reviewed schema/map extension first. Detection rejects unmapped entries and malformed top-level paths. A valid manifest with absent product layers produces explicit NOT APPLICABLE (not evidence); an empty layer selects the gate and cannot establish conformance. Missing or invalid configuration fails before workflow outputs are emitted.
+
+**Cross-PR integration (completed):** [PR #38](https://github.com/YerriSuyudHasim/noctinirs-2/pull/38), [PR #39](https://github.com/YerriSuyudHasim/noctinirs-2/pull/39), then [PR #43](https://github.com/YerriSuyudHasim/noctinirs-2/pull/43) landed in the required order. #43 migrated the Python dependency map, CROSS patterns and platform patterns to this manifest. The legacy grep scanner is retired; wrappers invoke the same Python scanner. The [N6 integration report](../N6_INTEGRATION_REPORT.md) retains historical candidate inputs and conflict evidence; Section 0 links actual squash execution and the bounded Owner acceptance. No pending PR #40 change is included in that integration.
 
 **`REQUIRES` / `PRIV_REQUIRES` allow-list** (derived from the layout above; no ESP-IDF components permitted):
 
@@ -228,6 +319,42 @@ No timing, latency, jitter, or throughput claim is made by this ADR. All three m
 - Safe-state actions (e.g. emitters OFF) are requested through ports; the concrete fail-safe mechanism and its timing are Hardware/RTOS decisions.
 - `assert` / `abort` are reserved for programmer errors in debug builds; policy is TBD with RTOS Specialist (watchdog interaction).
 
+### 3.9 Q-10 decision: verifiable ISO C11 enforcement
+
+Decision accepted within Section 0's static framework: strict ISO C11 for inner-layer C translation units and every port header, in host and ESP-IDF builds. Adapters and the composition root retain the SDK default. The bounded Firmware/RTOS consultation supports this design; future implementation, atomic and timing approvals remain separate.
+
+At ESP-IDF v6.1 commit `fff9895c82d744c7237be8847347bdd1b07c6643`, `tools/cmake/build.cmake` selects `-std=gnu23` for the target compiler. The older Issue #11 comment's gnu17 default is not this pinned source's behavior. `C_STANDARD 11` alone is insufficient: CMake may decay unless `C_STANDARD_REQUIRED` is set, extensions default ON, and raw SDK/compiler options can override properties.
+
+Implementation: root `CMakeLists.txt` includes [cmake/nn2_c11.cmake](../../cmake/nn2_c11.cmake) **after** `project()`, when IDF component targets exist. `nn2_require_c11(target)` sets `C_STANDARD 11`, `C_STANDARD_REQUIRED YES`, `C_EXTENSIONS NO`, and C-only private `-std=c11 -pedantic-errors`. A forced [guard header](../../cmake/nn2_c11_guard.h) requires `__STDC_VERSION__ == 201112L` and `__STRICT_ANSI__`. A later C17 or GNU11 source override therefore causes compilation to fail. Unsupported compiler families fail closed. Root placement avoids adding commands to component CMake files rejected by PR #38's restricted parser.
+
+The root hook uses the canonical paths and compiles one independent object probe per `.h` in each existing layer, including header-only Ports. Each probe inherits the owning component's public/transitive requirements and private include directories and compile definitions. Repository-relative header paths are SHA-256 hashed for distinct probe filenames and target identities; `nn2_c11_header_probes.tsv` records coverage. Unrelated private headers are never required to coexist in one artificial translation unit; intentional combined-header/include-order checks remain separate review or test work. Probes are build checks and are not linked into product firmware. Header self-containment and per-header include order still require review and host tests. Future host build targets must call the same helper and compile all port headers with only inner-layer include directories, standard library and explicit mocks. Product Class U tests must execute a nonzero test count; these contract fixtures do not constitute product Class U evidence.
+
+Verification: `tests/architecture/test_c11.py` builds CMake fixtures with GCC/Clang on host and with the pinned Xtensa compiler in CI: ISO C11 features succeed; later C17/GNU11 overrides and GNU statement expressions fail. `tools/verify_c11_idf.py` creates synthetic components outside the product tree, exercises actual IDF component registration, builds separate private-header source TUs plus header-only Ports, and checks a one-to-one header/probe inventory and the exact expected source/probe compile-command coverage with effective `-std=c11`. Helper-level regressions cover private namespace conflicts, matching include guards, component context and collision-safe identities. `tools/verify_c11_regression.py` confirms that both F1 regressions fail against the unchanged reviewed helper before checking the corrected implementation. CI retains generated probe sources, fixture headers, inventories, compile commands, logs and checksums for 90 days. Normal Class B still builds the unchanged product scaffold. No production-layer C11 conformance is claimed while layers are absent.
+
+Limits: C11 flags/guard do not prove all code is portable, detect deliberate macro spoofing, inspect link-time symbols, or constrain arbitrary project/toolchain mutations. GNU `__extension__`, suppression pragmas, C++/assembly additions, forced includes, target/source options and compiler wrappers require manual review. Only GCC/Clang toolchains are supported by this implementation. New host platforms need explicit verification. A missing compiler is a test failure, not a silent skip.
+
+### 3.10 Q-11 decision: complementary include/dependency verification
+
+The Verifier owns mechanical evidence; the Architect owns dependency interpretation; Firmware owns build inputs; RTOS reviews atomic/concurrency exceptions. No layer may use a scanner blind spot as permission to depend outward.
+
+| Mechanism | Class S guarantee / limitation | Required complementary verification and responsibility |
+|---|---|---|
+| Literal direct includes | The integrated Python scanner performs PR #38's lexical/path normalization and derives inward edges and forbidden patterns from the canonical manifest. It is not a full preprocessor. | Verifier runs the exact-head gate/fixtures; Reviewer compares supported patterns with Section 3.3. Conservative scanning can flag inactive preprocessor branches (false positives); rewrite or request a reviewed exception, never bypass CI. |
+| Macro-expanded includes (G3), macro-built platform calls | No expansion guarantee; a literal scan can miss them (false negatives). | Firmware/Verifier compile all inner source and public headers on host with only permitted include roots; exercise configuration branches. Reviewer inspects macros and call targets. Disabled/unbuilt branches remain manual risk. |
+| `__has_include` | May hide an outward include or select a fallback that makes an isolated host build pass. No Class S guarantee. | Reviewer inspects every conditional include/probe and supported configuration; Verifier builds both relevant branches where executable. Conditional platform dependencies in inner layers are forbidden, even if absent on host. |
+| Generated headers (G5) | Scanner sees only files present when run; generation can occur later. | Generated headers in inner layers are unsupported by default. Firmware must propose an ADR exception identifying generator, reproducibility, output roots, provenance and post-generation scan/build before adoption. Product-owned `sdkconfig.h` dependencies remain forbidden; the sole pinned standard-library implementation chain is distinguished by the bounded A2 Owner decision above. |
+| Transitive includes (G4) | Direct scan does not compute a transitive graph. PR #38's explicit REQUIRES audit checks declared component names only. | Verifier's future product host build must use restricted include roots and retain compiler `-M`/dependency output including system headers (`-MM` alone can omit `-isystem` headers). Class B compile commands/dependency files are reviewed against allowed roots. Link symbols/callback targets remain manual architecture review. |
+| Include directories / search order | A legal header name can resolve to an unintended platform/header shadow. | Firmware records compiler, working directory, `-I`, `-isystem`, `-iquote`, forced includes, sysroot and environment (`CPATH` etc.). Verifier retains compile commands and resolved dependencies; Reviewer checks provenance/search order, system-header classification and mocks. Host isolation is complementary, not proof across target configurations. |
+| Build-generated/implicit dependencies | Textual CMake audit cannot evaluate arbitrary toolchain files, target mutations, Component Manager or build graph generators. PR #38 deliberately rejects unsupported component syntax. | Reviewer audits root/toolchain/build changes and generated dependency graph. Verifier performs clean host/target builds of supported configurations and retains generated evidence; new dynamic mechanisms require a reviewed contract extension. |
+
+The bounded A2 decision does not remove the standard-header/transitive review obligation.
+The literal scanner remains unchanged: product includes of `sdkconfig.h` still fail;
+only the identified libc implementation chain is conditionally permitted. Each new
+candidate must retain its complete target graph and check that no additional platform
+header or product CONFIG_* dependence has appeared.
+
+**What is executed now:** Class S enforcement is preserved through canonical policy acquisition; manifest/detection regressions, synthetic C11 host/target checks and actual IDF fixture are automated. **What is required when product layers land:** isolated host build of all inner TUs/headers, retained full compiler dependencies and compile-command review, branch/configuration coverage and port acceptance tests. No product dependency-graph checker or host unit suite is introduced here. **Deferred/unsupported:** comprehensive preprocessor/CMake interpretation, exhaustive feature-branch expansion and automated link/callback reachability. Residual risk is explicit manual architecture review until a separately reviewed implementation closes it. Class S success alone cannot close G3/G4/G5 or prove absence of transitive/platform dependencies.
+
 ## 4. Testability and integration contracts
 
 | Class | Check | Scope | Notes |
@@ -239,7 +366,7 @@ No timing, latency, jitter, or throughput claim is made by this ADR. All three m
 | **B** (Build) | `idf.py set-target esp32s3 && idf.py build` with the ESP-IDF version pinned by Issue #2. | Compile/link | Not hardware validation. |
 | **H** (Hardware/on-target) | Measurement on ESP32-S3 hardware. | Timing, behavior | Required for any timing/latency/jitter claim. Out of scope for this ADR. |
 
-These run as **separate CI jobs** so that a failure is attributable to one class. Job definitions, runner images, and the ESP-IDF pin are coordinated with the Verifier under Issue #2. This ADR does not add CI.
+These run as **separate CI jobs** so that a failure is attributable to one class. Job definitions, runner images, and the ESP-IDF pin are coordinated with the Verifier under Issue #2. Rev 2 adds contract fixture CI; existing production S/B semantics remain.
 
 **Result semantics (normative):**
 
@@ -282,7 +409,7 @@ Neutral: `main/app_main.c` becomes the only place that knows concrete adapters.
 - Future `components/nn2_*` (proposed, Section 3.5).
 - Future port headers (Section 3.6).
 - Future CI jobs S/U/B (coordinated with Issue #2).
-- No change to `reference/**`, build configuration, or firmware in this ADR.
+- Rev 2 adds canonical configuration, a root C11 hook, compiler fixtures and CI wiring; no firmware behavior or `reference/**` changes.
 
 ## 8. Verification strategy (mapped to Issue #3)
 
@@ -295,7 +422,7 @@ Neutral: `main/app_main.c` becomes the only place that knows concrete adapters.
 | AC-5 | Scaffold gap (1.2); "not implemented" statements throughout. | Static review |
 | AC-6 | The PR adds only this file; no source layout or `reference/**` change. | PR diff |
 
-Acceptance requires an independent reviewer and Owner acknowledgment. Code conformance is verified later by the Class S/U/B jobs.
+The bounded framework's independent review and Owner acceptance are recorded in Section 0. This decision-record revision requires its own non-author review and subsequent Owner merge authorization. Product code conformance is verified later by the Class S/U/B jobs; it is not established by document acceptance.
 
 ## 9. Open questions and risks
 
@@ -308,12 +435,17 @@ Acceptance requires an independent reviewer and Owner acknowledgment. Code confo
 | Q-5 | Acceptability of function-pointer ports on the hot path; need for a real-time island exception. | RTOS Specialist (measurement) |
 | Q-6 | Product scope for 0.1.x (modalities, transport, storage). | Owner |
 | Q-7 | Host test framework (Unity) as a dependency: provenance/licence review. | Owner / Verifier |
-| Q-8 | Branch protection on `main` is reported unavailable/disabled (`protected: false`); merge discipline relies on process. | Owner (Issue #1 follow-up) |
+| Q-8 | Historical protection gap superseded by active main ruleset 25220606; meaningful Class U restoration remains governed by N5 in Section 0. This record changes no protection. | Owner / governance |
 | Q-9 | Backup owner unassigned. | Owner |
-| Q-10 | Agreement on `-std=c11` for inner layers (strict vs. GNU extensions, compatibility with ESP-IDF headers used by Adapters). | Firmware + RTOS Specialist |
-| Q-11 | Include checks not detectable by grep: macros (G3), transitive includes (G4), generated headers (G5). | Verifier (follow-ups) |
+| Q-10 | Static enforcement design accepted after bounded Firmware/RTOS consultation (Section 0); future product compiler evidence and implementation review remain required. | Firmware + RTOS Specialist / Verifier |
+| Q-11 | Strategy resolved in 3.10; production host/dependency evidence deferred until layers land. | Verifier / Architect |
 
 ## 10. References
+
+- [Issue #11 Owner decision packet](../M1_ISSUE11_DECISION_PACKET.md) and [port interface template](../templates/port-interface-contract.md).
+- [Pinned ESP-IDF build.cmake](https://github.com/espressif/esp-idf/blob/fff9895c82d744c7237be8847347bdd1b07c6643/tools/cmake/build.cmake) (C dialect flags).
+- CMake [C_STANDARD](https://cmake.org/cmake/help/v4.0/prop_tgt/C_STANDARD.html), [C_STANDARD_REQUIRED](https://cmake.org/cmake/help/v4.0/prop_tgt/C_STANDARD_REQUIRED.html), [C_EXTENSIONS](https://cmake.org/cmake/help/v4.0/prop_tgt/C_EXTENSIONS.html).
+
 
 - Issues: #1 (M0.1 Governance), #2 (M0.2 Reproducible ESP-IDF build), #3 (this ADR), #4 (M0.4 Historical reference assessment).
 - Owner decision OWNER-M0-A1-001 r1.1 (Core / Application / Ports / Adapters naming; C11).
@@ -328,3 +460,7 @@ Acceptance requires an independent reviewer and Owner acknowledgment. Code confo
 |---|---|---|---|
 | 0 | 2026-10-16 | Initial draft (`c5667a46`). | Proposed |
 | 1 | 2026-10-16 | Revision following the PR #6 architecture review (head `690deff`) and the Orchestrator decision in the team room: normative layer paths (3.5); NOT APPLICABLE is not evidence (4); `-std=c11` for inner layers; explicit FreeRTOS/BLE/NVS include patterns and cross-layer edges (3.3); `<stdatomic.h>` restated as review-only; `REQUIRES` allow-list; Class U and `REQUIRES` audit acceptance criteria; Class H for on-target claims (3.7); OWNER-M0-A1-001 r1.1 cited. | **Proposed** (unchanged) |
+| 2 | 2026-10-17 | Issue #11: Q-10 strict C11 root enforcement and compiler probes; Q-11 verification/residual-risk strategy; JSON canonical manifest and partial cross-PR N6 integration; port contract template and Owner decision packet. | **Proposed** (Owner decision required) |
+
+| 3 | 2026-10-17 | N6 combined integration: schema v2 owns dependency/include policy, hardened Python scanner and canonical detector replace independent gate maps; adversarial and CI propagation regressions. | **Proposed** (Owner decision required) |
+| 4 | 2026-10-19 | Record the actual 2026-10-18 Owner acceptance of the reviewed static framework, source links and retained conditions; update current decision dispositions without altering historical evidence. | **Accepted** (bounded scope in Section 0) |

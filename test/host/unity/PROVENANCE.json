@@ -1,0 +1,30 @@
+{
+  "upstream": "https://github.com/ThrowTheSwitch/Unity",
+  "version": "v2.6.1",
+  "commit": "cbcd08fa7de711053a3deec6339ee89cad5d2697",
+  "license": "MIT",
+  "owner_approval": "https://github.com/YerriSuyudHasim/noctinirs-2/issues/8#issuecomment-6208383677",
+  "modifications": "none; exact upstream bytes",
+  "files": {
+    "unity.c": {
+      "upstream_path": "src/unity.c",
+      "git_blob": "7fa2dc6306607f24148c40f9f4751c906d4a2a6f",
+      "sha256": "b90e735a54cf3b3765ab6caa955d11a1488ee73d9c6152cdc98576c2d17cb871"
+    },
+    "unity.h": {
+      "upstream_path": "src/unity.h",
+      "git_blob": "9e2a97b791a56bf073bea5d8835575becdb863f9",
+      "sha256": "9db174d3c2c6424fd35c0980c5941d124c5ebb0f48e8172f997a2aa9554b64ea"
+    },
+    "unity_internals.h": {
+      "upstream_path": "src/unity_internals.h",
+      "git_blob": "562f5b6da6d05a736423c58847a26acba1c0ef0c",
+      "sha256": "fcd8b3f6b412ac0ab599547eb8a30b6d7f3f0af77aab31f7a1822a2a8fc9a2b2"
+    },
+    "LICENSE.txt": {
+      "upstream_path": "LICENSE.txt",
+      "git_blob": "3e3aad5bcd8d150d1a5cba07b563d69554f727be",
+      "sha256": "907d9e859c6433703c0c183de3ddeaaf4baf3d517382f8f368b2c190fd2581d1"
+    }
+  }
+}

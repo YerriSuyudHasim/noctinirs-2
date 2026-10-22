@@ -6,7 +6,8 @@ name: Firmware build
 #   esp-idf-build          -> Class B (build) only
 # A successful build is NOT hardware validation, NOT unit/integration evidence,
 # and says nothing about timing, electrical behaviour, safety, or clinical validity.
-# No Class U job exists yet: no tests are present in the repository.
+#   host-unit-tests        -> Class U (host unit) only; Core + Application with mock ports
+# Contract fixtures verify tooling separately from product Class U.
 
 on:
   push:
@@ -38,36 +39,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Normative inner-layer paths, ADR-0001 section 3.5 @ 880903832c8d8c6527ad2c42ec095f9e5a0d1560
-          # (docs/adr/0001-clean-architecture-boundaries.md). Change only together with an ADR revision.
-          normative=(components/nn2_core components/nn2_app components/nn2_ports)
-          unknown=()
-          if [ -d components ]; then
-            while IFS= read -r d; do
-              known=false
-              for n in "${normative[@]}"; do [ "$d" = "$n" ] && known=true; done
-              [ "$known" = true ] || unknown+=("$d")
-            done < <(find components -mindepth 1 -maxdepth 1 -type d -name 'nn2_*' | sort)
-          fi
-          if [ "${#unknown[@]}" -gt 0 ]; then
-            echo "::error title=Layer map violation::components/nn2_* not in ADR-0001 normative map: ${unknown[*]}"
-            echo "### Layer map violation (FAIL): ${unknown[*]} not in ADR-0001 section 3.5 map" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          dirs=()
-          for d in "${normative[@]}"; do
-            [ -d "$d" ] && dirs+=("$d")
-          done
-          if [ "${#dirs[@]}" -eq 0 ]; then
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "dirs=" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Class S dependency gate::NOT APPLICABLE (not evidence): components/nn2_core, nn2_app, nn2_ports absent; gate job skipped"
+          python3 tools/layer_contract.py detect > layer-state.txt
+          cat layer-state.txt >> "$GITHUB_OUTPUT"
+          cat layer-state.txt
+          if grep -qx 'present=false' layer-state.txt; then
             echo "### Class S: NOT APPLICABLE (not evidence)" >> "$GITHUB_STEP_SUMMARY"
-            echo "No layered components (components/nn2_core, components/nn2_app, components/nn2_ports). The gate job is skipped; no conformance is claimed." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
-            echo "dirs=${dirs[*]}" >> "$GITHUB_OUTPUT"
-            echo "Layered components found: ${dirs[*]}"
           fi
 
   static-dependency-gate:
@@ -84,12 +60,12 @@ jobs:
 
       - name: Forbidden-include gate for layered components
         shell: bash
-        # Logic lives in tools/class-s-gate.sh (Refs #10): exit 0 PASS; 1 FAIL (violation,
-        # empty/missing layer folder, or grep rc>=2 scanner error). Only grep rc=1 (no match) passes.
+        # Logic lives in tools/class-s-gate.py via the shell wrapper (Refs #10):
+        # exit 0 PASS; 1 FAIL; 3 NOT APPLICABLE. A present hierarchy must return 0.
         run: |
           set -uo pipefail
           rc=0
-          VIOLATIONS_FILE=violations.txt bash tools/class-s-gate.sh . || rc=$?
+          bash tools/class-s-gate.sh . 2>&1 | tee violations.txt || rc=$?
           if [ "$rc" -eq 0 ]; then
             echo "### Class S dependency gate: PASS" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -109,16 +85,78 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Run gate fixtures
         shell: bash
-        run: bash tools/class-s-gate-selftest.sh
+        run: |
+          set -euo pipefail
+          bash tools/class-s-gate-selftest.sh 2>&1 | tee gate-selftest.txt
+      - name: Run Issue 10 ADR regression fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/gate-fixtures -p "test_*.py" -v 2>&1 | tee gate-regressions.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-regressions-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          path: gate-*.txt
+
+  architecture-contract:
+    name: architecture-contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0 # Regression-first checks read the exact reviewed helper blob.
+      - name: Manifest, workflow and C11 contract regression tests
+        run: |
+          set -euo pipefail
+          {
+            echo "SOURCE_SHA=$SOURCE_SHA"
+            echo "UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            python3 --version
+            cc --version | head -n1
+            cmake --version | head -n1
+            ninja --version
+          } | tee architecture-tests.txt
+          NN2_C11_EVIDENCE_DIR=evidence/reviewed-helper python3 tools/verify_c11_regression.py 2>&1 | tee evidence-regression-first.txt
+          NN2_C11_EVIDENCE_DIR=evidence/c11-host python3 -m unittest discover -s tests/architecture -v 2>&1 | tee -a architecture-tests.txt
+      - name: Hash contract evidence
+        if: always()
+        run: |
+          mkdir -p evidence
+          cp architecture-tests.txt evidence-regression-first.txt evidence/ 2>/dev/null || true
+          find evidence -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/EVIDENCE_SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: architecture-contract-${{ github.event.pull_request.head.sha || github.sha }}
+          include-hidden-files: true # Keep Ninja metadata covered by the checksum inventory.
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            architecture-tests.txt
+            evidence/
 
   esp-idf-build:
-    name: class-b-esp-idf-build
+    name: class-b-esp-idf-build${{ matrix.suffix }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: fake
+            suffix: ''
+            defaults: sdkconfig.defaults
+          - profile: diagnostic
+            suffix: '-ads131-diagnostic'
+            defaults: sdkconfig.defaults;sdkconfig.ads131-diagnostic
     runs-on: ubuntu-latest
     container:
       # espressif/idf:v6.1, pinned by digest (Docker Hub tag v6.1, verified 2026-10-16).
       image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
     env:
       EXPECTED_IDF_COMMIT: fff9895c82d744c7237be8847347bdd1b07c6643  # espressif/esp-idf tag v6.1
+      SDKCONFIG_DEFAULTS: ${{ matrix.defaults }}
     defaults:
       run:
         shell: bash
@@ -161,6 +199,24 @@ jobs:
           idf.py set-target esp32s3 2>&1 | tee evidence/set-target.log
           idf.py build 2>&1 | tee evidence/build.log
           idf.py size 2>&1 | tee evidence/size.txt
+          idf.py size-components 2>&1 | tee evidence/size-components.txt
+          python3 tools/check_ads131_config.py --selftest --cc xtensa-esp32s3-elf-gcc --generated-header build/config/sdkconfig.h | tee evidence/config-negatives.txt
+          if [ "${{ matrix.profile }}" = diagnostic ]; then
+            python3 tools/check_ads131_config.py sdkconfig --diagnostic | tee evidence/profile-config.txt
+          else
+            python3 tools/check_ads131_config.py sdkconfig | tee evidence/profile-config.txt
+          fi
+          python3 tools/collect_adc_adapter_build.py --build build --evidence evidence/adapter-dependencies | tee evidence/adapter-dependency-coverage.log
+          cp build/flasher_args.json evidence/
+          cp build/flash*args evidence/ 2>/dev/null || true
+          python3 tools/collect_inner_build.py --build build --evidence evidence/product-dependencies --mode idf 2>&1 | tee evidence/product-dependency-coverage.log
+
+      - name: Verify C11 using the pinned target compiler
+        run: |
+          set -euo pipefail
+          . "$IDF_PATH/export.sh" > /dev/null
+          NN2_C11_EVIDENCE_DIR=evidence/c11-target NN2_TEST_CC=xtensa-esp32s3-elf-gcc python3 -m unittest discover -s tests/architecture -p 'test_c11.py' -v 2>&1 | tee evidence/c11-target.txt
+          env -u SDKCONFIG_DEFAULTS python3 tools/verify_c11_idf.py 2>&1 | tee evidence/c11-idf-fixture.txt
 
       - name: Verify generated target
         run: |
@@ -177,8 +233,8 @@ jobs:
           set -euo pipefail
           cp sdkconfig evidence/sdkconfig
           sha256sum build/*.bin build/bootloader/bootloader.bin build/partition_table/partition-table.bin sdkconfig | tee evidence/SHA256SUMS
-          grep -ciE 'warning:' evidence/build.log > evidence/warning-count.txt || true
-          echo "Compiler warning lines: $(cat evidence/warning-count.txt)"
+          python3 tools/reproducible_build.py warnings evidence/build.log --output evidence/warning-count.txt
+          find evidence -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/EVIDENCE_SHA256SUMS
 
       - name: Write step summary
         if: always()
@@ -198,7 +254,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: class-b-build-${{ github.event.pull_request.head.sha || github.sha }}
+          name: class-b-build-${{ matrix.profile }}-${{ github.event.pull_request.head.sha || github.sha }}
+          include-hidden-files: true # Evidence checksum inventory includes Ninja metadata.
           retention-days: 90
           if-no-files-found: error
           path: |
@@ -206,8 +263,47 @@ jobs:
             build/*.bin
             build/*.elf
             build/*.map
+            build/flasher_args.json
+            build/flash*args
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
+
+  host-unit-tests:
+    # Product Class U: production Core/Application linked with deterministic mocks.
+    name: class-u-host-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0 # Exact reviewed control blob for old-fail/new-pass assertions.
+      - name: Execute product behavior and isolated failure controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-u
+          { echo "SOURCE_SHA=$SOURCE_SHA"; date -u +%Y-%m-%dT%H:%M:%SZ; gcc --version; cmake --version; ninja --version; } > evidence-u/toolchain.txt
+          python3 tools/verify_ads131_control_regression.py --evidence evidence-u/control-regression 2>&1 | tee evidence-u/control-regression.log
+          python3 tools/run_host_tests.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence "$GITHUB_WORKSPACE/evidence-u" --failure-controls 2>&1 | tee evidence-u/runner.log
+          python3 tools/collect_inner_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/product-dependencies --mode host 2>&1 | tee evidence-u/dependency-coverage.log
+          python3 tools/collect_adc_adapter_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/adapter-dependencies | tee evidence-u/adapter-dependency-coverage.log
+          python3 tools/layer_contract.py detect | tee evidence-u/layer-state.txt
+          python3 tools/class-s-gate.py . 2>&1 | tee evidence-u/real-layer-gate.log
+          cat evidence-u/result.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Hash product host evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p evidence-u
+          find evidence-u -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence-u/EVIDENCE_SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: class-u-host-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 90
+          include-hidden-files: true
+          if-no-files-found: error
+          path: evidence-u/
 
   class-s-gate-invariant:
     # Self-check: a present layer must be gated; detection must succeed. Not conformance evidence by itself.

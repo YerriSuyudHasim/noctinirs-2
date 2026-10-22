@@ -67,3 +67,14 @@ The relationship to `ai-engineering-hub` is documentation and governance only—
 - Reciprocal hub registration: prepared in both repositories; human owner, backup owner, risk class, and evidence-retention fields remain unresolved.
 - ESP-IDF build: not run because ESP-IDF is not available in the current shell.
 - On-target and HIL testing: not run.
+
+## Issue 35 diagnostic candidate (draft PR 36)
+
+Default boot remains the fake ADC / disabled emitter demo. The proposed opt-in
+ADS131 diagnostic is built with `SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ads131-diagnostic"`
+and a clean generated sdkconfig. It initializes, verifies and reads four signed
+channels, stops, then demonstrates explicit reinitialization. It has no emitter
+control or USB LED-on route. Compilation is not authorization to install/run it.
+See [candidate contract](docs/ISSUE35_DIAGNOSTIC_CONTRACT.md) and
+[test/recovery guide](docs/ISSUE35_DIAGNOSTIC_TEST_GUIDE.md). All physical tests
+remain NOT RUN; #19 limitations are unchanged.
