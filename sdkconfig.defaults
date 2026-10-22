@@ -4,3 +4,8 @@ CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 # Issue #9: omit IDF build timestamps and map source/debug paths deterministically.
 CONFIG_APP_REPRODUCIBLE_BUILD=y
+# Issue #49: brownout detector on. SEL_7 is the ESP-IDF v6.1 esp32s3 Kconfig
+# default. The IDF menu labels it "2.44V" and says those voltages are estimates.
+# Recorded here so the choice is reviewable. Not a measured NoctiNIRS threshold.
+CONFIG_ESP_BROWNOUT_DET=y
+CONFIG_ESP_BROWNOUT_DET_LVL_SEL_7=y

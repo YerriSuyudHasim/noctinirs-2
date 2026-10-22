@@ -9,6 +9,8 @@ Acquisition sequencer state machine `IDLE -> LED_ON -> SAMPLE -> LED_OFF -> IDLE
 - Completed samples are pushed to a caller-owned `nn2_core_ring_t`; ring-full is drop-and-count, not a fault.
 - Single-context; no synchronization (RTOS review item Q-4).
 
+`nn2_app_safe_boot` is the issue #49 boot policy: record the reset reason, hold RESET#, and run one PCA9956B off sequence through `nn2_port_emitter_safe_t`. It does not create tasks or include ESP-IDF. A failure stays fail-closed with RESET# asserted. Host tests: `test/host`.
+
 Status: DRAFT (M1). Host tests: `test/host`.
 
 Concrete ownership, lifecycle, statuses, overflow, timing and acceptance gates: [Issue #13 contract](../../docs/ISSUE13_COMPONENT_CONTRACT.md). Opaque caller storage uses typed memcpy snapshots; bounded Architect/RTOS delta review remains required, with no author self-approval.

@@ -6,10 +6,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "nn2_brownout_check.h"
 #include "nn2_core_types.h"
 #include "nn2_core_ring.h"
 #include "nn2_app_sequencer.h"
+#include "nn2_app_safe_boot.h"
 #include "nn2_adapter_esp32s3.h"
+#include "nn2_adapter_emitter_safe.h"
+#include "nn2_boot_esp.h"
 
 static const char *TAG = "nn2_main";
 
@@ -101,8 +105,55 @@ static void adc_diagnostic(void)
     }
 }
 #endif
+static void safe_boot_error(void *ctx, nn2_boot_outcome_t outcome, nn2_status_t error)
+{
+    (void)ctx;
+    ESP_LOGE(TAG, "safe-boot fail-closed: outcome=%s error=%s; emitter path not enabled",
+             nn2_app_safe_boot_outcome_str(outcome), nn2_core_status_str(error));
+}
+
+/* Reset reason is read and logged before adapter bind, SPIRAM query, or any
+ * later profile work. Safe-off then runs before the fake demo or the ADS131
+ * diagnostic. A failure returns without starting either path. */
+static bool emitter_safe_boot(void)
+{
+    nn2_reset_reason_t reason = nn2_adapter_read_reset_reason();
+    nn2_port_emitter_safe_t port;
+    nn2_app_safe_boot_input_t in;
+    nn2_app_safe_boot_result_t result;
+    nn2_status_t st;
+
+    ESP_LOGI(TAG, "reset_reason=%s (%d)", nn2_app_reset_reason_str(reason), (int)reason);
+    ESP_LOGI(TAG, "brownout_det=%d recorded_level=%d", CONFIG_ESP_BROWNOUT_DET,
+             CONFIG_ESP_BROWNOUT_DET_LVL);
+    st = nn2_adapter_emitter_safe_bind(&port);
+    if (st != NN2_OK) {
+        ESP_LOGE(TAG, "safe-boot fail-closed: emitter adapter bind failed; emitter path not enabled");
+        return false;
+    }
+    in.reset_reason = reason;
+    /* Runtime SPIRAM check owned by issue #49. Compile-time `# CONFIG_SPIRAM is
+     * not set` and the app_main `#error` are assigned to PR #34 by that issue
+     * and are not duplicated here. PR #34 on this base does not contain them. */
+    in.spiram_bytes = nn2_adapter_spiram_bytes();
+    st = nn2_app_safe_boot_run(&in, &port, safe_boot_error, NULL, &result);
+    if (st != NN2_OK) {
+        ESP_LOGE(TAG, "safe-boot fail-closed: reset_held_low=%d attempts=%" PRIu32
+                 " emitter_enabled=0 reset=%s",
+                 result.reset_held_low ? 1 : 0, result.attempts,
+                 nn2_app_reset_reason_str(result.reset_reason));
+        return false;
+    }
+    ESP_LOGI(TAG, "safe-boot complete: RESET# held low; emitter path disabled; reset=%s",
+             nn2_app_reset_reason_str(result.reset_reason));
+    return true;
+}
+
 void app_main(void)
 {
+    if (!emitter_safe_boot()) {
+        return;
+    }
 #if CONFIG_NN2_PROFILE_ADS131_DIAGNOSTIC
     adc_diagnostic();
 #else

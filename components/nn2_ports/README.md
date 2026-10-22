@@ -8,6 +8,7 @@ Header-only port contracts (ADR-0001 3.4/3.6): each port is a struct of function
 | `nn2_port_adc.h` | single raw ADC read (pull) + `source` provenance | fake adapters set `NN2_SAMPLE_SRC_FAKE` |
 | `nn2_port_clock.h` | monotonic µs timebase + optional delay | |
 | `nn2_port_log.h` | leveled text log | never from ISR |
+| `nn2_port_emitter_safe.h` | PCA9956B safe-off at boot | task in `app_main` only; no MODE1/SLEEP; issue #49 |
 
 Timing figures in headers are expectations to be measured (Class H), not guarantees. Status: DRAFT (M1).
 
