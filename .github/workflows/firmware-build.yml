@@ -236,6 +236,39 @@ jobs:
           python3 tools/reproducible_build.py warnings evidence/build.log --output evidence/warning-count.txt
           find evidence -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/EVIDENCE_SHA256SUMS
 
+      - name: Assemble and validate board-v1 review package
+        env:
+          PACKAGE_PROFILE: ${{ matrix.profile }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'tools')
+          from firmware_package import create, validate
+          profile = os.environ['PACKAGE_PROFILE']
+          sha = os.environ['SOURCE_SHA']
+          artifact = 'board-v1-package-' + profile + '-' + sha + '-' + os.environ['GITHUB_RUN_ID'] + '-' + os.environ['GITHUB_RUN_ATTEMPT']
+          ci = {'run_id': int(os.environ['GITHUB_RUN_ID']), 'attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+                'event': os.environ['GITHUB_EVENT_NAME'], 'artifact_name': artifact,
+                'run_url': os.environ['GITHUB_SERVER_URL'] + '/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID'],
+                'publication_identity': 'Artifact ID, ZIP digest and expiry assigned after upload; external DOWNLOAD_INDEX binds these without a circular self-hash'}
+          output = Path('packages') / ('noctinirs2-board-v1-' + profile + '-' + sha + '.zip')
+          create('build', 'evidence', '.', sha, profile, ci, output)
+          validate(output, expect_sha=sha, expect_profile=profile, expect_tool=sha)
+          (output.parent / 'ZIP_SHA256SUMS').write_text(hashlib.sha256(output.read_bytes()).hexdigest() + '  ' + output.name + '\n')
+          print('PASS packaged actual firmware SHA', sha, profile)
+          PY
+
+      - name: Upload board-v1 candidate package
+        uses: actions/upload-artifact@v4
+        with:
+          name: board-v1-package-${{ matrix.profile }}-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 90
+          if-no-files-found: error
+          path: packages/
+
       - name: Write step summary
         if: always()
         run: |
@@ -267,6 +300,26 @@ jobs:
             build/flash*args
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
+
+  packaging-tests:
+    name: offline-package-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Test generator and offline validator (host tooling, not product Class U)
+        shell: bash
+        run: |
+          set -euo pipefail
+          { echo "SOURCE_SHA=$SOURCE_SHA"; date -u +%Y-%m-%dT%H:%M:%SZ; python3 --version; python3 -m unittest discover -s tests/packaging -v; } 2>&1 | tee packaging-tests.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: offline-package-tests-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 90
+          if-no-files-found: error
+          path: packaging-tests.txt
 
   host-unit-tests:
     # Product Class U: production Core/Application linked with deterministic mocks.
