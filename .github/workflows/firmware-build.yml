@@ -276,12 +276,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0 # Exact reviewed control blob for old-fail/new-pass assertions.
       - name: Execute product behavior and isolated failure controls
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p evidence-u
           { echo "SOURCE_SHA=$SOURCE_SHA"; date -u +%Y-%m-%dT%H:%M:%SZ; gcc --version; cmake --version; ninja --version; } > evidence-u/toolchain.txt
+          python3 tools/verify_ads131_control_regression.py --evidence evidence-u/control-regression 2>&1 | tee evidence-u/control-regression.log
           python3 tools/run_host_tests.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence "$GITHUB_WORKSPACE/evidence-u" --failure-controls 2>&1 | tee evidence-u/runner.log
           python3 tools/collect_inner_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/product-dependencies --mode host 2>&1 | tee evidence-u/dependency-coverage.log
           python3 tools/collect_adc_adapter_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/adapter-dependencies | tee evidence-u/adapter-dependency-coverage.log

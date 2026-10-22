@@ -7,4 +7,5 @@ void test_sequencer_suite(void);
 void test_contract_suite(void);
 void test_storage_suite(void);
 void test_ads131_suite(void);
+void test_ads131_control_suite(void);
 #endif

@@ -49,8 +49,13 @@ nonreentrant; caller serializes the handle. Adapter context/static resources liv
 until reboot. Inputs are copied for the call; no borrowed pointers are queued.
 Read copies one record; counters copies a coherent owner snapshot. Outputs are
 unchanged on any non-OK result. Null/zero or timeout>1000ms is INVALID_ARG.
-Read waits for data in bounded tick steps; EMPTY means no record by its deadline; IO means device/protocol/integrity failure; TIMEOUT
-means the command deadline expired, not proof of quiescence. Start requires READY;
+Read waits for data in bounded tick steps. EMPTY means timely EMPTY replies
+exhausted the outward read budget between retries; TIMEOUT means enqueue or reply
+acceptance reached that same absolute deadline. A late EMPTY reply is TIMEOUT too.
+IO means device/protocol/integrity failure. At `now >= deadline`, no matching
+reply is accepted and no output is copied. Rounded RTOS waits never renew the
+budget, including nested read retries. A timeout is not cancellation, completed
+STOP, proof of quiescence, or a guarantee of physical return latency. Start requires READY;
 init requires STOPPED/READY/FAULT, not RUNNING; stop is idempotent and holds ADC reset.
 Reinit flushes buffered records and counts them as lost; lifetime counters persist.
 Application always requests stop after attempted initialization or acquisition;
@@ -67,6 +72,15 @@ Command enqueue/ack use one total deadline; stop wakes the task with the high bi
 notification word; lower31 bits count DRDY (eIncrement). Control never aborts SPI
 queue waits. The bounded notification wait also expires every RTOS tick. Commands are processed before any notified read.
 No caller stack pointer crosses the mailbox. No shared Core ring is used.
+Rejected/expired lifecycle commands that leave RUNNING retain captured DRDY and
+combine newly pending notifications before service. Coalescence faults/counts the
+discontinuity rather than reading stale catch-up frames. START drains pre-sync
+notifications only when READY; successful sync and sync failure into FAULT both
+invalidate pre-sync events. STOP/reset success or failure into FAULT ends live
+acquisition. These effects, not opcode or OK alone, decide resynchronization.
+A post-dispatch notification remains pending if it arrives after the service
+snapshot. This control glue is an adapter-private include shared by the ESP task
+and deterministic host RTOS mocks; it adds no public ABI or inner SDK dependency.
 
 The adapter owner exclusively accesses a128-record overwrite-oldest queue. Each
 overwrite increments overflow and lost, and sets persistent discontinuity quality
@@ -92,7 +106,7 @@ is an error, never silently accepted. SPI queue and result waits use finite tick
 transaction/buffers are static. A result timeout poisons the bus until reboot:
 do not reuse/free an in-flight transaction or claim that reset cancels the driver.
 Inspect the pinned driver's bounded queue/result behavior in the review evidence.
-Tick rounding is ceil(ms*tick_hz/1000), minimum1: at100Hz one tick is10ms,
+SPI wait rounding is ceil(ms*tick_hz/1000); control waits use ceil(remaining_us*tick_hz/1000000), minimum1: at100Hz one tick is10ms,
 not a250us wall-clock detector. A30ms stall budget is conditional on scheduling;
 hard time bounds, interrupt latency and SPI completion remain unmeasured.
 

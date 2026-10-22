@@ -135,31 +135,7 @@ static nn2_status_t setup(device_t *d)
     }
     d->hardware_ready = true; return NN2_OK;
 }
-static bool dispatch(device_t *d, bool *discard_events)
-{
-    request_t req; reply_t reply = {0};
-    if (xQueueReceive(d->commands, &req, 0u) != pdTRUE) return false;
-    *discard_events = req.op == CMD_INIT || req.op == CMD_START || req.op == CMD_STOP;
-    uint32_t discarded;
-    reply.id = req.id;
-    if (now_us(d) >= req.deadline) reply.result = NN2_ERR_TIMEOUT;
-    else switch (req.op) {
-    case CMD_INIT:
-        reply.result = d->hardware_ready && !d->poisoned && d->watchdog
-            ? nn2_ads131_initialize(&d->logic, &d->board.config) : NN2_ERR_IO; break;
-    case CMD_START:
-        (void)xTaskNotifyWait(0u, UINT32_MAX, &discarded, 0u);
-        reply.result = nn2_ads131_start(&d->logic); break;
-    case CMD_STOP:
-        reply.result = nn2_ads131_stop(&d->logic);
-        (void)xTaskNotifyWait(0u, UINT32_MAX, &discarded, 0u); break;
-    case CMD_READ: reply.result = nn2_ads131_pop(&d->logic, &reply.record); break;
-    case CMD_OBSERVE: reply.observation = d->logic.observation; reply.result = NN2_OK; break;
-    default: reply.result = NN2_ERR_INVALID_ARG; break;
-    }
-    /* A late reply never retains caller memory; replace only an unconsumed reply. */
-    (void)xQueueOverwrite(d->replies, &reply); return true;
-}
+#include "nn2_ads131_control.inc"
 static void owner(void *arg)
 {
     device_t *d = arg;
@@ -169,65 +145,8 @@ static void owner(void *arg)
     for (;;) {
         uint32_t notified = 0u;
         (void)xTaskNotifyWait(0u, UINT32_MAX, &notified, 1u);
-        uint32_t got = notified & 0x7fffffffu;
-        bool discard_events = false;
-        bool command = dispatch(d, &discard_events);
-        if (d->watchdog && esp_task_wdt_reset() != ESP_OK) {
-            d->watchdog = false; (void)nn2_ads131_fail(&d->logic, NN2_ADC_FAULT_WATCHDOG);
-        }
-        if (!command && d->logic.observation.state == NN2_ADC_RUNNING)
-            (void)nn2_ads131_service(&d->logic, got);
-        else if (command && !discard_events && d->logic.observation.state == NN2_ADC_RUNNING) {
-            /* A control wake must not silently consume an ADC notification. */
-            (void)nn2_ads131_service(&d->logic, got);
-        }
+        owner_iteration(d, notified & 0x7fffffffu);
     }
-}
-static nn2_status_t call(device_t *d, uint32_t op, uint32_t ms, reply_t *out)
-{
-    request_t req; reply_t reply; uint64_t end;
-    if (!d || !d->created || ms == 0u || ms > 1000u) return NN2_ERR_INVALID_ARG;
-    if (xTaskGetCurrentTaskHandle() != d->caller) return NN2_ERR_INVALID_STATE;
-    end = now_us(d) + (uint64_t)ms * 1000u;
-    req.id = ++d->next_id; req.op = op; req.deadline = end;
-    if (xQueueSend(d->commands, &req, ticks(ms)) != pdTRUE) return NN2_ERR_TIMEOUT;
-    (void)xTaskNotify(d->task, 0x80000000u, eSetBits); /* Control wake, distinct from DRDY count. */
-    for (;;) {
-        uint64_t now = now_us(d);
-        if (now >= end) break;
-        uint32_t remaining = (uint32_t)((end - now + 999u) / 1000u);
-        if (remaining == 0u) break;
-        if (xQueueReceive(d->replies, &reply, ticks(remaining)) == pdTRUE && reply.id == req.id) {
-            if (reply.result == NN2_OK && out) *out = reply;
-            return reply.result;
-        }
-    }
-    return NN2_ERR_TIMEOUT;
-}
-static nn2_status_t init_port(void *ctx, uint32_t ms) { return call(ctx, CMD_INIT, ms, NULL); }
-static nn2_status_t start_port(void *ctx, uint32_t ms) { return call(ctx, CMD_START, ms, NULL); }
-static nn2_status_t stop_port(void *ctx, uint32_t ms) { return call(ctx, CMD_STOP, ms, NULL); }
-static nn2_status_t read_port(void *ctx, nn2_core_adc_record_t *out, uint32_t ms)
-{
-    reply_t reply;
-    device_t *d = ctx;
-    if (!out || !d || ms == 0u || ms > 1000u) return NN2_ERR_INVALID_ARG;
-    const uint64_t end = now_us(d) + (uint64_t)ms * 1000u;
-    for (;;) {
-        uint64_t now = now_us(d);
-        if (now >= end) return NN2_ERR_EMPTY;
-        uint32_t remaining = (uint32_t)((end - now + 999u) / 1000u);
-        nn2_status_t status = call(d, CMD_READ, remaining, &reply);
-        if (status == NN2_OK) { *out = reply.record; return status; }
-        if (status != NN2_ERR_EMPTY) return status;
-        vTaskDelay(1u); /* Consumer blocks; producer continues on its own core. */
-    }
-}
-static nn2_status_t observe_port(void *ctx, nn2_core_adc_observation_t *out, uint32_t ms)
-{
-    reply_t reply; nn2_status_t s;
-    if (!out) return NN2_ERR_INVALID_ARG;
-    s = call(ctx, CMD_OBSERVE, ms, &reply); if (s == NN2_OK) *out = reply.observation; return s;
 }
 nn2_status_t nn2_adapter_ads131_create(const nn2_ads131_board_t *board, nn2_port_adc_stream_t *out)
 {
