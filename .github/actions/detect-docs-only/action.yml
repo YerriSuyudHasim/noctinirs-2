@@ -1,0 +1,24 @@
+name: Detect docs-only changes
+description: >-
+  Set docs_only to true only when every changed path is on the docs allowlist.
+  Uncertainty and any other path set docs_only to false so build gates run.
+
+outputs:
+  docs_only:
+    description: true only for an allowlisted docs-only diff
+    value: ${{ steps.classify.outputs.docs_only }}
+  files:
+    description: Comma-separated changed paths for the skip log
+    value: ${{ steps.classify.outputs.files }}
+
+runs:
+  using: composite
+  steps:
+    - id: classify
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        BEFORE_SHA: ${{ github.event.before }}
+        EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      run: bash "$GITHUB_ACTION_PATH/detect.sh"

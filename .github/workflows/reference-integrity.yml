@@ -1,8 +1,21 @@
 name: Reference integrity
 
+# Issue #59, AGENT 07: this workflow used to trigger on push and pull_request
+# with no branch filter, so every PR head ran twice. push is main-only now.
+# pull_request remains. The check name reference-integrity is unchanged.
+# This job always runs; it is not a docs-only skip. The runner stays
+# windows-latest (a Linux move is proposal-only and is not done here).
+# pull_request_target is not used. Secrets are not referenced.
+
 on:
   push:
+    branches:
+      - main
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -16,6 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Verify historical snapshots
         shell: pwsh
         run: |

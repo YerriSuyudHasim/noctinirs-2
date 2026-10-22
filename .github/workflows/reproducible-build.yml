@@ -1,8 +1,21 @@
 name: Reproducible build
 
+# Issue #59: push is limited to main. Pull requests run on opened, synchronize,
+# reopened, and ready_for_review so a draft that becomes ready is rebuilt
+# without another push. Drafts keep the same check names and log a skip.
+# No trigger path filters, no pull_request_target, no secrets, no toolchain
+# cache. The double build stays a clean environment.
+
 on:
   push:
+    branches:
+      - main
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -13,27 +26,72 @@ env:
   CI_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 jobs:
+  detect-changes:
+    name: detect-changes
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+      files: ${{ steps.classify.outputs.files }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Classify changed paths
+        id: classify
+        uses: ./.github/actions/detect-docs-only
+
   comparison-tests:
     name: reproducibility-comparison-tests
+    needs: detect-changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     steps:
+      - name: Skip reproducible comparison on docs-only or draft
+        id: mode
+        shell: bash
+        env:
+          DOCS_ONLY: ${{ needs.detect-changes.outputs.docs_only }}
+          CHANGED_FILES: ${{ needs.detect-changes.outputs.files }}
+          IS_DRAFT: ${{ github.event.pull_request.draft == true && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          if [ "${DOCS_ONLY:-}" = "true" ]; then
+            echo "SKIPPED: docs-only (files: ${CHANGED_FILES:-})"
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            {
+              echo "## SKIPPED: docs-only"
+              echo "files: ${CHANGED_FILES:-}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${IS_DRAFT:-}" = "true" ]; then
+            echo "SKIPPED: draft pull request (reproducible build runs on ready_for_review, non-draft synchronize, and main)"
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            echo "## SKIPPED: draft pull request" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "mode=run" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: steps.mode.outputs.mode == 'run'
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0 # Regression-first checks read the reviewed helper/workflow blobs.
       - name: Reproduce both findings on the reviewed implementation
+        if: steps.mode.outputs.mode == 'run'
         run: |
           set -euo pipefail
           python3 tools/verify_repro_regression.py 2>&1 | tee regression-first.txt
       - name: Exercise success, mismatch, incomplete and diagnostic paths
+        if: steps.mode.outputs.mode == 'run'
         run: |
           set -euo pipefail
           echo "SOURCE_SHA=$SOURCE_SHA UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee comparison-tests.txt
           python3 --version | tee -a comparison-tests.txt
           python3 -m unittest discover -s tests/reproducibility -v 2>&1 | tee -a comparison-tests.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
+        if: always() && steps.mode.outputs.mode == 'run'
         with:
           name: reproducibility-tests-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}
           retention-days: 90
@@ -56,27 +114,57 @@ jobs:
             defaults: sdkconfig.defaults;sdkconfig.ads131-diagnostic
     env:
       SDKCONFIG_DEFAULTS: ${{ matrix.defaults }}
-    needs: comparison-tests
+    needs: [detect-changes, comparison-tests]
+    # Comparison failure still skips this job. Classifier failure does not:
+    # an empty docs_only output takes the build path.
+    if: ${{ !cancelled() && needs.comparison-tests.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
       # ESP-IDF v6.1 OCI index. Registry byte verification is retained as evidence.
-      image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
+      # Exactly true docs_only or a draft selects the small image. Every other
+      # value keeps the pinned image. This job does not restore a toolchain cache.
+      image: ${{ (needs.detect-changes.outputs.docs_only == 'true' || github.event.pull_request.draft == true) && 'ubuntu:24.04' || 'espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c' }}
       options: --platform linux/amd64
     defaults:
       run:
         shell: bash
     steps:
+      - name: Skip reproducible build on docs-only or draft
+        id: mode
+        env:
+          DOCS_ONLY: ${{ needs.detect-changes.outputs.docs_only }}
+          CHANGED_FILES: ${{ needs.detect-changes.outputs.files }}
+          IS_DRAFT: ${{ github.event.pull_request.draft == true && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          if [ "${DOCS_ONLY:-}" = "true" ]; then
+            echo "SKIPPED: docs-only (files: ${CHANGED_FILES:-})"
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            {
+              echo "## SKIPPED: docs-only"
+              echo "files: ${CHANGED_FILES:-}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${IS_DRAFT:-}" = "true" ]; then
+            echo "SKIPPED: draft pull request (reproducible build runs on ready_for_review, non-draft synchronize, and main)"
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            echo "## SKIPPED: draft pull request" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "mode=run" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: steps.mode.outputs.mode == 'run'
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Verify immutable image index and platform manifest bytes
+        if: steps.mode.outputs.mode == 'run'
         run: python tools/verify_idf_image.py image-evidence
       - name: Build exact source twice in independent clean paths and compare every binary
+        if: steps.mode.outputs.mode == 'run'
         run: bash tools/build_twice.sh "$GITHUB_WORKSPACE/repro-evidence"
       - name: Publish comparison summary even on failure
-        if: always()
+        if: always() && steps.mode.outputs.mode == 'run'
         run: |
           if [ -f repro-evidence/comparison.md ]; then
             cat repro-evidence/comparison.md >> "$GITHUB_STEP_SUMMARY"
@@ -85,7 +173,7 @@ jobs:
             echo 'Comparison was not reached. Inspect image verification, checkout and build logs.' >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Retain raw binaries, inventories, configuration, commands and mismatch diagnostics
-        if: always()
+        if: always() && steps.mode.outputs.mode == 'run'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: reproducibility-${{ matrix.profile }}-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
