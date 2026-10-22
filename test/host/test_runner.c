@@ -24,6 +24,7 @@ void test_connect_guard_timeout_schedules_reconnect(void);
 void test_disconnect_clears_connect_in_flight(void);
 void test_link_up_is_report_only(void);
 void test_rtos_config_pins_console_and_wifi_to_core_0(void);
+void test_rtos_ads131_macros_have_the_moved_values(void);
 
 int main(void)
 {
@@ -44,5 +45,6 @@ int main(void)
     RUN_TEST(test_disconnect_clears_connect_in_flight);
     RUN_TEST(test_link_up_is_report_only);
     RUN_TEST(test_rtos_config_pins_console_and_wifi_to_core_0);
+    RUN_TEST(test_rtos_ads131_macros_have_the_moved_values);
     return UNITY_END();
 }

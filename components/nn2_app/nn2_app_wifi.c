@@ -1,7 +1,5 @@
 #include "nn2_app_wifi.h"
 
-#include "nn2_wifi_limits.h"
-
 #include <string.h>
 
 static int store_ready(const nn2_port_wifi_cred_store_t *store)
@@ -104,14 +102,15 @@ nn2_status_t nn2_app_wifi_on_link_event(const nn2_port_wifi_station_t *station,
 }
 
 nn2_status_t nn2_app_wifi_on_wait_timeout(const nn2_port_wifi_station_t *station,
-                                         const nn2_wifi_sta_status_t *status)
+                                         const nn2_wifi_sta_status_t *status,
+                                         uint32_t connect_guard_ms)
 {
     if (station == NULL || status == NULL) {
         return NN2_ERR_INVALID_ARG;
     }
     /* Association and DHCP keep the link down. Leave that attempt alone
        until the guard expires, then take the next backoff step. */
-    if (status->connect_in_flight && status->connect_attempt_ms < NN2_WIFI_CONNECT_GUARD_MS) {
+    if (status->connect_in_flight && status->connect_attempt_ms < connect_guard_ms) {
         return NN2_OK;
     }
     if (status->link != NN2_WIFI_LINK_DOWN || !status->want_connected || status->reconnect_timer_armed) {

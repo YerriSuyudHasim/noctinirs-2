@@ -7,13 +7,27 @@ include("${ROOT}/cmake/nn2_c11.cmake")
 set(INNER_ROOTS
     "${ROOT}/components/nn2_core/include"
     "${ROOT}/components/nn2_ports/include"
-    "${ROOT}/components/nn2_app/include")
+    "${ROOT}/components/nn2_app/include"
+    "${ROOT}/components/nn2_rtos/include"
+    "${ROOT}/components/nn2_ad_wifi/include"
+    "${ROOT}/components/nn2_ad_cred/include"
+    "${ROOT}/components/nn2_ad_prov/include")
 add_library(nn2_behavior STATIC
     "${ROOT}/components/nn2_core/src/nn2_core_ring.c"
     "${ROOT}/components/nn2_core/src/nn2_core_status.c"
+    "${ROOT}/components/nn2_core/nn2_wifi_cred.c"
+    "${ROOT}/components/nn2_core/nn2_wifi_backoff.c"
+    "${ROOT}/components/nn2_ports/nn2_ports_anchor.c"
     "${ROOT}/components/nn2_app/src/nn2_app_sequencer.c"
     "${ROOT}/components/nn2_app/src/nn2_app_adc_diagnostic.c"
+    "${ROOT}/components/nn2_app/nn2_app_wifi.c"
+    "${ROOT}/components/nn2_rtos/nn2_rtos_anchor.c"
+    "${ROOT}/components/nn2_ad_wifi/nn2_ad_wifi.c"
+    "${ROOT}/components/nn2_ad_cred/nn2_ad_cred.c"
+    "${ROOT}/components/nn2_ad_prov/nn2_ad_prov.c"
     "${ROOT}/main/adapters/nn2_ads131_logic.c")
+set_source_files_properties("${ROOT}/components/nn2_ad_wifi/nn2_ad_wifi.c" PROPERTIES
+    COMPILE_DEFINITIONS "NN2_WIFI_BACKOFF_FIRST_MS=500;NN2_WIFI_BACKOFF_MAX_MS=8000;NN2_WIFI_BACKOFF_FACTOR=2;NN2_WIFI_CONNECT_GUARD_MS=15000")
 target_include_directories(nn2_behavior PUBLIC ${INNER_ROOTS} "${ROOT}/main/adapters")
 target_compile_options(nn2_behavior PRIVATE -Wall -Wextra -Werror -pedantic)
 nn2_require_c11(nn2_behavior)

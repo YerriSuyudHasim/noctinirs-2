@@ -15,10 +15,3 @@ idf_component_register(SRCS ${nn2_sources} INCLUDE_DIRS "." "adapters" PRIV_REQU
 execute_process(COMMAND git rev-parse HEAD WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     OUTPUT_VARIABLE nn2_source_sha OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
 target_compile_definitions(${COMPONENT_LIB} PRIVATE NN2_SOURCE_SHA="${nn2_source_sha}")
-
-# main/adapters/nn2_rtos_config.h is the ADS131 diagnostic header and shares
-# its name with the Wi-Fi component header. Sources in main/ must resolve the
-# component header. The ADS131 translation unit still finds the header beside
-# itself because a quoted include searches that file's directory first.
-target_include_directories(${COMPONENT_LIB} BEFORE PRIVATE
-    "${CMAKE_CURRENT_LIST_DIR}/../components/nn2_rtos/include")

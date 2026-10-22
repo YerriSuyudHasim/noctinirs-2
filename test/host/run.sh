@@ -22,6 +22,16 @@ done
 if grep -RInE --include='*.c' --include='*.h' 'portMAX_DELAY|safe_off|SafeOff|nvs_flash_erase|WIFI_MODE_AP' "${SCAN_DIRS[@]}" ; then
   fail "forbidden token in active firmware sources"
 fi
+if grep -RInE --include='*.c' --include='*.h' --include='CMakeLists.txt' 'nn2_rtos' \
+  "$ROOT/components/nn2_core" "$ROOT/components/nn2_ports" "$ROOT/components/nn2_app"; then
+  fail "inner layer depends on nn2_rtos"
+fi
+if grep -RInE --include='*.h' 'define[[:space:]]+NN2_RTOS_ADS131_' \
+  "$ROOT/components" "$ROOT/main" "$ROOT/test" \
+  | grep -v 'components/nn2_rtos/include/nn2_rtos_config.h'; then
+  fail "NN2_RTOS_ADS131_* defined outside nn2_rtos_config.h"
+fi
+echo "PASS: ads131_macros_single_header"
 
 cc_one() {
   gcc -std=c11 -Wall -Wextra -Werror -pedantic \
@@ -179,3 +189,45 @@ gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
   -c "$ROOT/main/app_main.c" \
   -o "$OUT/app_main_spiram_off.o"
 echo "PASS: app_main_spiram_off"
+
+STALE="$OUT/stale-rtos"
+mkdir -p "$STALE"
+cat >"$STALE/nn2_rtos_config.h" <<'EOF'
+#ifndef NN2_RTOS_CONFIG_H
+#define NN2_RTOS_CONFIG_H
+#define NN2_RTOS_ADS131_CORE 9
+#define NN2_RTOS_ADS131_PRIORITY 9
+#define NN2_RTOS_ADS131_STACK_BYTES 1u
+#define NN2_RTOS_ADS131_SPI_WAIT_MS 1u
+#endif
+EOF
+cat >"$OUT/ads131_shadow.c" <<EOF
+#include "nn2_rtos_config.h"
+#include "${ROOT}/components/nn2_rtos/include/nn2_rtos_config.h"
+int nn2_ads131_shadow_anchor;
+EOF
+expect_fail ads131_stale_shadow "stale NN2_RTOS_ADS131_* duplicate shadowed nn2_rtos_config.h" \
+  gcc -std=c11 -Wall -Wextra -Werror \
+    -I"$STALE" \
+    -c "$OUT/ads131_shadow.c" \
+    -o "$OUT/ads131_shadow.o"
+
+cat >"$OUT/ads131_predefined.c" <<EOF
+#define NN2_RTOS_ADS131_CORE 9
+#include "${ROOT}/components/nn2_rtos/include/nn2_rtos_config.h"
+int nn2_ads131_predefined_anchor;
+EOF
+expect_fail ads131_predefined "NN2_RTOS_ADS131_* already defined" \
+  gcc -std=c11 -Wall -Wextra -Werror \
+    -c "$OUT/ads131_predefined.c" \
+    -o "$OUT/ads131_predefined.o"
+
+cat >"$OUT/ads131_twice.c" <<EOF
+#include "${ROOT}/components/nn2_rtos/include/nn2_rtos_config.h"
+#include "${ROOT}/components/nn2_rtos/include/nn2_rtos_config.h"
+int nn2_ads131_twice_anchor;
+EOF
+gcc -std=c11 -Wall -Wextra -Werror \
+  -c "$OUT/ads131_twice.c" \
+  -o "$OUT/ads131_twice.o"
+echo "PASS: ads131_twice"

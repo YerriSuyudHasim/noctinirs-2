@@ -1,5 +1,5 @@
 /* These values come from this component's target_compile_definitions.
-   Checked before nn2_wifi_limits.h, which supplies host defaults. */
+   This file fails closed when they are missing. Core does not supply them. */
 #if !defined(NN2_WIFI_BACKOFF_FIRST_MS)
 #error "NN2_WIFI_BACKOFF_FIRST_MS is required"
 #endif
@@ -13,21 +13,36 @@
 #error "NN2_WIFI_CONNECT_GUARD_MS is required"
 #endif
 
-#include "nn2_ad_wifi.h"
-
 #include "nn2_rtos_config.h"
-#include "nn2_wifi_backoff.h"
 #include "nn2_wifi_limits.h"
 
-#include <stdatomic.h>
+/* First backoff slot must sit inside the 3 s Wi-Fi-loss grace window and
+   must be at most 1 s. The immediate retry is 0 ms and is not this value. */
+_Static_assert(NN2_WIFI_BACKOFF_FIRST_MS > 0, "first backoff delay must be non-zero");
+_Static_assert(NN2_WIFI_BACKOFF_FIRST_MS <= 1000, "first backoff delay must be <= 1000 ms");
+_Static_assert(NN2_WIFI_BACKOFF_FIRST_MS < 3000, "first backoff delay must be < 3000 ms");
+_Static_assert(NN2_WIFI_BACKOFF_MAX_MS >= NN2_WIFI_BACKOFF_FIRST_MS, "backoff cap is below the first delay");
+_Static_assert(NN2_WIFI_CONNECT_GUARD_MS > NN2_WIFI_EVENT_WAIT_MS,
+               "connect guard must outlast one station poll");
+_Static_assert(NN2_WIFI_CONNECT_GUARD_MS <= NN2_WIFI_WAIT_CAP_MS,
+               "connect guard must stay inside the wait cap");
+
+#ifdef ESP_PLATFORM
+
+#include "nn2_ad_wifi.h"
+#include "nn2_wifi_backoff.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
 /* ESP-IDF headers test unset CONFIG_* and build macros with #if.
-   -Werror=undef stays on for this file; those headers are not our code. */
+   -Werror=undef stays on for this file; those headers are not our code.
+   stdatomic.h is the IDF libc wrapper under -std=c11 and uses the same
+   #if on an unset __cplusplus, so it stays inside this region. */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wundef"
+#include <stdatomic.h>
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -578,3 +593,10 @@ nn2_status_t nn2_ad_wifi_init(nn2_port_wifi_station_t *out)
     ESP_LOGI(TAG, "sta adapter ready");
     return NN2_OK;
 }
+
+uint32_t nn2_ad_wifi_connect_guard_ms(void)
+{
+    return (uint32_t)NN2_WIFI_CONNECT_GUARD_MS;
+}
+
+#endif /* ESP_PLATFORM */

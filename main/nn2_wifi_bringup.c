@@ -4,9 +4,7 @@
 #include "nn2_ad_prov.h"
 #include "nn2_ad_wifi.h"
 #include "nn2_app_wifi.h"
-/* Quoted "nn2_rtos_config.h" from main/ would hit
-   main/adapters/nn2_rtos_config.h (ADS131). This path is the Wi-Fi header. */
-#include "../components/nn2_rtos/include/nn2_rtos_config.h"
+#include "nn2_rtos_config.h"
 #include "nn2_wifi_limits.h"
 
 #include <string.h>
@@ -55,7 +53,8 @@ static void net_task(void *arg)
             memset(&link, 0, sizeof(link));
             if (s_station.get_status != NULL &&
                 s_station.get_status(s_station.ctx, &link) == NN2_OK) {
-                status = nn2_app_wifi_on_wait_timeout(&s_station, &link);
+                status = nn2_app_wifi_on_wait_timeout(&s_station, &link,
+                                                           nn2_ad_wifi_connect_guard_ms());
                 if (status != NN2_OK) {
                     ESP_LOGW(TAG, "sta liveness schedule failed: %d", (int)status);
                 }

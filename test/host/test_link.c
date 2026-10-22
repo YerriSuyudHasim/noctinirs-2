@@ -1,3 +1,4 @@
+#include "nn2_wifi_host_backoff.h"
 #include "nn2_app_wifi.h"
 #include "nn2_wifi_limits.h"
 #include "unity.h"
@@ -108,7 +109,7 @@ void test_dropped_link_event_still_schedules_reconnect(void)
     status.want_connected = true;
     status.reconnect_timer_armed = false;
     status.event_overflow_count = 1u;
-    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status, NN2_WIFI_CONNECT_GUARD_MS));
     TEST_ASSERT_EQUAL(1, g_schedule_calls);
 
     /* RECONNECT_DUE was dropped after the one-shot timer fired. The timer
@@ -116,13 +117,13 @@ void test_dropped_link_event_still_schedules_reconnect(void)
     reset_spies();
     status.event_overflow_count = 2u;
     status.reconnect_timer_armed = false;
-    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status, NN2_WIFI_CONNECT_GUARD_MS));
     TEST_ASSERT_EQUAL(1, g_schedule_calls);
 
     /* An armed timer already owns the next attempt. */
     reset_spies();
     status.reconnect_timer_armed = true;
-    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status, NN2_WIFI_CONNECT_GUARD_MS));
     TEST_ASSERT_EQUAL(0, g_schedule_calls);
     TEST_ASSERT_EQUAL(0, g_other_station_calls);
     TEST_ASSERT_EQUAL(0, g_safe_off_calls);
@@ -161,11 +162,11 @@ void test_slow_attempt_does_not_reconnect_while_in_flight(void)
     status.connect_in_flight = true;
     status.connect_attempt_ms = NN2_WIFI_EVENT_WAIT_MS;
 
-    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status, NN2_WIFI_CONNECT_GUARD_MS));
     TEST_ASSERT_EQUAL(0, g_schedule_calls);
 
     status.connect_attempt_ms = NN2_WIFI_CONNECT_GUARD_MS - 1u;
-    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status, NN2_WIFI_CONNECT_GUARD_MS));
     TEST_ASSERT_EQUAL(0, g_schedule_calls);
     TEST_ASSERT_EQUAL(0, g_other_station_calls);
     TEST_ASSERT_EQUAL(0, g_safe_off_calls);
@@ -186,12 +187,12 @@ void test_connect_guard_timeout_schedules_reconnect(void)
     status.connect_in_flight = true;
     status.connect_attempt_ms = NN2_WIFI_CONNECT_GUARD_MS;
 
-    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status, NN2_WIFI_CONNECT_GUARD_MS));
     TEST_ASSERT_EQUAL(1, g_schedule_calls);
 
     reset_spies();
     status.connect_attempt_ms = NN2_WIFI_CONNECT_GUARD_MS + NN2_WIFI_EVENT_WAIT_MS;
-    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status));
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_wifi_on_wait_timeout(&station, &status, NN2_WIFI_CONNECT_GUARD_MS));
     TEST_ASSERT_EQUAL(1, g_schedule_calls);
     TEST_ASSERT_EQUAL(0, g_other_station_calls);
     TEST_ASSERT_EQUAL(0, g_safe_off_calls);

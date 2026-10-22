@@ -13,6 +13,9 @@ extern "C" {
    busy-loop. */
 nn2_status_t nn2_ad_wifi_init(nn2_port_wifi_station_t *out);
 
+/* Connect-attempt guard from this adapter's compile definitions. */
+uint32_t nn2_ad_wifi_connect_guard_ms(void);
+
 #ifdef __cplusplus
 }
 #endif

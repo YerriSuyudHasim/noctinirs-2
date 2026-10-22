@@ -1,3 +1,6 @@
+#include "nn2_rtos_config.h"
+
+#ifdef ESP_PLATFORM
 #include "nn2_ad_prov.h"
 
 #include <errno.h>
@@ -175,3 +178,4 @@ nn2_status_t nn2_ad_prov_init(nn2_port_prov_console_t *out)
     out->ctx = NULL;
     return NN2_OK;
 }
+#endif /* ESP_PLATFORM */

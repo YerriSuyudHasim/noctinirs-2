@@ -44,11 +44,13 @@ nn2_status_t nn2_app_wifi_on_link_event(const nn2_port_wifi_station_t *station,
    down, a connection is still wanted, and the backoff timer is not armed.
    That covers a LINK_DOWN or RECONNECT_DUE dropped by a full queue.
    While connect_in_flight is set and connect_attempt_ms is below
-   NN2_WIFI_CONNECT_GUARD_MS, do not schedule: the link stays down until
-   GOT_IP. When the guard expires, schedule the next backoff step. The
-   adapter clears connect_in_flight on that call. */
+   connect_guard_ms, do not schedule: the link stays down until GOT_IP.
+   When the guard expires, schedule the next backoff step. The adapter
+   clears connect_in_flight on that call. connect_guard_ms is supplied by
+   the caller; this layer does not own that limit. */
 nn2_status_t nn2_app_wifi_on_wait_timeout(const nn2_port_wifi_station_t *station,
-                                         const nn2_wifi_sta_status_t *status);
+                                         const nn2_wifi_sta_status_t *status,
+                                         uint32_t connect_guard_ms);
 
 /* reconnect_now failed. Schedule the next backoff step. NN2_OK does not.
    A stale RECONNECT_DUE after LINK_UP makes reconnect_now return NN2_OK,

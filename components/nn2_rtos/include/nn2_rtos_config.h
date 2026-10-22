@@ -1,4 +1,11 @@
 #ifndef NN2_RTOS_CONFIG_H
+/* A stale main/adapters copy, or any earlier definition, must not win.
+   This check is inside the include guard so a second include of this
+   file is a no-op, and it runs before this header defines the macros. */
+#if defined(NN2_RTOS_ADS131_CORE) || defined(NN2_RTOS_ADS131_PRIORITY) \
+    || defined(NN2_RTOS_ADS131_STACK_BYTES) || defined(NN2_RTOS_ADS131_SPI_WAIT_MS)
+#error "NN2_RTOS_ADS131_* already defined"
+#endif
 #define NN2_RTOS_CONFIG_H
 
 #include <stddef.h>
@@ -20,7 +27,8 @@
    buffer would be overrun. The nn2_net stack high-water mark is NOT RUN
    and is measured in Class H. Optical tasks are not created here.
 
-   Both tasks are pinned to core 0. This header defines no other core.
+   The Wi-Fi tasks are pinned to core 0. The ADS131 diagnostic macros
+   below name core 1; that task is not created by the Wi-Fi path.
    The Wi-Fi, lwIP TCP/IP, and esp_timer tasks are pinned to core 0 by
    sdkconfig. sys_evt has no affinity Kconfig in ESP-IDF v6.1:
    esp_event_loop_create_default sets task_core_id to 0
@@ -50,6 +58,23 @@ _Static_assert(NN2_RTOS_PRIO_NET > NN2_RTOS_PRIO_PROV, "station task outranks co
 _Static_assert(NN2_WIFI_EVT_QUEUE_LEN >= 1u, "event queue depth");
 _Static_assert(NN2_RTOS_STACK_NET_BYTES == 3072u, "nn2_net stack is 3072 bytes");
 _Static_assert(NN2_RTOS_STACK_PROV_BYTES == 2560u, "nn2_prov stack is 2560 bytes");
+
+/* Provisional ADS131 diagnostic choices, moved unchanged from the former
+   main/adapters header so this file is the only definition (ADR-0003).
+   No accepted timing or stack-margin claim. */
+#define NN2_RTOS_ADS131_CORE 1
+#define NN2_RTOS_ADS131_PRIORITY 5
+#define NN2_RTOS_ADS131_STACK_BYTES 4096u
+#define NN2_RTOS_ADS131_SPI_WAIT_MS 20u
+
+_Static_assert(NN2_RTOS_ADS131_CORE == 1, "ADS131 diagnostic task is core 1");
+_Static_assert(NN2_RTOS_ADS131_PRIORITY == 5, "ADS131 diagnostic priority");
+_Static_assert(NN2_RTOS_ADS131_STACK_BYTES == 4096u, "ADS131 diagnostic stack is 4096 bytes");
+_Static_assert(NN2_RTOS_ADS131_SPI_WAIT_MS == 20u, "ADS131 SPI wait is 20 ms");
+
+/* Set only when this header's body ran. A same-guard duplicate included
+   first skips the body and leaves this unset. */
+#define NN2_RTOS_CONFIG_OWNED_BY_NN2_RTOS 1
 
 /* ESP-IDF defines ESP_PLATFORM on the target command line. Include
    sdkconfig.h before the affinity guards so those checks cannot skip
@@ -84,3 +109,12 @@ _Static_assert(NN2_RTOS_STACK_PROV_BYTES == 2560u, "nn2_prov stack is 2560 bytes
 #endif
 
 #endif /* NN2_RTOS_CONFIG_H */
+
+/* Outside the include guard: a stale header that defined NN2_RTOS_CONFIG_H
+   and the ADS131 macros skips the body above. Including this file then
+   still fails, instead of keeping the other definition. */
+#if !defined(NN2_RTOS_CONFIG_OWNED_BY_NN2_RTOS) && ( \
+    defined(NN2_RTOS_ADS131_CORE) || defined(NN2_RTOS_ADS131_PRIORITY) \
+    || defined(NN2_RTOS_ADS131_STACK_BYTES) || defined(NN2_RTOS_ADS131_SPI_WAIT_MS))
+#error "stale NN2_RTOS_ADS131_* duplicate shadowed nn2_rtos_config.h"
+#endif
