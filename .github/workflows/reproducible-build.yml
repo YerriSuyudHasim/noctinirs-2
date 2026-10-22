@@ -1,0 +1,97 @@
+name: Reproducible build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  IDF_CONTAINER_IMAGE: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
+  CI_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  comparison-tests:
+    name: reproducibility-comparison-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0 # Regression-first checks read the reviewed helper/workflow blobs.
+      - name: Reproduce both findings on the reviewed implementation
+        run: |
+          set -euo pipefail
+          python3 tools/verify_repro_regression.py 2>&1 | tee regression-first.txt
+      - name: Exercise success, mismatch, incomplete and diagnostic paths
+        run: |
+          set -euo pipefail
+          echo "SOURCE_SHA=$SOURCE_SHA UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee comparison-tests.txt
+          python3 --version | tee -a comparison-tests.txt
+          python3 -m unittest discover -s tests/reproducibility -v 2>&1 | tee -a comparison-tests.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reproducibility-tests-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            regression-first.txt
+            comparison-tests.txt
+
+  build-twice:
+    name: class-b-reproducible-build${{ matrix.suffix }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: fake
+            suffix: ''
+            defaults: sdkconfig.defaults
+          - profile: diagnostic
+            suffix: '-ads131-diagnostic'
+            defaults: sdkconfig.defaults;sdkconfig.ads131-diagnostic
+    env:
+      SDKCONFIG_DEFAULTS: ${{ matrix.defaults }}
+    needs: comparison-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      # ESP-IDF v6.1 OCI index. Registry byte verification is retained as evidence.
+      image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
+      options: --platform linux/amd64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify immutable image index and platform manifest bytes
+        run: python tools/verify_idf_image.py image-evidence
+      - name: Build exact source twice in independent clean paths and compare every binary
+        run: bash tools/build_twice.sh "$GITHUB_WORKSPACE/repro-evidence"
+      - name: Publish comparison summary even on failure
+        if: always()
+        run: |
+          if [ -f repro-evidence/comparison.md ]; then
+            cat repro-evidence/comparison.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '## Reproducibility: FAIL / INCOMPLETE' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Comparison was not reached. Inspect image verification, checkout and build logs.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain raw binaries, inventories, configuration, commands and mismatch diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: reproducibility-${{ matrix.profile }}-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 90
+          if-no-files-found: error
+          include-hidden-files: true # Preserve recursively discovered binaries in hidden subdirectories too.
+          path: |
+            image-evidence/
+            repro-evidence/

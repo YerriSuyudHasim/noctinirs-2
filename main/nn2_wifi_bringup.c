@@ -4,7 +4,9 @@
 #include "nn2_ad_prov.h"
 #include "nn2_ad_wifi.h"
 #include "nn2_app_wifi.h"
-#include "nn2_rtos_config.h"
+/* Quoted "nn2_rtos_config.h" from main/ would hit
+   main/adapters/nn2_rtos_config.h (ADS131). This path is the Wi-Fi header. */
+#include "../components/nn2_rtos/include/nn2_rtos_config.h"
 #include "nn2_wifi_limits.h"
 
 #include <string.h>

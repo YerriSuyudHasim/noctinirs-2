@@ -1,34 +1,10 @@
 #!/usr/bin/env bash
-# Class S forbidden-include gate (ADR-0001 3.5), Refs #10.
-# Usage: tools/class-s-gate.sh [ROOT]   (default ROOT=.)
-# Exit: 0 PASS, 1 FAIL (violation, empty/missing layer, or scanner error), 3 NOT APPLICABLE (no layer present).
-# grep semantics: rc=0 match -> FAIL; rc=1 no match -> PASS; rc>=2 scanner error -> FAIL.
+# Class S gate, ADR-0001 §§3.3,3.5. Exit 0 PASS, 1 FAIL, 3 NOT APPLICABLE.
 set -uo pipefail
-ROOT="${1:-.}"
-layers=(components/nn2_core components/nn2_ports components/nn2_app)
-present=0
-for l in "${layers[@]}"; do [ -e "$ROOT/$l" ] && present=1; done
-if [ "$present" -eq 0 ]; then
-  echo "NOT APPLICABLE: no normative layer directory present"
-  exit 3
-fi
-# Once any layer exists, every layer must exist and contain at least one C/C++ source or header.
-for l in "${layers[@]}"; do
-  if [ ! -d "$ROOT/$l" ]; then
-    echo "FAIL: layer directory missing: $l"; exit 1
-  fi
-  n="$(find "$ROOT/$l" -type f \( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \) | wc -l)"
-  if [ "$n" -eq 0 ]; then
-    echo "FAIL: layer directory has no C/C++ sources or headers: $l"; exit 1
-  fi
-done
-pattern='^[[:space:]]*#[[:space:]]*include[[:space:]]*[<"]([^>"]*/)?(esp_[^>"]*|freertos/[^>"]*|FreeRTOS\.h|driver/[^>"]*|lwip/[^>"]*|hal/[^>"]*|soc/[^>"]*|rom/[^>"]*|xtensa/[^>"]*|nimble/[^>"]*|nvs[^>"/]*\.h|nn2_adapter_[^>"]*|sdkconfig\.h)[>"]'
-dirs=(); for l in "${layers[@]}"; do dirs+=("$ROOT/$l"); done
-out="$(mktemp)" || { echo "FAIL: mktemp error"; exit 1; }
+HERE="$(cd "$(dirname "$0")" && pwd)"
 rc=0
-grep -rnE --include='*.c' --include='*.h' --include='*.cpp' --include='*.hpp' "$pattern" "${dirs[@]}" > "$out" || rc=$?
-[ -n "${VIOLATIONS_FILE:-}" ] && cp "$out" "$VIOLATIONS_FILE"
-if [ "$rc" -eq 0 ]; then echo "FAIL: forbidden platform/adapter includes found"; cat "$out"; rm -f "$out"; exit 1
-elif [ "$rc" -eq 1 ]; then rm -f "$out"; echo "PASS: no forbidden includes in ${layers[*]}"; exit 0
-else echo "FAIL: grep error (exit $rc); gate result invalid"; exit 1
-fi
+"${PYTHON:-python3}" "$HERE/class-s-gate.py" "${1:-.}" || rc=$?
+case "$rc" in
+  0|1|3) exit "$rc" ;;
+  *) echo "FAIL: gate interpreter error (exit $rc)"; exit 1 ;;
+esac

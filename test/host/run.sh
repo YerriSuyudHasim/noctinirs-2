@@ -124,16 +124,27 @@ gcc -std=c11 -Wall -Wextra -Werror -Werror=undef \
 echo "PASS: ad_wifi_injected"
 
 STUB="$OUT/app-main-stubs"
-mkdir -p "$STUB"
+mkdir -p "$STUB/freertos"
 cat >"$STUB/esp_log.h" <<'EOF'
 #define ESP_LOGI(tag, fmt, ...) do { (void)(tag); } while (0)
 #define ESP_LOGW(tag, fmt, ...) do { (void)(tag); } while (0)
 #define ESP_LOGE(tag, fmt, ...) do { (void)(tag); } while (0)
 EOF
+cat >"$STUB/freertos/FreeRTOS.h" <<'EOF'
+typedef int BaseType_t;
+#define pdTRUE 1
+#define pdMS_TO_TICKS(ms) (ms)
+EOF
+cat >"$STUB/freertos/task.h" <<'EOF'
+void vTaskDelay(int ticks);
+EOF
 APP_MAIN_INC=(
   -I"$STUB"
   -I"$ROOT/main"
+  -I"$ROOT/main/adapters"
   -I"$ROOT/components/nn2_core/include"
+  -I"$ROOT/components/nn2_ports/include"
+  -I"$ROOT/components/nn2_app/include"
 )
 expect_fail app_main_sdkconfig_not_seen "sdkconfig not seen" \
   gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
@@ -159,6 +170,8 @@ OFF_SDK="$OUT/spiram-off-sdk"
 mkdir -p "$OFF_SDK"
 cat >"$OFF_SDK/sdkconfig.h" <<'EOF'
 #define CONFIG_IDF_TARGET "esp32s3"
+#define CONFIG_NN2_LED_SETTLE_US 100
+#define CONFIG_NN2_DEMO_CYCLES 5
 EOF
 gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
   -I"$OFF_SDK" \

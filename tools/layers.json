@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "source_extensions": [".c", ".h", ".cpp", ".hpp", ".cc", ".cxx", ".hh", ".hxx", ".c++", ".h++", ".s"],
+  "forbidden_include_regex": [
+    "esp_.*", "freertos/.*", "driver/.*", "lwip/.*", "hal/.*", "soc/.*", "rom/.*",
+    "esp32s3/rom/.*", "xtensa/.*", "esp_private/.*", "sdkconfig\\.h", "nimble/.*",
+    "host/ble_.*", "bt_.*", "nvs(?:_.*)?\\.h", "FreeRTOS\\.h", "task\\.h", "queue\\.h",
+    "semphr\\.h", "timers\\.h", "event_groups\\.h", "nn2_adapters?_.*"
+  ],
+  "layers": [
+    {"name": "core", "path": "components/nn2_core", "requires": [], "header_prefixes": ["nn2_core_"]},
+    {"name": "ports", "path": "components/nn2_ports", "requires": ["nn2_core"], "header_prefixes": ["nn2_port_", "nn2_ports_"]},
+    {"name": "app", "path": "components/nn2_app", "requires": ["nn2_core", "nn2_ports"], "header_prefixes": ["nn2_app_"]}
+  ]
+}
