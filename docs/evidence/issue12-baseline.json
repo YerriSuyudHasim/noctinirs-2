@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "evidence_class": "B-static-build",
+  "provenance": {
+    "source_sha": "4a21171353b72ceff62774ba114705e0c8be2c31",
+    "target": "esp32s3",
+    "idf_commit": "fff9895c82d744c7237be8847347bdd1b07c6643",
+    "compiler": "xtensa-esp-elf-gcc (crosstool-NG esp-15.2.0_20251204) 15.2.0",
+    "size_tool_version": "2.3.1",
+    "sdkconfig_values_sha256": "6585b44741b9d89db087604c7fdb670350a7526eb821ff9dc961804f386c0c00",
+    "sdkconfig_sha256": "5c6b7e1073053eb0580faae611d4736d6d72424934035b865166f9659d0c626f",
+    "build_flags": "{}",
+    "utc": "2026-10-17T09:14:03.704911+00:00",
+    "environment": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39; Python 3.12.3",
+    "container_reference": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c",
+    "report_sha256": "8e15a6bb1c5081a403468a86d64cd28e35e99a0a8a7361b58f11a93fd8a0f73a",
+    "map_sha256": "08fbdf0a0066429373058a919e6232517a17da91410348667155d9dd8f63df95",
+    "ci_run_url": "https://github.com/YerriSuyudHasim/noctinirs-2/actions/runs/39020072707",
+    "collection_mode": "clean-build"
+  },
+  "metrics": {
+    "iram_fixed": {
+      "used_bytes": 16384,
+      "capacity_bytes": 16384,
+      "headroom_bytes": 0,
+      "used_percent": 100.0
+    },
+    "iram_shared_text": {
+      "used_bytes": 32935,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "iram_placed": {
+      "used_bytes": 49319,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "dram_static": {
+      "used_bytes": 15307,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "diram": {
+      "used_bytes": 48242,
+      "capacity_bytes": 341760,
+      "headroom_bytes": 293518,
+      "used_percent": 14.115753745318353
+    },
+    "flash_code": {
+      "used_bytes": 69114,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "flash_data": {
+      "used_bytes": 38760,
+      "capacity_bytes": null,
+      "headroom_bytes": null,
+      "used_percent": null
+    },
+    "flash_app": {
+      "used_bytes": 170048,
+      "capacity_bytes": 1048576,
+      "headroom_bytes": 878528,
+      "used_percent": 16.217041015625
+    }
+  },
+  "image_size_from_report_bytes": 169928
+}
