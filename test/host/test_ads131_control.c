@@ -57,24 +57,29 @@ static int xQueueSend(void *q, const void *item, TickType_t wait)
 static int xQueueOverwrite(void *q, const void *item)
 { TEST_ASSERT_EQUAL_PTR(&reply_queue,q); posted=*(const reply_t *)item; return pdTRUE; }
 static void dispatch_during_receive(void);
-static int xQueueReceive(void *q, void *out, TickType_t wait)
+static int receive_sized(void *q, void *out, size_t size, TickType_t wait)
 {
     if (q==&command_queue) {
+        TEST_ASSERT_EQUAL(sizeof(queued),size);
+        if (size!=sizeof(queued)) return 0;
         if (!have_command) return 0;
-        *(request_t *)out=queued; have_command=false; return pdTRUE;
+        memcpy(out,&queued,size); have_command=false; return pdTRUE;
     }
     TEST_ASSERT_EQUAL_PTR(&reply_queue,q); last_wait=wait; receive_count++;
+    TEST_ASSERT_EQUAL(sizeof(posted),size);
+    if (q!=&reply_queue || size!=sizeof(posted)) return 0;
     if (pump) dispatch_during_receive();
     if (delivery_index<delivery_count) {
         delivery_t v=deliveries[delivery_index++]; clock_us+=v.delay;
         posted.id=queued.id+(uint32_t)v.offset; posted.result=v.result;
         memset(&posted.record,0x3c,sizeof(posted.record));
         memset(&posted.observation,0x4d,sizeof(posted.observation));
-        *(reply_t *)out=posted; return pdTRUE;
+        memcpy(out,&posted,size); return pdTRUE;
     }
-    if (pump) { *(reply_t *)out=posted; return pdTRUE; }
+    if (pump) { memcpy(out,&posted,size); return pdTRUE; }
     clock_us+=(uint64_t)wait*10000u; return 0;
 }
+#define xQueueReceive(q,out,wait) receive_sized((q),(out),sizeof(*(out)),(wait))
 #ifndef NN2_CONTROL_IMPLEMENTATION
 #define NN2_CONTROL_IMPLEMENTATION "nn2_ads131_control.inc"
 #endif
@@ -252,9 +257,9 @@ static void r2_observation_output_unchanged(void)
 }
 static void positive_port_outputs(void)
 {
-    fresh(); delivery(999u,0,NN2_OK); nn2_core_adc_record_t record;
+    fresh(); delivery(999u,0,NN2_OK); nn2_core_adc_record_t record={0};
     TEST_ASSERT_EQUAL(NN2_OK,read_port(&d,&record,1u)); TEST_ASSERT_EQUAL_HEX8(0x3c,((uint8_t *)&record)[0]);
-    fresh(); delivery(999u,0,NN2_OK); nn2_core_adc_observation_t observation;
+    fresh(); delivery(999u,0,NN2_OK); nn2_core_adc_observation_t observation={0};
     TEST_ASSERT_EQUAL(NN2_OK,observe_port(&d,&observation,1u)); TEST_ASSERT_EQUAL_HEX8(0x4d,((uint8_t *)&observation)[0]);
 }
 void test_ads131_control_suite(void)
