@@ -43,7 +43,19 @@ jobs:
             comparison-tests.txt
 
   build-twice:
-    name: class-b-reproducible-build
+    name: class-b-reproducible-build${{ matrix.suffix }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: fake
+            suffix: ''
+            defaults: sdkconfig.defaults
+          - profile: diagnostic
+            suffix: '-ads131-diagnostic'
+            defaults: sdkconfig.defaults;sdkconfig.ads131-diagnostic
+    env:
+      SDKCONFIG_DEFAULTS: ${{ matrix.defaults }}
     needs: comparison-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -76,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: reproducibility-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: reproducibility-${{ matrix.profile }}-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 90
           if-no-files-found: error
           include-hidden-files: true # Preserve recursively discovered binaries in hidden subdirectories too.

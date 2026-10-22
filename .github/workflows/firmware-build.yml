@@ -139,13 +139,24 @@ jobs:
             evidence/
 
   esp-idf-build:
-    name: class-b-esp-idf-build
+    name: class-b-esp-idf-build${{ matrix.suffix }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: fake
+            suffix: ''
+            defaults: sdkconfig.defaults
+          - profile: diagnostic
+            suffix: '-ads131-diagnostic'
+            defaults: sdkconfig.defaults;sdkconfig.ads131-diagnostic
     runs-on: ubuntu-latest
     container:
       # espressif/idf:v6.1, pinned by digest (Docker Hub tag v6.1, verified 2026-10-16).
       image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
     env:
       EXPECTED_IDF_COMMIT: fff9895c82d744c7237be8847347bdd1b07c6643  # espressif/esp-idf tag v6.1
+      SDKCONFIG_DEFAULTS: ${{ matrix.defaults }}
     defaults:
       run:
         shell: bash
@@ -188,6 +199,16 @@ jobs:
           idf.py set-target esp32s3 2>&1 | tee evidence/set-target.log
           idf.py build 2>&1 | tee evidence/build.log
           idf.py size 2>&1 | tee evidence/size.txt
+          idf.py size-components 2>&1 | tee evidence/size-components.txt
+          python3 tools/check_ads131_config.py --selftest --cc xtensa-esp32s3-elf-gcc --generated-header build/config/sdkconfig.h | tee evidence/config-negatives.txt
+          if [ "${{ matrix.profile }}" = diagnostic ]; then
+            python3 tools/check_ads131_config.py sdkconfig --diagnostic | tee evidence/profile-config.txt
+          else
+            python3 tools/check_ads131_config.py sdkconfig | tee evidence/profile-config.txt
+          fi
+          python3 tools/collect_adc_adapter_build.py --build build --evidence evidence/adapter-dependencies | tee evidence/adapter-dependency-coverage.log
+          cp build/flasher_args.json evidence/
+          cp build/flash*args evidence/ 2>/dev/null || true
           python3 tools/collect_inner_build.py --build build --evidence evidence/product-dependencies --mode idf 2>&1 | tee evidence/product-dependency-coverage.log
 
       - name: Verify C11 using the pinned target compiler
@@ -195,7 +216,7 @@ jobs:
           set -euo pipefail
           . "$IDF_PATH/export.sh" > /dev/null
           NN2_C11_EVIDENCE_DIR=evidence/c11-target NN2_TEST_CC=xtensa-esp32s3-elf-gcc python3 -m unittest discover -s tests/architecture -p 'test_c11.py' -v 2>&1 | tee evidence/c11-target.txt
-          python3 tools/verify_c11_idf.py 2>&1 | tee evidence/c11-idf-fixture.txt
+          env -u SDKCONFIG_DEFAULTS python3 tools/verify_c11_idf.py 2>&1 | tee evidence/c11-idf-fixture.txt
 
       - name: Verify generated target
         run: |
@@ -233,7 +254,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: class-b-build-${{ github.event.pull_request.head.sha || github.sha }}
+          name: class-b-build-${{ matrix.profile }}-${{ github.event.pull_request.head.sha || github.sha }}
           include-hidden-files: true # Evidence checksum inventory includes Ninja metadata.
           retention-days: 90
           if-no-files-found: error
@@ -242,6 +263,8 @@ jobs:
             build/*.bin
             build/*.elf
             build/*.map
+            build/flasher_args.json
+            build/flash*args
             build/bootloader/bootloader.bin
             build/partition_table/partition-table.bin
 
@@ -253,14 +276,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0 # Exact reviewed control blob for old-fail/new-pass assertions.
       - name: Execute product behavior and isolated failure controls
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p evidence-u
           { echo "SOURCE_SHA=$SOURCE_SHA"; date -u +%Y-%m-%dT%H:%M:%SZ; gcc --version; cmake --version; ninja --version; } > evidence-u/toolchain.txt
+          python3 tools/verify_ads131_control_regression.py --evidence evidence-u/control-regression 2>&1 | tee evidence-u/control-regression.log
           python3 tools/run_host_tests.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence "$GITHUB_WORKSPACE/evidence-u" --failure-controls 2>&1 | tee evidence-u/runner.log
           python3 tools/collect_inner_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/product-dependencies --mode host 2>&1 | tee evidence-u/dependency-coverage.log
+          python3 tools/collect_adc_adapter_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/adapter-dependencies | tee evidence-u/adapter-dependency-coverage.log
           python3 tools/layer_contract.py detect | tee evidence-u/layer-state.txt
           python3 tools/class-s-gate.py . 2>&1 | tee evidence-u/real-layer-gate.log
           cat evidence-u/result.json >> "$GITHUB_STEP_SUMMARY"

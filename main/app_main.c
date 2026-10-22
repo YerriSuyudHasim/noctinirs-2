@@ -13,12 +13,15 @@
 
 static const char *TAG = "nn2_main";
 
+#if !CONFIG_NN2_PROFILE_ADS131_DIAGNOSTIC
 static nn2_core_ring_storage_t s_ring_storage;
 static nn2_core_ring_t *s_ring;
 static nn2_app_seq_storage_t s_seq_storage;
 static nn2_app_sequencer_t *s_seq;
+#endif
 
-void app_main(void)
+#if !CONFIG_NN2_PROFILE_ADS131_DIAGNOSTIC
+static void fake_demo(void)
 {
     ESP_LOGI(TAG, "NoctiNIRS 2 firmware v%s (draft library skeleton, non-clinical)", NN2_VERSION_STRING);
 
@@ -64,4 +67,45 @@ void app_main(void)
     if (nn2_app_sequencer_observe(s_seq, &observation) != NN2_OK) return;
     ESP_LOGI(TAG, "done: cycles_ok=%" PRIu32 " faults=%" PRIu32 " off_failures=%" PRIu32 " dropped=%" PRIu32,
              observation.cycles_ok, observation.faults, observation.off_failures, nn2_core_ring_dropped(s_ring));
+}
+
+#endif
+#if CONFIG_NN2_PROFILE_ADS131_DIAGNOSTIC
+#include "nn2_app_adc_diagnostic.h"
+#include "nn2_board_v1.h"
+#include "esp_app_desc.h"
+static void adc_diagnostic(void)
+{
+    nn2_port_adc_stream_t port;
+    nn2_core_adc_observation_t observation = {0};
+    const esp_app_desc_t *description = esp_app_get_description();
+    ESP_LOGI(TAG, "profile=ADS131_DIAGNOSTIC source=ADC time_kind=read_complete_us emitter_control=ABSENT fixture=REQUIRED source_sha=%s config=MODE0110_CLOCK0F0A_GAIN0000 version=%s elf_sha256=%02x%02x%02x%02x", NN2_SOURCE_SHA, description->version,
+        description->app_elf_sha256[0], description->app_elf_sha256[1], description->app_elf_sha256[2], description->app_elf_sha256[3]);
+    nn2_status_t s = nn2_adapter_ads131_create(&nn2_board_v1_adc, &port);
+    if (s != NN2_OK) { ESP_LOGE(TAG, "owner creation failed: %s", nn2_core_status_str(s)); return; }
+    for (unsigned session = 0; session < 2u; ++session) {
+        nn2_core_adc_record_t record;
+        s = nn2_app_adc_diagnostic_run(&port, 128u, &observation, &record);
+        (void)port.observe(port.ctx, &observation, 1000u);
+        ESP_LOGI(TAG, "diagnostic result=%s state=%u fault=%u session=%" PRIu32 " produced=%" PRIu32 " consumed=%" PRIu32 " lost=%" PRIu32 " overflow=%" PRIu32 " crc_bad=%" PRIu32 " spi_errors=%" PRIu32 " drdy_timeouts=%" PRIu32 " missed_min=%" PRIu32 " unknown_loss=%" PRIu32 " occupancy=%" PRIu32 " peak=%" PRIu32 " record_bytes=%u",
+            nn2_core_status_str(s), (unsigned)observation.state, (unsigned)observation.fault,
+            observation.session, observation.produced, observation.consumed, observation.lost,
+            observation.overflow, observation.crc_bad, observation.spi_errors, observation.drdy_timeouts,
+            observation.adc_missed, observation.loss_unknown, observation.occupancy,
+            observation.max_occupancy, (unsigned)sizeof(nn2_core_adc_record_t));
+        if (s == NN2_OK)
+            ESP_LOGI(TAG, "source=ADC sequence=%" PRIu32 " read_complete_us=%" PRIu64 " status=%04x quality=%" PRIu32 " ch0=%" PRId32 " ch1=%" PRId32 " ch2=%" PRId32 " ch3=%" PRId32,
+                record.sequence, record.read_complete_us, (unsigned)record.status, record.quality,
+                record.channel[0], record.channel[1], record.channel[2], record.channel[3]);
+        if (s != NN2_OK) break; /* No automatic fault recovery. */
+    }
+}
+#endif
+void app_main(void)
+{
+#if CONFIG_NN2_PROFILE_ADS131_DIAGNOSTIC
+    adc_diagnostic();
+#else
+    fake_demo();
+#endif
 }

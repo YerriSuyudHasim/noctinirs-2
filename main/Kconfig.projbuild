@@ -1,7 +1,13 @@
 menu "NoctiNIRS 2 (draft v0.1.0)"
 
-    # 0.1.x scope: no physical emitter/ADC options. The LED adapter is a disabled
-    # no-op and the ADC adapter is a fake (src=FAKE). See PR #15 (F1).
+    choice NN2_PROFILE
+        prompt "Firmware profile"
+        default NN2_PROFILE_FAKE
+        config NN2_PROFILE_FAKE
+            bool "Fake ADC / disabled emitter baseline"
+        config NN2_PROFILE_ADS131_DIAGNOSTIC
+            bool "ADS131 diagnostic / emitter energy unavailable fixture required"
+    endchoice
 
     config NN2_LED_SETTLE_US
         int "Settle wait between (disabled) LED on and (fake) sample (us)"
