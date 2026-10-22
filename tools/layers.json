@@ -11,5 +11,42 @@
     {"name": "core", "path": "components/nn2_core", "requires": [], "header_prefixes": ["nn2_core_"]},
     {"name": "ports", "path": "components/nn2_ports", "requires": ["nn2_core"], "header_prefixes": ["nn2_port_", "nn2_ports_"]},
     {"name": "app", "path": "components/nn2_app", "requires": ["nn2_core", "nn2_ports"], "header_prefixes": ["nn2_app_"]}
+  ],
+  "outer_layers": [
+    {
+      "name": "adapter",
+      "component_pattern": "nn2_ad_*",
+      "path_pattern": "components/nn2_ad_*",
+      "header_prefixes": ["nn2_ad_"],
+      "allowed_dependencies": ["nn2_core", "nn2_ports", "nn2_rtos"],
+      "forbidden_dependencies": ["nn2_app"],
+      "forbidden_dependency_patterns": ["nn2_ad_.*"],
+      "allow_idf_dependencies": true,
+      "forbidden_include_prefixes": ["nn2_app_", "nn2_adapter_", "nn2_adapters_"],
+      "allow_platform_includes": true,
+      "allow_sdkconfig": true
+    },
+    {
+      "name": "platform",
+      "component": "nn2_rtos",
+      "path": "components/nn2_rtos",
+      "header_prefixes": ["nn2_rtos_"],
+      "allowed_dependencies": [],
+      "forbidden_dependencies": [],
+      "forbidden_dependency_patterns": ["nn2_.*"],
+      "allow_idf_dependencies": true,
+      "forbidden_include_prefixes": ["nn2_"],
+      "allow_platform_includes": true,
+      "allow_sdkconfig": true
+    },
+    {
+      "name": "composition",
+      "component": "main",
+      "path": "main",
+      "header_prefixes": ["nn2_adapter_", "nn2_adapters_"],
+      "allow_any_dependency": true,
+      "allow_platform_includes": true,
+      "allow_sdkconfig": true
+    }
   ]
 }
