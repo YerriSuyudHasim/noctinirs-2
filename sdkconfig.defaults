@@ -4,3 +4,27 @@ CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 # Issue #9: omit IDF build timestamps and map source/debug paths deterministically.
 CONFIG_APP_REPRODUCIBLE_BUILD=y
+
+# USB Serial/JTAG is the provisioning console (issue #30). No UART fallback.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# IDF Wi-Fi task stays on core 0. Station credentials live in the app
+# namespace, not in the Wi-Fi driver store. SoftAP is not part of this image.
+CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0=y
+# CONFIG_ESP_WIFI_NVS_ENABLED is not set
+# CONFIG_ESP_WIFI_SOFTAP_SUPPORT is not set
+
+# lwIP TCP/IP and esp_timer tasks stay on core 0 with the station task.
+# sys_evt has no affinity Kconfig in ESP-IDF v6.1. esp_event_loop_create_default
+# sets task_core_id to 0.
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+CONFIG_ESP_TIMER_TASK_AFFINITY_CPU0=y
+
+# First reconnect after disconnect is immediate. This is the next delay.
+CONFIG_NN2_WIFI_BACKOFF_FIRST_MS=500
+CONFIG_NN2_WIFI_BACKOFF_MAX_MS=8000
+
+# PSRAM stays off (ESP-IDF v6.1 symbol CONFIG_SPIRAM). app_main fails the
+# build if a later sdkconfig turns it on.
+# CONFIG_SPIRAM is not set

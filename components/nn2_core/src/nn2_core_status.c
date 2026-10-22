@@ -11,6 +11,14 @@ const char *nn2_core_status_str(nn2_status_t status)
     case NN2_ERR_IO: return "IO";
     case NN2_ERR_NOT_SUPPORTED: return "NOT_SUPPORTED";
     case NN2_ERR_TIMEOUT: return "TIMEOUT";
+    case NN2_ERR_MISSING: return "MISSING";
+    case NN2_ERR_INVALID: return "INVALID";
+    case NN2_ERR_NVS_CORRUPT: return "NVS_CORRUPT";
+    case NN2_ERR_AUTH_FAIL: return "AUTH_FAIL";
+    case NN2_ERR_CANCELLED: return "CANCELLED";
+    case NN2_ERR_NO_MEM: return "NO_MEM";
+    case NN2_ERR_BUSY: return "BUSY";
+    case NN2_ERR_OVERFLOW: return "OVERFLOW";
     default: return "UNKNOWN";
     }
 }

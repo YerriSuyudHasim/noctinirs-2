@@ -28,6 +28,15 @@ typedef enum {
     NN2_ERR_IO,
     NN2_ERR_NOT_SUPPORTED,
     NN2_ERR_TIMEOUT,
+    /* Issue #30 provision codes. Appended so the values above stay stable. */
+    NN2_ERR_MISSING,
+    NN2_ERR_INVALID,
+    NN2_ERR_NVS_CORRUPT,
+    NN2_ERR_AUTH_FAIL,
+    NN2_ERR_CANCELLED,
+    NN2_ERR_NO_MEM,
+    NN2_ERR_BUSY,
+    NN2_ERR_OVERFLOW,
     NN2_STATUS_COUNT_
 } nn2_status_t;
 

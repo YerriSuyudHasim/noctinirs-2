@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+# Class U host tests for the M2 Wi-Fi provision policy. No ESP-IDF, no hardware.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+OUT="${TMPDIR:-/tmp}/nn2-host-tests"
+mkdir -p "$OUT"
+
+fail() { echo "FAIL: $*" >&2; exit 1; }
+
+# Source scan: adapters and composition must not carry these tokens.
+SCAN_DIRS=(
+  "$ROOT/components/nn2_core"
+  "$ROOT/components/nn2_ports"
+  "$ROOT/components/nn2_app"
+  "$ROOT/main"
+)
+for extra in nn2_ad_wifi nn2_ad_cred nn2_ad_prov nn2_rtos; do
+  if [ -d "$ROOT/components/$extra" ]; then
+    SCAN_DIRS+=("$ROOT/components/$extra")
+  fi
+done
+if grep -RInE --include='*.c' --include='*.h' 'portMAX_DELAY|safe_off|SafeOff|nvs_flash_erase|WIFI_MODE_AP' "${SCAN_DIRS[@]}" ; then
+  fail "forbidden token in active firmware sources"
+fi
+if grep -RInE --include='*.c' --include='*.h' --include='CMakeLists.txt' 'nn2_rtos' \
+  "$ROOT/components/nn2_core" "$ROOT/components/nn2_ports" "$ROOT/components/nn2_app"; then
+  fail "inner layer depends on nn2_rtos"
+fi
+if grep -RInE --include='*.h' 'define[[:space:]]+NN2_RTOS_ADS131_' \
+  "$ROOT/components" "$ROOT/main" "$ROOT/test" \
+  | grep -v 'components/nn2_rtos/include/nn2_rtos_config.h'; then
+  fail "NN2_RTOS_ADS131_* defined outside nn2_rtos_config.h"
+fi
+echo "PASS: ads131_macros_single_header"
+
+cc_one() {
+  gcc -std=c11 -Wall -Wextra -Werror -pedantic \
+    -I"$ROOT/components/nn2_core/include" \
+    -I"$ROOT/components/nn2_ports/include" \
+    -I"$ROOT/components/nn2_app/include" \
+    -I"$ROOT/components/nn2_rtos/include" \
+    -I"$ROOT/test/host/unity" \
+    -c "$1" -o "$2"
+}
+
+cc_one "$ROOT/components/nn2_core/nn2_wifi_cred.c" "$OUT/cred.o"
+cc_one "$ROOT/components/nn2_core/nn2_wifi_backoff.c" "$OUT/backoff.o"
+cc_one "$ROOT/components/nn2_app/nn2_app_wifi.c" "$OUT/app.o"
+cc_one "$ROOT/test/host/test_cred.c" "$OUT/test_cred.o"
+cc_one "$ROOT/test/host/test_backoff.c" "$OUT/test_backoff.o"
+cc_one "$ROOT/test/host/test_link.c" "$OUT/test_link.o"
+cc_one "$ROOT/test/host/test_rtos.c" "$OUT/test_rtos.o"
+cc_one "$ROOT/test/host/test_runner.c" "$OUT/test_runner.o"
+gcc -std=c11 -Wall -Wextra -Werror \
+  -I"$ROOT/test/host/unity" \
+  -c "$ROOT/test/host/unity/unity.c" -o "$OUT/unity.o"
+gcc -o "$OUT/nn2_host_tests" \
+  "$OUT/cred.o" "$OUT/backoff.o" "$OUT/app.o" \
+  "$OUT/test_cred.o" "$OUT/test_backoff.o" "$OUT/test_link.o" \
+  "$OUT/test_rtos.o" "$OUT/test_runner.o" "$OUT/unity.o"
+"$OUT/nn2_host_tests"
+
+# Target-only guards must fail closed. Host Class U above leaves ESP_PLATFORM unset.
+expect_fail() {
+  local name="$1"
+  local needle="$2"
+  shift 2
+  set +e
+  "$@" >"$OUT/${name}.log" 2>&1
+  local rc=$?
+  set -e
+  if [ "$rc" -eq 0 ]; then
+    fail "$name compiled, expected failure"
+  fi
+  if ! grep -F "$needle" "$OUT/${name}.log" >/dev/null; then
+    cat "$OUT/${name}.log" >&2
+    fail "$name did not report: $needle"
+  fi
+  echo "PASS: $name"
+}
+
+EMPTY_SDK="$OUT/empty-sdk"
+mkdir -p "$EMPTY_SDK"
+: >"$EMPTY_SDK/sdkconfig.h"
+expect_fail rtos_missing_sdkconfig "sdkconfig not seen" \
+  gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
+    -I"$EMPTY_SDK" \
+    -I"$ROOT/components/nn2_rtos/include" \
+    -c "$ROOT/components/nn2_rtos/nn2_rtos_anchor.c" \
+    -o "$OUT/rtos_missing_sdkconfig.o"
+
+cat >"$OUT/limits_target.c" <<'EOF'
+#include "nn2_wifi_limits.h"
+int nn2_limits_host_anchor;
+EOF
+gcc -std=c11 -Wall -Wextra -Werror -Werror=undef -DESP_PLATFORM \
+  -I"$ROOT/components/nn2_core/include" \
+  -c "$OUT/limits_target.c" \
+  -o "$OUT/limits_core_defaults.o"
+echo "PASS: limits_core_defaults"
+
+awk 'BEGIN{p=1} /^#include/{exit} {print}' \
+  "$ROOT/components/nn2_ad_wifi/nn2_ad_wifi.c" >"$OUT/ad_wifi_guard.c"
+echo "int nn2_ad_wifi_guard_anchor;" >>"$OUT/ad_wifi_guard.c"
+expect_fail ad_wifi_missing_macros "NN2_WIFI_BACKOFF_FIRST_MS is required" \
+  gcc -std=c11 -Wall -Wextra -Werror -Werror=undef \
+    -c "$OUT/ad_wifi_guard.c" \
+    -o "$OUT/ad_wifi_missing_macros.o"
+
+GOOD_SDK="$OUT/good-sdk"
+mkdir -p "$GOOD_SDK"
+cat >"$GOOD_SDK/sdkconfig.h" <<'EOF'
+#define CONFIG_IDF_TARGET "esp32s3"
+#define CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0 1
+#define CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0 1
+#define CONFIG_LWIP_TCPIP_TASK_AFFINITY 0
+#define CONFIG_ESP_TIMER_TASK_AFFINITY_CPU0 1
+#define CONFIG_ESP_TIMER_TASK_AFFINITY 0
+EOF
+gcc -std=c11 -Wall -Wextra -Werror -Werror=undef -DESP_PLATFORM \
+  -I"$GOOD_SDK" \
+  -I"$ROOT/components/nn2_rtos/include" \
+  -c "$ROOT/components/nn2_rtos/nn2_rtos_anchor.c" \
+  -o "$OUT/rtos_good_sdkconfig.o"
+echo "PASS: rtos_good_sdkconfig"
+
+gcc -std=c11 -Wall -Wextra -Werror -Werror=undef \
+  -DNN2_WIFI_BACKOFF_FIRST_MS=500 \
+  -DNN2_WIFI_BACKOFF_MAX_MS=8000 \
+  -DNN2_WIFI_BACKOFF_FACTOR=2 \
+  -DNN2_WIFI_CONNECT_GUARD_MS=15000 \
+  -c "$OUT/ad_wifi_guard.c" \
+  -o "$OUT/ad_wifi_injected.o"
+echo "PASS: ad_wifi_injected"
+
+STUB="$OUT/app-main-stubs"
+mkdir -p "$STUB/freertos"
+cat >"$STUB/esp_log.h" <<'EOF'
+#define ESP_LOGI(tag, fmt, ...) do { (void)(tag); } while (0)
+#define ESP_LOGW(tag, fmt, ...) do { (void)(tag); } while (0)
+#define ESP_LOGE(tag, fmt, ...) do { (void)(tag); } while (0)
+EOF
+cat >"$STUB/freertos/FreeRTOS.h" <<'EOF'
+typedef int BaseType_t;
+#define pdTRUE 1
+#define pdMS_TO_TICKS(ms) (ms)
+EOF
+cat >"$STUB/freertos/task.h" <<'EOF'
+void vTaskDelay(int ticks);
+EOF
+APP_MAIN_INC=(
+  -I"$STUB"
+  -I"$ROOT/main"
+  -I"$ROOT/main/adapters"
+  -I"$ROOT/components/nn2_core/include"
+  -I"$ROOT/components/nn2_ports/include"
+  -I"$ROOT/components/nn2_app/include"
+)
+expect_fail app_main_sdkconfig_not_seen "sdkconfig not seen" \
+  gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
+    -I"$EMPTY_SDK" \
+    "${APP_MAIN_INC[@]}" \
+    -c "$ROOT/main/app_main.c" \
+    -o "$OUT/app_main_missing_sdk.o"
+
+SPIRAM_SDK="$OUT/spiram-sdk"
+mkdir -p "$SPIRAM_SDK"
+cat >"$SPIRAM_SDK/sdkconfig.h" <<'EOF'
+#define CONFIG_IDF_TARGET "esp32s3"
+#define CONFIG_SPIRAM 1
+EOF
+expect_fail app_main_spiram_on "CONFIG_SPIRAM must stay disabled" \
+  gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
+    -I"$SPIRAM_SDK" \
+    "${APP_MAIN_INC[@]}" \
+    -c "$ROOT/main/app_main.c" \
+    -o "$OUT/app_main_spiram_on.o"
+
+OFF_SDK="$OUT/spiram-off-sdk"
+mkdir -p "$OFF_SDK"
+cat >"$OFF_SDK/sdkconfig.h" <<'EOF'
+#define CONFIG_IDF_TARGET "esp32s3"
+#define CONFIG_NN2_LED_SETTLE_US 100
+#define CONFIG_NN2_DEMO_CYCLES 5
+EOF
+gcc -std=c11 -Wall -Wextra -Werror -DESP_PLATFORM \
+  -I"$OFF_SDK" \
+  "${APP_MAIN_INC[@]}" \
+  -c "$ROOT/main/app_main.c" \
+  -o "$OUT/app_main_spiram_off.o"
+echo "PASS: app_main_spiram_off"
+
+STALE="$OUT/stale-rtos"
+mkdir -p "$STALE"
+cat >"$STALE/nn2_rtos_config.h" <<'EOF'
+#ifndef NN2_RTOS_CONFIG_H
+#define NN2_RTOS_CONFIG_H
+#define NN2_RTOS_ADS131_CORE 9
+#define NN2_RTOS_ADS131_PRIORITY 9
+#define NN2_RTOS_ADS131_STACK_BYTES 1u
+#define NN2_RTOS_ADS131_SPI_WAIT_MS 1u
+#endif
+EOF
+cat >"$OUT/ads131_shadow.c" <<EOF
+#include "nn2_rtos_config.h"
+#include "${ROOT}/components/nn2_rtos/include/nn2_rtos_config.h"
+int nn2_ads131_shadow_anchor;
+EOF
+expect_fail ads131_stale_shadow "stale NN2_RTOS_ADS131_* duplicate shadowed nn2_rtos_config.h" \
+  gcc -std=c11 -Wall -Wextra -Werror \
+    -I"$STALE" \
+    -c "$OUT/ads131_shadow.c" \
+    -o "$OUT/ads131_shadow.o"
+
+cat >"$OUT/ads131_predefined.c" <<EOF
+#define NN2_RTOS_ADS131_CORE 9
+#include "${ROOT}/components/nn2_rtos/include/nn2_rtos_config.h"
+int nn2_ads131_predefined_anchor;
+EOF
+expect_fail ads131_predefined "NN2_RTOS_ADS131_* already defined" \
+  gcc -std=c11 -Wall -Wextra -Werror \
+    -c "$OUT/ads131_predefined.c" \
+    -o "$OUT/ads131_predefined.o"
+
+cat >"$OUT/ads131_twice.c" <<EOF
+#include "${ROOT}/components/nn2_rtos/include/nn2_rtos_config.h"
+#include "${ROOT}/components/nn2_rtos/include/nn2_rtos_config.h"
+int nn2_ads131_twice_anchor;
+EOF
+gcc -std=c11 -Wall -Wextra -Werror \
+  -c "$OUT/ads131_twice.c" \
+  -o "$OUT/ads131_twice.o"
+echo "PASS: ads131_twice"

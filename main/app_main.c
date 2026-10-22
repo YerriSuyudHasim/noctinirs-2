@@ -1,3 +1,19 @@
+/* Composition root. ESP-IDF defines ESP_PLATFORM on the target command
+   line. Include sdkconfig.h here so a missing Kconfig header cannot skip
+   the PSRAM check. Host builds leave ESP_PLATFORM unset. */
+#ifdef ESP_PLATFORM
+#include "sdkconfig.h"
+#endif
+#if defined(ESP_PLATFORM) && !defined(CONFIG_IDF_TARGET)
+#error "sdkconfig not seen"
+#endif
+/* This image does not enable PSRAM. A pin map for octal-PSRAM pads is
+   not approved in an issue or ADR, so this check is the software switch
+   only. */
+#if defined(CONFIG_SPIRAM) && CONFIG_SPIRAM
+#error "CONFIG_SPIRAM must stay disabled"
+#endif
+
 /* NoctiNIRS 2 composition root (draft v0.1.0). Non-clinical research prototype:
  * raw counts only, no physiological or clinical interpretation. */
 #include <inttypes.h>
@@ -10,6 +26,7 @@
 #include "nn2_core_ring.h"
 #include "nn2_app_sequencer.h"
 #include "nn2_adapter_esp32s3.h"
+#include "nn2_wifi_bringup.h"
 
 static const char *TAG = "nn2_main";
 
@@ -103,6 +120,13 @@ static void adc_diagnostic(void)
 #endif
 void app_main(void)
 {
+    nn2_status_t wifi_status;
+
+    ESP_LOGI(TAG, "Wi-Fi STA provisioning is enabled");
+    wifi_status = nn2_wifi_bringup();
+    if (wifi_status != NN2_OK) {
+        ESP_LOGE(TAG, "wifi bring-up failed: %d", (int)wifi_status);
+    }
 #if CONFIG_NN2_PROFILE_ADS131_DIAGNOSTIC
     adc_diagnostic();
 #else

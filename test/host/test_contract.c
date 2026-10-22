@@ -86,7 +86,7 @@ static void ring_multielement_wrap_refill_and_repeated_full(void)
 }
 static void complete_enum_names_and_invalid_values(void)
 {
-    const char *names[]={"OK","INVALID_ARG","INVALID_STATE","FULL","EMPTY","IO","NOT_SUPPORTED","TIMEOUT"};
+    const char *names[]={"OK","INVALID_ARG","INVALID_STATE","FULL","EMPTY","IO","NOT_SUPPORTED","TIMEOUT","MISSING","INVALID","NVS_CORRUPT","AUTH_FAIL","CANCELLED","NO_MEM","BUSY","OVERFLOW"};
     for (int i=0;i<NN2_STATUS_COUNT_;++i) TEST_ASSERT_EQUAL_STRING(names[i],nn2_core_status_str((nn2_status_t)i));
     TEST_ASSERT_EQUAL_STRING("UNKNOWN",nn2_core_status_str(NN2_STATUS_COUNT_));
     TEST_ASSERT_EQUAL_STRING("UNKNOWN",nn2_core_status_str((nn2_status_t)-1));
