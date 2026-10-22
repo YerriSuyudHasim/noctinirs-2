@@ -26,7 +26,7 @@ remain explicitly pending; a Draft may have a useful partial chain.
 | Commit SHA | Full 40-character PR head; issue-referencing commits; pin all source, comparisons, reports, tests and reviews to it. Base SHA and dependency SHAs are separate fields |
 | CI run | Workflow/job URLs, run ID and attempt, event, source SHA, actual checkout mode, raw job/step conclusions, commands, UTC, executor, tool versions/environment, counts/skips, artifacts/checksums and retention. Record failed and superseded runs as well as current results |
 | Independent Review | Non-author/non-coauthor identity and accountable role, assignment/handoff, full reviewed SHA, review URL, findings and explicit decision. Specialist concurrence where applicable. A request or accepted handoff is not approval |
-| Owner Decision | Durable issue/PR decision by the human Owner: Accept/Reject/Amend, PR URL, exact reviewed SHA, scope, conditions and authorization. Merge authorization follows valid checks and independent review; it is separate from permission to prepare a Draft |
+| Owner Decision | Durable issue/PR decision by the human Owner: Accept/Reject/Amend, PR URL, exact reviewed SHA, scope, conditions and authorization. Merge authorization follows valid checks and independent review; it is separate from permission to prepare a Draft. **Open item:** product `AGENTS.md` at main `5958a0eafec6b03c2b158c4026f3f10b8a3366d1` does not record delegated approval, and no amending pull request for that text is merged. Until it lands, cite the delegation record when a record relies on it: [#33 comment 6333953903](https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6333953903). Delegated merge approval does not cover flash, Class H, tags or releases |
 | Merge SHA | Only after an actual authorized merge: verified merged state, full merge/result SHA, method, actor, UTC and parent/head correspondence. Link from PR and issue with evidence and remaining follow-ups. Merge is not release or deployment |
 
 Do not copy GitHub's `merge_commit_sha` into the final stage for an open PR: it
@@ -44,6 +44,32 @@ For example, host reporting-tool tests can be U/R for that tool, without
 establishing product Core/Application behavior. Identify simulation and
 field/production evidence explicitly under the hub taxonomy; do not silently
 relabel simulations as hardware, integration or field results.
+
+Class I rows for simulator or loopback evidence must name that simulator or
+loopback and mark the result **SIMULATED**. For v0.1.0, simulator-plus-CI
+conformance is the #50 `nn2ctl` suite and the #56 timestamp/sequence test.
+Issue #56 AC2 calls that test Class U/I; the SIMULATED label is still required
+on the integration claim.
+[Issue #56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56) places
+the timestamp contract (ADR-0004 rev 2, open [PR #55](https://github.com/YerriSuyudHasim/noctinirs-2/pull/55))
+and the simulator conformance test in v0.1.0, and defers the real DRDY-latched
+implementation to v0.1.2 (streaming path) and v0.1.3 (DRDY-synchronized
+capture). **Open item:** #55 is still Draft and Proposed, and its body also
+says "rev 3.1 fixes"; this convention does not choose between those revision
+labels. Acceptance of the #56/#50 conformance work is **BLOCKED** until Agent
+06 posts acceptance criteria on both issues. At the 2026-10-22T06:35:26Z API
+check, #50 had no comments and #56's comments were Agent 05 mirrors. The class
+table stays **NOT RUN** until a run exists. BLOCKED here is an acceptance-matrix
+status, not a PASS.
+
+Class H stays **NOT RUN**, including when deferred by the Owner directive
+relayed in #56 (2026-10-22 15:25 KST). That deferral is never NOT APPLICABLE
+and never PASS. H-COMMS-1 ([#53](https://github.com/YerriSuyudHasim/noctinirs-2/issues/53),
+draft procedure [#54](https://github.com/YerriSuyudHasim/noctinirs-2/pull/54))
+is parked and is not a v0.1.0 merge gate under this convention. **Open item:**
+#53 remains in milestone v0.1.0, and `docs/ROADMAP.md` on main
+`5958a0eafec6b03c2b158c4026f3f10b8a3366d1` still names H-COMMS-1 as the v0.1.0
+Class H gate. This document does not amend that roadmap.
 
 All six template rows default to **NOT RUN**. Explicit statuses are mandatory at
 review handoff; TODO fields are incomplete. The template is a checklist reviewed
@@ -89,7 +115,7 @@ and checksums, and do not weaken retention without a documented alternative.
 | Multiple PRs for one issue | Maintain an issue-level list of all PRs, roles, scopes, heads, states and dependencies. Keep separate chains and criteria coverage for each. Closing/superseding one PR does not complete the issue; closeout must account for all required deliverables |
 | Unmerged dependency | Pin dependency PR + SHA, distinguish reference-only from incorporated/stacked code, state overlaps and unresolved compatibility. Do not call it main or accepted. Record real base lineage. Separate-branch green runs do not establish combined compatibility; authorized integration requires fresh combined-SHA checks and review |
 | Rejected or amended PR | Preserve the PR, failed evidence, reviewer findings and Owner decision. Append the reason and successor/revision links. Rejected work is not accepted history. Amendments get new SHA/evidence/review/Owner decision; do not erase or silently rewrite prior handoffs |
-| Missing hardware evidence | H stays NOT RUN with equipment/procedure/authorization blocker and the exact unsupported claims. Block criteria needing it and hand off to the Owner/specialist. Continue independently testable documentation work; build/host/simulation evidence cannot fill the hardware gap |
+| Missing hardware evidence | H stays NOT RUN — deferred by the Owner directive relayed in [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56) (2026-10-22 15:25 KST), or with the equipment/procedure/authorization blocker — and the exact unsupported claims. Never record that deferral as NOT APPLICABLE or PASS. H-COMMS-1 (#53/#54) is parked and is not a v0.1.0 gate here; the roadmap conflict in the evidence-status section stays open. Block criteria needing hardware and hand off to the Owner/specialist. Continue independently testable documentation work; build/host/simulation evidence cannot fill the hardware gap |
 
 Hardware timing, electrical/optical safety, peak runtime memory and clinical
 behavior need their applicable evidence and authorization. This documentation
@@ -117,11 +143,20 @@ the exact diff against base, including the manifest. Unexpected mismatches stop
 the affected work. An intentional reference-maintenance exception requires
 separate explicit authorization and review under AGENTS.md.
 
-At the inspected main, firmware CI explicitly checks out the PR head;
-reference-integrity CI uses the default PR checkout (synthetic merge tree).
-Record that distinction: a PR run's API `head_sha` alone does not prove that its
-checkout tested that head. Use exact-head push integrity evidence as well.
-Do not import the unmerged #40 checkout fix or imply it is already on main.
+At main `5958a0eafec6b03c2b158c4026f3f10b8a3366d1` (workflow text read
+2026-10-22T06:35:26Z), `firmware-build.yml`, `reproducible-build.yml` and
+`reference-integrity.yml` check out
+`${{ github.event.pull_request.head.sha || github.sha }}` on `pull_request`.
+Reference-integrity does not use the default synthetic merge tree at that SHA.
+[PR #40](https://github.com/YerriSuyudHasim/noctinirs-2/pull/40) is merged as
+`4ee6d5412e31848d8f7a5681aa91853f5847ce8d` (2026-10-19T00:43:08Z). The older
+statement that reference-integrity used a synthetic merge tree, and that #40
+was unmerged, described main before that merge.
+
+Still verify the checkout mode and `SOURCE_SHA` recorded by the job. A run's
+API `head_sha` alone does not prove that its checkout tested that head. Pin
+the workflow revision that actually ran. Keep exact-head push evidence when
+the job record does not show the checkout ref.
 
 ## Retrospective application and maintenance
 

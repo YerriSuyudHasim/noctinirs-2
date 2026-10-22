@@ -113,3 +113,20 @@ then decides budget adoption and any later merge after required checks/reviews.
 Rollback remains a reviewed revert of reporting tooling/docs/workflow, not a
 firmware or hardware recovery claim. Any new head requires fresh evidence and
 review; this historical example must not be silently updated into approval.
+
+## Later status (not part of the snapshot)
+
+Appended 2026-10-22T06:35:26Z from the GitHub API. The 2026-10-17 snapshot
+above is unchanged, including its statements that #38, #39 and #40 were
+unmerged and that the reference-integrity PR checkout was a synthetic merge
+tree. Those sentences are historical. They are not the current rule; see
+[TRACEABILITY.md](../TRACEABILITY.md). This note does not approve #41.
+
+| Record | State at this append |
+|---|---|
+| [#38](https://github.com/YerriSuyudHasim/noctinirs-2/pull/38) | MERGED [`cc2066db6cd01bb2bfa72e304d530cab2963cc22`](https://github.com/YerriSuyudHasim/noctinirs-2/commit/cc2066db6cd01bb2bfa72e304d530cab2963cc22) at 2026-10-17T16:56:28Z |
+| [#39](https://github.com/YerriSuyudHasim/noctinirs-2/pull/39) | MERGED [`5e45b398a6abfa6ec98de7f5d4814f13dad1900a`](https://github.com/YerriSuyudHasim/noctinirs-2/commit/5e45b398a6abfa6ec98de7f5d4814f13dad1900a) at 2026-10-18T09:25:39Z |
+| [#40](https://github.com/YerriSuyudHasim/noctinirs-2/pull/40) | MERGED [`4ee6d5412e31848d8f7a5681aa91853f5847ce8d`](https://github.com/YerriSuyudHasim/noctinirs-2/commit/4ee6d5412e31848d8f7a5681aa91853f5847ce8d) at 2026-10-19T00:43:08Z |
+| [#37](https://github.com/YerriSuyudHasim/noctinirs-2/pull/37) | CLOSED, unmerged (`merged=false`, `merge_commit_sha=null`, closed 2026-10-22T06:05:19Z) |
+| [#12](https://github.com/YerriSuyudHasim/noctinirs-2/issues/12) | OPEN, milestone [v0.1.0 Communication Foundation](https://github.com/YerriSuyudHasim/noctinirs-2/milestone/2) |
+| [#41](https://github.com/YerriSuyudHasim/noctinirs-2/pull/41) | Still OPEN/Draft at `b7ebdfa75b67cbd9aaa1bc7127c040537ef29e34`, `merged=false` |

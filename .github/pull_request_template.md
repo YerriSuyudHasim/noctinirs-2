@@ -41,8 +41,8 @@ represent an unexecuted class here as NOT RUN with the blocking reason.
 | S — Static | NOT RUN | TODO | TODO |
 | B — Build | NOT RUN | TODO | TODO |
 | U — Host/unit | NOT RUN | TODO | TODO |
-| I — Integration | NOT RUN | TODO | TODO |
-| H — Hardware/on-target | NOT RUN | TODO | TODO |
+| I — Integration | NOT RUN | Name the simulator or loopback and mark SIMULATED. v0.1.0 nn2ctl (#50) and timestamp conformance (#56) stay BLOCKED until Agent 06 posts acceptance criteria on both. Class-table status remains NOT RUN until a run exists | TODO |
+| H — Hardware/on-target | NOT RUN | NOT RUN — deferred by Owner directive 2026-10-22 15:25 KST (#56). Never NOT APPLICABLE or PASS for this deferral. H-COMMS-1 (#53/#54) is parked and is not a v0.1.0 gate. Open item: ROADMAP.md at 5958a0eafec6b03c2b158c4026f3f10b8a3366d1 still lists H-COMMS-1 as that gate | TODO |
 | R — Regression | NOT RUN | TODO | TODO |
 
 **Skipped is never PASS.** Absent normative layers: production Class S dependency
@@ -84,6 +84,7 @@ job cannot replace inspection of individual jobs, steps and test skips.
 - Independent decision / blocking findings: **PENDING — no approval claimed**
 - Re-review after new commits: **REQUIRED**, unless reviewer explicitly records
   the immaterial-diff assessment on the new SHA; old approval is not transferable
+- Decision authority / delegation record URL: **OPEN** until an `AGENTS.md` amendment recording it is merged. Product `AGENTS.md` at main `5958a0eafec6b03c2b158c4026f3f10b8a3366d1` does not. Interim cite: https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6333953903. Delegated merge approval does not cover flash, Class H, tags or releases
 - Owner authorization for preparation: TODO (scope / durable record)
 - Owner Accept / Reject / Amend decision URL, PR and full SHA: **PENDING**
 - Owner merge authorization: **NOT GRANTED** (record separately after valid checks
