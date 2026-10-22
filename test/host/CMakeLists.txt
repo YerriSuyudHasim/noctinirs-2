@@ -13,6 +13,7 @@ add_library(nn2_behavior STATIC
     "${ROOT}/components/nn2_core/src/nn2_core_status.c"
     "${ROOT}/components/nn2_app/src/nn2_app_sequencer.c"
     "${ROOT}/components/nn2_app/src/nn2_app_adc_diagnostic.c"
+    "${ROOT}/components/nn2_app/src/nn2_app_safe_boot.c"
     "${ROOT}/main/adapters/nn2_ads131_logic.c")
 target_include_directories(nn2_behavior PUBLIC ${INNER_ROOTS} "${ROOT}/main/adapters")
 target_compile_options(nn2_behavior PRIVATE -Wall -Wextra -Werror -pedantic)
@@ -20,7 +21,7 @@ nn2_require_c11(nn2_behavior)
 add_library(unity STATIC unity/unity.c)
 target_include_directories(unity PUBLIC unity)
 nn2_require_c11(unity)
-add_executable(nn2_host_tests test_main.c test_ring.c test_sequencer.c test_contract.c test_storage.c test_ads131.c test_ads131_control.c)
+add_executable(nn2_host_tests test_main.c test_ring.c test_sequencer.c test_contract.c test_storage.c test_ads131.c test_ads131_control.c test_safe_boot.c)
 target_link_libraries(nn2_host_tests PRIVATE nn2_behavior unity)
 target_compile_options(nn2_host_tests PRIVATE -Wall -Wextra -Werror -pedantic)
 nn2_require_c11(nn2_host_tests)
