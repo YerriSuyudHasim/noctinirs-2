@@ -7,6 +7,7 @@ CF1 and historical ASCII/stream-v1 packets are intentionally incompatible.
 import argparse
 import dataclasses
 import json
+import math
 import secrets
 import socket
 import struct
@@ -231,7 +232,7 @@ def main():
     parser.add_argument("--timeout",type=float,default=0.5)
     parser.add_argument("--retries",type=int,default=2)
     parser.add_argument("--rate",type=int,default=None,
-                        help="Frame rate for set-fs, or optional configuration before start/run; boot default is 5 Hz")
+                        help="Frame rate for set-fs, or optional configuration before start/run; integer 2..10 Hz; boot default is5 Hz")
     parser.add_argument("--channel",type=int,default=0)
     parser.add_argument("--current-ma",type=int,default=0)
     parser.add_argument("--seconds",type=float,default=10)
@@ -246,12 +247,13 @@ def main():
             usb_status(args.serial_port);return 0
         if not 1<=args.port<=65535: raise ValueError("UDP port")
         if args.command=="set-fs" and args.rate is None: args.rate=5
-        if args.rate is not None and args.rate not in (1,2,4,5,8,10): raise ValueError("rate")
+        if args.rate is not None and not 2 <= args.rate <= 10: raise ValueError("rate must be an integer from2 to10 Hz")
         if args.command=="set-led-current" and not (0<=args.channel<20 and 0<=args.current_ma<=50): raise ValueError("channel/current")
-        if args.command=="run" and not 0<args.seconds<=86400: raise ValueError("duration")
+        if args.command=="run" and (not math.isfinite(args.seconds) or args.seconds <= 0): raise ValueError("duration must be positive and finite")
         client=Client(args.host,args.port,args.timeout,args.retries)
         if args.command in ("start", "run"):
             info = require_ok(client.request("info"))
+            print(json.dumps(info), flush=True)  # One cached preflight reply, before START.
             real_led = "led=REAL_BRINGUP" in info["info"]
             if real_led and not args.led:
                 raise RuntimeError("Real LED profile: START can energize emitters. Use --led only under the approved bench procedure")
@@ -260,10 +262,17 @@ def main():
             if "short_policy=BENCH_WARN" in info["info"]:
                 if not (args.led and args.ack_short_warning):
                     raise RuntimeError("SHORT advisory requires --led --ack-short-warning")
-                if args.rate is not None and args.rate != 5:
-                    raise ValueError("SHORT advisory requires Fs5")
-                if args.command == "run" and args.seconds > 2:
-                    raise ValueError("SHORT advisory engineering cap is 2 seconds")
+                # Respect the running image: old firmware may still advertise a cap.
+                capabilities = dict(item.split("=", 1) for item in info["info"].split(";") if "=" in item)
+                fs_min = int(capabilities.get("fs_min", "5"))
+                fs_max = int(capabilities.get("fs_max", "5"))
+                if args.rate is not None and not fs_min <= args.rate <= fs_max:
+                    raise ValueError(f"Running firmware advertises Fs{fs_min}..{fs_max}; Owner build required for Fs2..10")
+                limit_s = int(capabilities.get("limit_s", "-1"))
+                if limit_s < 0:
+                    raise ValueError("SHORT advisory firmware has no valid duration capability")
+                if args.command == "run" and limit_s and args.seconds > limit_s:
+                    raise ValueError(f"Running firmware advertises limit_s={limit_s}; Owner build required for host-controlled duration")
             if args.rate is not None:
                 require_ok(client.request("set-fs", bytes([args.rate])))
         if args.command=="run":

@@ -2,6 +2,9 @@
 #define LED_STUB_RTOS_H
 #include <stdint.h>
 typedef int BaseType_t;
+typedef uint32_t TickType_t;
+#define pdMS_TO_TICKS(ms) (((ms) + 9u) / 10u)
+#define portYIELD_FROM_ISR() ((void)0)
 typedef void *TaskHandle_t;
 typedef int portMUX_TYPE;
 #define portMUX_INITIALIZER_UNLOCKED 0

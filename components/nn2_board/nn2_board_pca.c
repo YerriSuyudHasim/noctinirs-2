@@ -96,6 +96,8 @@ nn2_status_t nn2_board_pca_prepare(nn2_board_pca_t *p,
         iref[1 + ch] = (uint8_t)((uint32_t)current[slot] *
             (4u * NN2_BOARD_PCA_REXT_OHM) / 900u);
         p->on[slot][0] = 0x80 | LEDOUT0;
+        p->off[slot][0] = (uint8_t)(LEDOUT0 + ch / 4);
+        p->off[slot][1] = 0;
         if (iref[1 + ch]) p->expected_channels |= UINT32_C(1) << ch;
         if (iref[1 + ch])
             p->on[slot][1 + ch / 4] = (uint8_t)(1u << (2u * (ch % 4)));
@@ -145,18 +147,31 @@ nn2_status_t nn2_board_pca_off(nn2_board_pca_t *p) {
         d->invalid_channels = (d->invalid_channels & ~bit) | (code == 3 ? bit : 0);
         if (code >= 2) return fail(p); /* Stop at the observed sample. */
     }
-    /* V3 baseline: always commit a complete all-off image at I2C STOP. */
+    /* V4 transaction idea: FULL ON established a known one-hot image. Only
+     * its selected LEDOUT byte needs clearing for normal OFF. Reset and boot
+     * still clear all outputs; unknown/failed state is never eligible. */
+    if (p->compact_off) {
+        unsigned slot = 0;
+        while (slot < NN2_OPTICAL_SLOTS && channels[slot] != ch) ++slot;
+        if (slot == NN2_OPTICAL_SLOTS ||
+            p->io.write(p->io.ctx, p->off[slot], 2) != NN2_OK) return fail(p);
+        p->selected = -1;
+        return NN2_OK;
+    }
+    /* Conservative full-image OFF remains available outside the async owner. */
     const uint8_t all_off[7] = {0x80 | LEDOUT0, 0, 0, 0, 0, 0, 0};
     if (p->io.write(p->io.ctx, all_off, sizeof(all_off)) != NN2_OK) return fail(p);
     p->selected = -1;
     return NN2_OK;
 }
 nn2_status_t nn2_board_pca_health(nn2_board_pca_t *p) {
-    uint8_t mode1, mode;
+    uint8_t modes[2];
     if (p && p->frame_checked) return fail(p);
     if (!p || !p->ready) return NN2_ERR_INVALID_STATE;
-    if (p->io.read(p->io.ctx, MODE1, &mode1, 1) != NN2_OK ||
-        p->io.read(p->io.ctx, MODE2, &mode, 1) != NN2_OK) return fail(p);
+    /* MODE1 AI[1:0]=10 permits this adjacent two-byte read (NXP Table6).
+     * EFLAG is outside that range and is still sampled individually while ON. */
+    if (p->io.read(p->io.ctx, (uint8_t)(0x80 | MODE1), modes, 2) != NN2_OK) return fail(p);
+    uint8_t mode1 = modes[0], mode = modes[1];
     nn2_board_pca_diagnostics_t *d = &p->diagnostics;
     d->mode2 = mode;
     if ((mode1 & 0x7f) != 0x40 || (mode & 0xa8) ||

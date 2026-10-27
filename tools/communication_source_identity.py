@@ -6,9 +6,9 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-PREFIXES = ('main/', 'components/', 'bootloader_components/', 'cmake/', 'tools/', 'test/', 'tests/')
+PREFIXES = ('main/', 'components/', 'bootloader_components/', 'cmake/', 'config/', 'tools/', 'test/', 'tests/')
 ROOT_FILES = {'CMakeLists.txt', 'sdkconfig.defaults', 'sdkconfig.communication',
-              'sdkconfig.ads131-diagnostic', 'sdkconfig.led-bringup', 'sdkconfig.led-short-bench', 'VERSION', 'reference/MANIFEST.sha256'}
+              'sdkconfig.ads131-diagnostic', 'sdkconfig.led-bringup', 'sdkconfig.led-short-bench', 'sdkconfig.led-strict', 'VERSION', 'reference/MANIFEST.sha256'}
 
 
 def main():

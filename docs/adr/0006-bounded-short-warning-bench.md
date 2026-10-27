@@ -1,3 +1,30 @@
+# ADR-0006: Board SHORT advisory with host duration control
+
+Date:2026-10-27. Status: updated software candidate, Owner-directed revision.
+
+The Owner explicitly requested removal of the engineering duration ceiling and
+single-attempt quota, then requested integer Fs2..10Hz. This supersedes the
+original2s/one-START proposal below. Current implementation has no run-duration
+cap; the host selects duration. STOP/lease/deadline/thermal/OPEN/I2C/readback and
+fresh ERROR classification protections remain. Strict is still the generic
+default; the selected local board profile remains advisory. See
+[current behavior, tests and Owner build instructions](../LED_HOST_CONTROL.md).
+No physical qualification is claimed and no agent firmware build/device action
+is authorized by this source revision. Current test limits are recorded there.
+
+## Owner-directed async transport revision,2026-10-28
+
+The Owner requested V4's asynchronous transaction approach and800kHz runtime,
+implemented for ESP-IDF6.1. See [async runtime decision and build procedure](../LED_ASYNC_RUNTIME.md).
+This is a platform/board change: one in-flight transfer, persistent buffers,
+ISR completion, generation cancellation, drain-before-detach, compact normal OFF
+and combined MODE1/MODE2 read. Core policy remains framework-independent.
+Hardware/RTOS specialist review and independent verification are required.
+800kHz exceeds the ESP32-S3 documented400kHz range and remains an engineering
+candidate; accepting this source revision does not qualify its physical timing.
+
+## Historical original decision and implementation record (superseded duration/rates)
+
 # ADR-0006: Bounded SHORT-warning bench candidate
 
 Date: 2026-10-27. Status: software candidate implemented; optional profile disabled by default.
@@ -127,3 +154,16 @@ it adds no I2C. The bounded serial buffer/reader grows from1024 to1536 bytes to
 hold identity and telemetry. Existing root configuration is not changed.
 See [implementation handoff](../SHORT_ADVISORY_HANDOFF.md) for commands, results,
 source identity, remaining gates and review requests.
+
+## Owner boot13 configuration correction
+
+Owner-supplied cached USB STATUS confirms source23eb042 and image
+c39444a276e6b937b2e9e22abdccc2b148cb7e774540835523eab0280025a421 selected STRICT.
+MODE2=0x45 and fresh valid=SHORT=0xFFC3FF were rejected at39 edges/frame0, with
+no deadline miss and no cap hit. The normal build had not selected the separate
+advisory overlay. [The configuration diagnosis](../LED_PROFILE_DIAGNOSIS.md)
+records full identities, explicit named board profiles and generated-policy
+assertion. Root selection changes only the advisory bit; unrelated settings are
+preserved. Firmware/driver policy and2s ceiling are unchanged.15s support is a
+scoped proposal only. Owner builds manually; no firmware build or device access
+was run by this agent for the correction.

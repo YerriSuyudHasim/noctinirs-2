@@ -5,11 +5,13 @@
 #include "nn2_port_safety.h"
 #include "nn2_board_pca.h"
 typedef struct {
-    uint8_t state, pca_mode2;
+    uint8_t state, pca_mode2, i2c_event;
     uint32_t frames, edges, deadline_misses, transfer_max_us;
     int32_t error;
     uint32_t stack_free, dispatch_max_us, completion_max_us;
+    uint32_t i2c_submitted, i2c_completed, i2c_errors, i2c_stale;
     uint8_t first_stop;
+    /* Compatibility telemetry: cap stays false; attempt marks this run, not a lock. */
     bool limit_hit, attempt_used;
     bool bus_released;
     nn2_board_pca_diagnostics_t pca, last_complete, first_fault;

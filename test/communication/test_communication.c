@@ -74,7 +74,7 @@ static void transactions(void) {
   for (unsigned i = 0; i < 20; ++i)
     CHECK(nn2_core_get_u16(defaults.payload + 30 + i * 2) == 30);
   CHECK(error(command(1, 1, NN2_CMD_INFO, NULL, 0)) == 0);
-  uint8_t fs = 3;
+  uint8_t fs = 1;
   CHECK(error(command(1, 2, NN2_CMD_SET_FS, &fs, 1)) == NN2_REPLY_ARGUMENT);
   fs = 5;
   CHECK(error(command(1, 3, NN2_CMD_SET_FS, &fs, 1)) == 0);
@@ -285,7 +285,7 @@ static void optical_binding(void) {
   reset(); optical_starts = 0;
   nn2_port_optical_t port = {.start = optical_start, .state = optical_get_state,
       .clear_fault = optical_clear, .current_limit_ma = 30};
-  port.policy_info = "led=REAL_BRINGUP;short_policy=BENCH_WARN;limit_s=2;single_run=1";
+  port.policy_info = "led=REAL_BRINGUP;short_policy=BENCH_WARN;duration=HOST;fs_min=2;fs_max=10;limit_s=0;single_run=0";
   CHECK(nn2_app_comm_bind_optical(&state, &port) == NN2_OK);
   nn2_core_packet_t info = command(1, 0, NN2_CMD_INFO, NULL, 0);
   CHECK(info.length == 28 + strlen(port.policy_info));
@@ -326,12 +326,25 @@ static void optical_binding(void) {
         nn2_app_comm_get_status(&state).fault != 0 && !nn2_app_comm_get_status(&state).owned);
   CHECK(error(command(2, 5, NN2_CMD_CLEAR_FAULT, NULL, 0)) == 0);
 }
+static void frame_rate_range(void) {
+  for (unsigned rate = 0; rate <= 255; ++rate) {
+    reset();
+    uint8_t fs = (uint8_t)rate;
+    uint16_t expected = rate >= 2 && rate <= 10 ? NN2_REPLY_OK : NN2_REPLY_ARGUMENT;
+    CHECK(error(command(1, 1, NN2_CMD_SET_FS, &fs, 1)) == expected);
+    if (expected == NN2_REPLY_OK) {
+      nn2_core_packet_t config = command(1, 2, NN2_CMD_GET_CONFIG, NULL, 0);
+      CHECK(config.payload[28] == rate);
+    }
+  }
+}
 int main(void) {
   transactions();
   time_and_grace();
   validation();
   provisioning();
   optical_binding();
+  frame_rate_range();
   printf("%u checks, %u failures\n", checks, failures);
   return failures ? 1 : 0;
 }

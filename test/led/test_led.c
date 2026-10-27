@@ -5,6 +5,16 @@
 #include "nn2_app_comm.h"
 #include "../../main/adapters/nn2_led_bringup.c"
 static unsigned checks, failures;
+static i2c_master_callback_t fake_callback;
+static void *fake_callback_ctx;
+static bool defer_completion, drain_fails, callback_fails, suppress_completion;
+static bool cancel_on_wait, deadline_on_wait;
+static i2c_master_event_t fake_event = I2C_EVENT_DONE;
+static TickType_t fake_ticks;
+static void finish_transfer(void) {
+    const i2c_master_event_data_t event = {.event = fake_event};
+    if (fake_callback) (void)fake_callback(s_pca, &event, fake_callback_ctx);
+}
 #define CHECK(x) do { ++checks; if (!(x)) { ++failures; printf("FAIL %u: %s\n", __LINE__, #x); } } while (0)
 static uint8_t regs[0x47];
 static bool reset_low = true, occupied, remove_fails;
@@ -35,21 +45,34 @@ esp_err_t nn2_board_release_emitters_reset(void) {
 void esp_rom_delay_us(uint32_t us) { (void)us; }
 void xTaskNotifyGive(TaskHandle_t task) { CHECK(task != NULL); }
 void vTaskNotifyGiveFromISR(TaskHandle_t task, BaseType_t *wake) { CHECK(task != NULL); *wake = pdTRUE; }
-uint32_t ulTaskNotifyTake(BaseType_t clear, uint32_t wait) { (void)clear; (void)wait; return 1; }
+TickType_t xTaskGetTickCount(void) { return fake_ticks; }
+uint32_t ulTaskNotifyTake(BaseType_t clear, uint32_t wait) {
+    (void)clear;
+    if (cancel_on_wait) { cancel_on_wait = false; (void)cancel(NULL); }
+    if (deadline_on_wait) {
+        deadline_on_wait = false;
+        clock_count = next_alarm;
+        const gptimer_alarm_event_data_t event = {.count_value = clock_count, .alarm_value = next_alarm};
+        (void)alarm_callback(s_timer, &event, NULL);
+    }
+    if (!suppress_completion && s_pending) finish_transfer();
+    fake_ticks += wait;
+    return 1;
+}
 uint32_t uxTaskGetStackHighWaterMark(TaskHandle_t task) { (void)task; return 4096; }
 BaseType_t xTaskCreatePinnedToCore(void (*entry)(void *), const char *name,
     uint32_t stack, void *ctx, unsigned priority, TaskHandle_t *task, int core) {
     (void)entry; (void)ctx;
-    CHECK(!strcmp(name, "nn2_led") && stack == 6144 && priority == 5 && core == 1);
+    CHECK(!strcmp(name, "nn2_led") && stack == 6144 && priority == 22 && core == 1);
     *task = &s_task; return pdPASS;
 }
 esp_err_t i2c_new_master_bus(const i2c_master_bus_config_t *c, i2c_master_bus_handle_t *out) {
-    CHECK(c->i2c_port == 0 && c->sda_io_num == 15 && c->scl_io_num == 16 && c->trans_queue_depth == 0);
+    CHECK(c->i2c_port == 0 && c->sda_io_num == 15 && c->scl_io_num == 16 && c->trans_queue_depth <= 1);
     if (occupied) return ESP_FAIL;
     occupied = true; *out = &s_bus; return ESP_OK;
 }
 esp_err_t i2c_master_bus_add_device(i2c_master_bus_handle_t bus, const i2c_device_config_t *c, i2c_master_dev_handle_t *out) {
-    CHECK(bus != NULL && c->device_address == 1 && c->scl_speed_hz == 100000);
+    CHECK(bus != NULL && c->device_address == 1 && c->scl_speed_hz == (uint32_t)(s_async ? CONFIG_NN2_LED_RUNTIME_I2C_HZ : 100000));
     *out = &s_pca; return ESP_OK;
 }
 esp_err_t i2c_master_bus_rm_device(i2c_master_dev_handle_t device) { (void)device; return remove_fails ? ESP_FAIL : ESP_OK; }
@@ -60,14 +83,17 @@ esp_err_t i2c_master_transmit(i2c_master_dev_handle_t device, const uint8_t *dat
     ++io_count;
     if (cancel_io && io_count == cancel_io) { (void)cancel(NULL); return ESP_FAIL; }
     if (io_count == fail_at || reset_low) return ESP_FAIL;
+    if (fake_callback) CHECK(data == s_tx); /* Driver never retains a stack pointer. */
     if (cancel_at_write) { cancel_at_write = false; (void)cancel(NULL); return ESP_FAIL; }
     uint8_t address = data[0] & 0x7f;
     if (s_status.state == NN2_OPTICAL_RUNNING && address >= 2 && address <= 7)
-        CHECK(n == 7 && data[0] == 0x82); /* V3 full ON and OFF wire images. */
+        CHECK((n == 7 && data[0] == 0x82) ||
+              (n == 2 && data[1] == 0 && address == 2 + s_chip.selected / 4));
     if (address == 0x40) memset(regs + 0x22, data[1], 24);
     else if (address == 0x3f) memset(regs + 0x0a, data[1], 24);
     else if (address == 1) regs[1] = (uint8_t)((regs[1] & 0xc7) | (data[1] & 0x28));
     else for (size_t i = 1; i < n; ++i) regs[address + (data[0] & 0x80 ? i - 1 : 0)] = data[i];
+    if (fake_callback && !defer_completion && !suppress_completion) finish_transfer();
     return ESP_OK;
 }
 esp_err_t i2c_master_transmit_receive(i2c_master_dev_handle_t device, const uint8_t *tx, size_t tn, uint8_t *rx, size_t rn, int timeout) {
@@ -76,10 +102,24 @@ esp_err_t i2c_master_transmit_receive(i2c_master_dev_handle_t device, const uint
     ++io_count;
     if (cancel_io && io_count == cancel_io) { (void)cancel(NULL); return ESP_FAIL; }
     if (io_count == fail_at || reset_low) return ESP_FAIL;
+    if (fake_callback) CHECK(tx == s_tx && rx == s_rx);
     memcpy(rx, regs + (*tx & 0x7f), rn);
     if (corrupt_read) rx[0] ^= 1;
     if (corrupt_current_read && rn == 24 && regs[0x22]) rx[0] ^= 1;
+    if (fake_callback && !defer_completion && !suppress_completion) finish_transfer();
     return ESP_OK;
+}
+esp_err_t i2c_master_register_event_callbacks(i2c_master_dev_handle_t d,
+    const i2c_master_event_callbacks_t *callbacks, void *ctx) {
+    CHECK(d != NULL);
+    if (callback_fails) return ESP_FAIL;
+    fake_callback = callbacks->on_trans_done;
+    fake_callback_ctx = ctx;
+    return ESP_OK;
+}
+esp_err_t i2c_master_bus_wait_all_done(i2c_master_bus_handle_t b, int timeout) {
+    CHECK(b != NULL && timeout == 20);
+    return drain_fails ? ESP_ERR_TIMEOUT : ESP_OK;
 }
 esp_err_t gptimer_new_timer(const gptimer_config_t *c, gptimer_handle_t *out) { CHECK(c->resolution_hz == 1000000); *out = &s_timer; return timer_fail == 1 ? ESP_FAIL : ESP_OK; }
 esp_err_t gptimer_register_event_callbacks(gptimer_handle_t t, const gptimer_event_callbacks_t *c, void *ctx) { (void)t; (void)ctx; CHECK(c->on_alarm == alarm_callback); return timer_fail == 2 || register_fails ? ESP_FAIL : ESP_OK; }
@@ -98,7 +138,6 @@ static nn2_port_optical_config_t configuration(uint8_t fs) {
 }
 static void restore(void) {
     (void)cancel(NULL); owner_step();
-    s_attempt_used = false; /* Test fixture models a fresh boot only. */
     timer_fail = 0; register_fails = false;
     timer_count_fails = timer_stop_fails = false; cancel_io = 0;
     remove_fails = false; occupied = false; fail_at = io_count = 0;
@@ -120,12 +159,13 @@ static void alarm_tick(bool consume) {
 static void geometry_and_scan(void) {
     static const uint8_t map[20] = {0,1,2,3,4,5,6,7,8,9,14,15,16,17,18,19,20,21,22,23};
     for (unsigned fs = 0; fs <= 255; ++fs) {
-        bool allowed = fs == 1 || fs == 2 || fs == 4 || fs == 5 || fs == 8 || fs == 10;
+        bool allowed = fs >= 2 && fs <= 10;
         CHECK(nn2_core_optical_fs_valid((uint8_t)fs) == allowed);
-        if (!allowed || (CONFIG_NN2_LED_SHORT_BENCH && fs != 5)) continue;
+        if (!allowed) continue;
         begin((uint8_t)fs);
         CHECK(state(NULL) == NN2_OPTICAL_RUNNING && !reset_low);
-        CHECK(s_half_us * 40u * fs == 1000000u);
+        CHECK(s_half_us * 40u * fs <= 1000000u);
+        CHECK(1000000u - s_half_us * 40u * fs < 40u * fs);
         for (unsigned ch = 0; ch < 24; ++ch)
             { CHECK(regs[0x22 + ch] == (ch >= 10 && ch <= 13 ? 0 : 133));
               CHECK(regs[0x0a + ch] == 255); }
@@ -306,7 +346,7 @@ static void boundary_tests(void) {
     timer_fail = 0; owner_step(); restore();
     /* Each phase's bus failure, including EFLAG and frame MODE1/MODE2 reads. */
     for (unsigned phase = 0; phase < 40; ++phase) {
-        unsigned transactions = phase == 39 ? 4 : (phase & 1u) ? 2 : 1;
+        unsigned transactions = phase == 39 ? 3 : (phase & 1u) ? 2 : 1;
         for (unsigned tx = 1; tx <= transactions; ++tx) {
             begin(5);
             for (unsigned i = 0; i < phase; ++i) alarm_tick(true);
@@ -325,48 +365,15 @@ static void boundary_tests(void) {
     timer_stop_fails = false; owner_step(); restore();
     if (CONFIG_NN2_LED_SHORT_BENCH) {
         nn2_port_optical_config_t c = configuration(5);
-        c.fs = 10; CHECK(start(NULL, &c) == NN2_ERR_INVALID_ARG);
+        c.fs = 1; CHECK(start(NULL, &c) == NN2_ERR_INVALID_ARG);
         c.fs = 5; c.current_ma[3] = 0; CHECK(start(NULL, &c) == NN2_ERR_INVALID_ARG);
         c.current_ma[3] = 29; CHECK(start(NULL, &c) == NN2_ERR_INVALID_ARG);
         begin(5); (void)cancel(NULL); owner_step();
         CHECK(clear_fault(NULL) == NN2_OK); c = configuration(5);
-        CHECK(start(NULL, &c) == NN2_ERR_INVALID_STATE); /* No test reboot here. */
-        restore();
-        CHECK(start(NULL, &c) == NN2_OK); (void)cancel(NULL); owner_step();
-        CHECK(clear_fault(NULL) == NN2_OK && start(NULL, &c) == NN2_ERR_INVALID_STATE);
-        restore();
-        for (unsigned phase = 0; phase < 40; ++phase) {
-            begin(5);
-            for (unsigned i = 0; i < phase; ++i) alarm_tick(true);
-            alarm_tick(false); clock_count = SHORT_CAP_US; owner_step();
-            CHECK(reset_low && s_status.limit_hit && !s_armed); restore();
-        }
-        begin(5); regs[1] = 0x45; short_pattern(1);
-        for (unsigned i = 0; i < 400; ++i) alarm_tick(true);
-        CHECK(reset_low && s_status.limit_hit && s_status.first_stop == STOP_CAP);
-        CHECK(s_status.frames == 9 && s_status.pca.warning_frames == 9);
-        CHECK(s_status.edges == 399 && s_status.deadline_misses == 0);
-        CHECK(s_status.first_fault.epoch == 10);
-        CHECK(clear_fault(NULL) == NN2_OK && start(NULL, &c) == NN2_ERR_INVALID_STATE);
-        restore();
-        /* Timer cap without host traffic, exact equality, cached callback count stale. */
-        begin(5); clock_count = SHORT_CAP_US;
-        gptimer_alarm_event_data_t event = {.count_value = 0, .alarm_value = next_alarm};
-        (void)alarm_callback(s_timer, &event, NULL); owner_step();
-        CHECK(reset_low && s_status.limit_hit && s_status.first_stop == STOP_CAP);
-        CHECK(s_status.deadline_misses == 0 && s_status.attempt_used);
-        CHECK(clear_fault(NULL) == NN2_OK && start(NULL, &c) == NN2_ERR_INVALID_STATE);
-        restore();
-        begin(5); next_alarm = SHORT_CAP_US - 2000; clock_count = next_alarm;
-        event.alarm_value = next_alarm;
-        (void)alarm_callback(s_timer, &event, NULL);
-        CHECK(next_alarm == SHORT_CAP_US);
-        clock_count = SHORT_CAP_US; owner_step();
-        CHECK(reset_low && s_status.limit_hit && s_status.edges == 0); restore();
-        /* Phase begins before cap and I2C returns at equality. */
-        begin(5); alarm_tick(false); clock_count = SHORT_CAP_US - 100;
-        s_alarm = clock_count; owner_step();
-        CHECK(reset_low && s_status.limit_hit && s_status.edges == 0); restore();
+        CHECK(start(NULL, &c) == NN2_OK); /* Same boot: no attempt quota. */
+        (void)cancel(NULL); owner_step();
+        CHECK(clear_fault(NULL) == NN2_OK && start(NULL, &c) == NN2_OK);
+        (void)cancel(NULL); owner_step(); restore();
     }
     begin(5); unsigned prior_io = io_count;
     for (unsigned i = 0; i < 1000; ++i) {
@@ -386,6 +393,32 @@ static void boundary_tests(void) {
     CHECK(!nn2_led_bringup_format_status(NULL, 0, &maximum));
     CHECK(io_count == prior_io); restore(); /* STATUS never reads hardware. */
 }
+static void host_duration_and_repeated_runs(void) {
+    nn2_port_optical_config_t c = configuration(5);
+    for (unsigned run = 0; run < 2; ++run) {
+        begin(5);
+        if (CONFIG_NN2_LED_SHORT_BENCH) { regs[1] = 0x45; short_pattern(1); }
+        unsigned phases = run == 0 ? 3000u : 180000u; /* Fake time:15s and15min. */
+        for (unsigned i = 0; i < phases; ++i) alarm_tick(true);
+        CHECK(state(NULL) == NN2_OPTICAL_RUNNING && !s_status.limit_hit);
+        CHECK(s_status.frames == phases / 40 && s_status.edges == phases);
+        CHECK(s_status.deadline_misses == 0 && s_status.first_stop == STOP_NONE);
+        CHECK(s_status.pca.warning_frames == (CONFIG_NN2_LED_SHORT_BENCH ? phases / 40 : 0));
+        /* START stays blocked while active and while old work drains. */
+        CHECK(start(NULL, &c) == NN2_ERR_INVALID_STATE);
+        (void)cancel(NULL);
+        CHECK(start(NULL, &c) == NN2_ERR_INVALID_STATE);
+        owner_step();
+        CHECK(reset_low && s_status.bus_released && state(NULL) == NN2_OPTICAL_IDLE);
+        /* Next iteration starts on the same boot, without resetting test globals. */
+    }
+    begin(5); regs[1] = 0x85;
+    for (unsigned i = 0; i < 40; ++i) alarm_tick(true);
+    CHECK(state(NULL) == NN2_OPTICAL_FAULT && reset_low);
+    CHECK(start(NULL, &c) == NN2_ERR_INVALID_STATE); /* No automatic fault clear. */
+    CHECK(clear_fault(NULL) == NN2_OK && start(NULL, &c) == NN2_OK);
+    (void)cancel(NULL); owner_step(); restore();
+}
 static uint16_t protocol_command(nn2_app_comm_storage_t *app, uint32_t id, uint16_t op) {
     nn2_core_packet_t request = {.type = NN2_MSG_REQUEST, .protocol_version = 1, .length = 6};
     nn2_core_put_u32(request.payload, id); nn2_core_put_u16(request.payload + 4, op);
@@ -403,6 +436,7 @@ static void protocol_interlocks(void) {
         nn2_port_optical_t optical = nn2_led_bringup_port();
         CHECK(nn2_app_comm_init(&app, 42, &safety, 7) == NN2_OK);
         CHECK(nn2_app_comm_bind_optical(&app, &optical) == NN2_OK);
+        CHECK(strlen(optical.policy_info) + 60 <= 256);
         CHECK(protocol_command(&app, 1, NN2_CMD_START) == NN2_REPLY_OK);
         uint32_t generation = s_generation;
         CHECK(protocol_command(&app, 1, NN2_CMD_START) == NN2_REPLY_OK);
@@ -418,10 +452,59 @@ static void protocol_interlocks(void) {
         CHECK(s_status.first_stop == STOP_CANCEL);
         if (CONFIG_NN2_LED_SHORT_BENCH) {
             nn2_port_optical_config_t c = configuration(5);
-            CHECK(clear_fault(NULL) == NN2_OK && start(NULL, &c) == NN2_ERR_INVALID_STATE);
+            CHECK(clear_fault(NULL) == NN2_OK && start(NULL, &c) == NN2_OK);
+            (void)cancel(NULL); owner_step();
         }
         restore();
     }
+}
+static void asynchronous_boundaries(void) {
+    begin(10); defer_completion = true;
+    alarm_tick(true);
+    CHECK(s_status.edges == 1 && s_status.i2c_submitted == 1 && s_status.i2c_completed == 1);
+    CHECK(s_status.i2c_errors == 0 && !s_pending);
+    restore(); defer_completion = false;
+    for (unsigned event = 0; event < 2; ++event) {
+        begin(10); fake_event = event ? I2C_EVENT_TIMEOUT : I2C_EVENT_NACK;
+        alarm_tick(true);
+        CHECK(reset_low && state(NULL) == NN2_OPTICAL_FAULT && s_status.i2c_errors == 1);
+        CHECK(s_status.i2c_event == (uint8_t)fake_event);
+        CHECK(s_status.error == (event ? ESP_ERR_TIMEOUT : ESP_FAIL));
+        fake_event = I2C_EVENT_DONE; restore();
+    }
+    begin(10); defer_completion = true; cancel_on_wait = true;
+    alarm_tick(true);
+    CHECK(reset_low && s_status.edges == 0 && s_status.i2c_stale == 1 && s_status.bus_released);
+    defer_completion = false; restore();
+    begin(10); defer_completion = true; cancel_on_wait = true;
+    uint8_t readback[2] = {0xa5, 0x5a};
+    CHECK(chip_read(NULL, 0x80, readback, 2) != NN2_OK);
+    CHECK(readback[0] == 0xa5 && readback[1] == 0x5a); /* No canceled read publication. */
+    owner_step(); defer_completion = false; restore();
+    begin(10); suppress_completion = true; deadline_on_wait = true;
+    alarm_tick(true);
+    CHECK(reset_low && s_status.first_stop == STOP_DEADLINE && s_status.deadline_misses == 1);
+    CHECK(s_pending && !s_status.bus_released && s_status.edges == 0);
+    suppress_completion = false; finish_transfer(); owner_step();
+    CHECK(reset_low && s_status.bus_released && s_status.i2c_stale == 1);
+    restore();
+    /* Accepted-but-unfinished I/O retains buffers, callback and handles. */
+    begin(10); suppress_completion = true; drain_fails = true;
+    alarm_tick(true);
+    CHECK(reset_low && state(NULL) == NN2_OPTICAL_FAULT && !s_status.bus_released);
+    CHECK(s_pending && s_pca && fake_callback && clear_fault(NULL) != NN2_OK);
+    nn2_port_optical_config_t c = configuration(10);
+    CHECK(start(NULL, &c) == NN2_ERR_INVALID_STATE);
+    uint32_t edges = s_status.edges;
+    suppress_completion = false; finish_transfer(); drain_fails = false; owner_step();
+    CHECK(reset_low && s_status.edges == edges && s_status.i2c_stale == 1 && s_status.bus_released);
+    restore();
+    begin(10); (void)cancel(NULL); callback_fails = true; owner_step();
+    CHECK(reset_low && !s_status.bus_released && s_pca && fake_callback);
+    callback_fails = false; owner_step(); restore();
+    callback_fails = true; begin(10);
+    CHECK(reset_low && state(NULL) == NN2_OPTICAL_FAULT && s_status.bus_released);
+    callback_fails = false; restore();
 }
 static void boot_faults(void) {
     for (unsigned step = 1; step <= 38; ++step) {
@@ -435,7 +518,7 @@ static void boot_faults(void) {
 }
 int main(void) {
     CHECK(nn2_led_bringup_init() == ESP_OK && reset_low && !occupied);
-    geometry_and_scan(); fault_paths(); boot_faults(); eflag_evidence(); classifier_tests(); boundary_tests(); protocol_interlocks();
+    asynchronous_boundaries(); geometry_and_scan(); fault_paths(); boot_faults(); eflag_evidence(); classifier_tests(); boundary_tests(); protocol_interlocks(); host_duration_and_repeated_runs();
     printf("%u LED checks, %u failures\n", checks, failures);
     return failures ? 1 : 0;
 }

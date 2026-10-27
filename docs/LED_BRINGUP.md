@@ -1,4 +1,17 @@
+> Current transport update: the Owner-directed [ESP-IDF6.1 async runtime](LED_ASYNC_RUNTIME.md)
+> uses800kHz for the explicit advisory profile, persistent transfer buffers,
+> compact normal OFF and combined MODE1/MODE2 reads.100kHz/full OFF descriptions
+> below refer to the earlier synchronous implementation and its evidence.
+
 # LED-only bring-up candidate
+
+> Current Owner boot13 diagnosis: the normal VS Code/root build selected STRICT,
+> and its first all-channel SHORT frame was rejected. The explicit local
+> `main-board-short-advisory` selection is now prepared; **Owner build required**.
+> See [profile diagnosis, exact image identities and build steps](LED_PROFILE_DIAGNOSIS.md).
+> Owner-directed source update: host-controlled duration, repeated START after STOP,
+> and integer Fs2..10Hz are implemented. [Current behavior/build commands](LED_HOST_CONTROL.md).
+> Earlier2s/single-run/Fs5-only descriptions below are historical for older images.
 
 > The strict profile faults on MODE2 ERROR. An optional, disabled-by-default
 > board-specific SHORT advisory candidate is now implemented under
@@ -17,7 +30,7 @@ No candidate code changes the running device.
   slots, one at a time. Physical PCA channels 0..9 and 14..23; 10..13 remain OFF.
 - Default optical Fs=5 Hz, default current=30 mA per slot. Current is a nominal
   setpoint, approximately 29.925 mA after DAC quantization with 1 kOhm REXT.
-- Strict profile allowed Fs={1,2,4,5,8,10}. Change while STOPPED only, retained until reboot.
+- Current profiles allow every integer Fs=2..10Hz (default5Hz). Change while STOPPED only, retained until reboot.
 - Strict bring-up current range=0..30 mA. Zero skips light in that slot; no simultaneous
   all-channel test. The global simulation cap of 50 mA is not enabled here.
 - 5 Hz: frame200 ms, slot10 ms, nominal ON/OFF5 ms each. 10 Hz: frame100 ms,
@@ -184,3 +197,6 @@ specialist acceptance. Before flash/energization, Nori must obtain numeric limit
 complete energy isolation, an isolated nonhuman fixture/procedure, matched source/
 image/config and recovery image, specialist reviews and specific Owner confirmation.
 The2s ceiling is not a qualified thermal/optical exposure limit.
+
+Current duration/rate and INFO semantics supersede the original optional bench
+section above; see [LED_HOST_CONTROL.md](LED_HOST_CONTROL.md).

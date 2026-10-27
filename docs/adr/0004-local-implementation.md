@@ -188,3 +188,12 @@ using a reviewed source snapshot; do not pair a CF1 client with this firmware.
 This task has no partition/NVS-format/security-fuse change. Restoring source does
 not restore charger registers; first request CE disabled and follow the approved
 board recovery procedure. Historical evidence and reference snapshots stay intact.
+
+## Owner-directed LED control update (2026-10-27)
+
+Current SET_FS accepts every integer2..10Hz, default5Hz, while STOPPED only.
+The advisory INFO capability includes fs_min=2, fs_max=10, duration=HOST,
+limit_s=0 and single_run=0. The host selects run duration and repeated START is
+allowed after completed STOP/cleanup; explicit fault-clear and all fault/lease
+protections remain. See [the revision](../LED_HOST_CONTROL.md). Older discrete
+rate/2s/single-attempt descriptions are historical.

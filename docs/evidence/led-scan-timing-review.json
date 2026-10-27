@@ -1,0 +1,219 @@
+{
+  "evidence_class": "Owner-reported command outcomes plus static source/timing analysis; not agent-operated hardware evidence",
+  "source_base_commit": "23eb04217463772887cd5b755d5a0b3920a679a5",
+  "source_state": "preserved uncommitted host-duration/Fs implementation",
+  "reported_image": "ac3ed74a2b4d9b8e4ecadbf13c9d692ff5df0d1dee9fb39476a266e947d9051b",
+  "runs": [
+    {
+      "boot": 16,
+      "fs": 10,
+      "requested_s": 10,
+      "outcome": "FAULT267",
+      "start_us": 41967437,
+      "fault_reply_us": 42997434,
+      "fault_observed_after_start_reply_us": 1029997
+    },
+    {
+      "boot": 16,
+      "fs": 10,
+      "requested_s": 5,
+      "outcome": "REJECTED_ALREADY_FAULTED",
+      "note": "No new START; not a new scan failure"
+    },
+    {
+      "boot": 17,
+      "fs": 5,
+      "requested_s": 5,
+      "outcome": "STOPPED_FAULT0",
+      "start_us": 24217428,
+      "stopped_reply_us": 29297724
+    },
+    {
+      "boot": 17,
+      "fs": 5,
+      "requested_s": 5,
+      "outcome": "STOPPED_FAULT0",
+      "start_us": 34817428,
+      "stopped_reply_us": 39897754
+    },
+    {
+      "boot": 17,
+      "fs": 10,
+      "requested_s": 2,
+      "outcome": "FAULT267",
+      "start_us": 49447487,
+      "fault_reply_us": 49967376,
+      "fault_observed_after_start_reply_us": 519889
+    },
+    {
+      "boot": 18,
+      "fs": 9,
+      "requested_s": 2,
+      "outcome": "FAULT267",
+      "start_us": 29787459,
+      "fault_reply_us": 30817618,
+      "fault_observed_after_start_reply_us": 1030159
+    },
+    {
+      "boot": 19,
+      "fs": 8,
+      "requested_s": 2,
+      "outcome": "STOPPED_FAULT0",
+      "start_us": 23457447,
+      "stopped_reply_us": 25537760
+    },
+    {
+      "boot": 19,
+      "fs": 8,
+      "requested_s": 5,
+      "outcome": "STOPPED_FAULT0",
+      "start_us": 31837461,
+      "stopped_reply_us": 36917738
+    },
+    {
+      "boot": 19,
+      "fs": 8,
+      "requested_s": 60,
+      "outcome": "FAULT267",
+      "start_us": 47877439,
+      "fault_reply_us": 48907390,
+      "fault_observed_after_start_reply_us": 1029951
+    },
+    {
+      "boot": 20,
+      "fs": 7,
+      "requested_s": 60,
+      "outcome": "STOPPED_FAULT0",
+      "start_us": 22597476,
+      "stopped_reply_us": 82677742
+    },
+    {
+      "boot": 20,
+      "fs": 2,
+      "requested_s": 5,
+      "outcome": "STOPPED_FAULT0",
+      "start_us": 95597434,
+      "stopped_reply_us": 100687761
+    },
+    {
+      "boot": 20,
+      "fs": 10,
+      "requested_s": 5,
+      "outcome": "FAULT267",
+      "start_us": 124517436,
+      "fault_reply_us": 125037400,
+      "fault_observed_after_start_reply_us": 519964
+    }
+  ],
+  "post_reset_status_boots": [
+    17,
+    18,
+    19
+  ],
+  "fault_boots_immediately_preceding_those_statuses": [
+    16,
+    17,
+    18
+  ],
+  "fault_cause": "UNCONFIRMED: supplied USB snapshots are after MCU reset, not the faulting boot",
+  "leading_hypothesis": "local phase deadline due to synchronous100kHz I2C/driver/scheduling peak latency; higher-priority electrical/diagnostic faults still possible",
+  "transaction_model": {
+    "on": {
+      "scl_clocks": 72,
+      "wire_us_at_100khz": 720
+    },
+    "eflag_read": {
+      "scl_clocks": 36,
+      "wire_us_at_100khz": 360
+    },
+    "off": {
+      "scl_clocks": 72,
+      "wire_us_at_100khz": 720
+    },
+    "mode1_read": {
+      "scl_clocks": 36,
+      "wire_us_at_100khz": 360
+    },
+    "mode2_read": {
+      "scl_clocks": 36,
+      "wire_us_at_100khz": 360
+    }
+  },
+  "phase_budget": [
+    {
+      "fs": 2,
+      "phase_budget_us": 12500,
+      "last_off_wire_lower_bound_us": 1800,
+      "wire_only_margin_us": 10700,
+      "margin_against_prior_boot13_completion2649_us": 9851,
+      "average_wire_occupancy_percent": 7.344
+    },
+    {
+      "fs": 5,
+      "phase_budget_us": 5000,
+      "last_off_wire_lower_bound_us": 1800,
+      "wire_only_margin_us": 3200,
+      "margin_against_prior_boot13_completion2649_us": 2351,
+      "average_wire_occupancy_percent": 18.36
+    },
+    {
+      "fs": 7,
+      "phase_budget_us": 3571,
+      "last_off_wire_lower_bound_us": 1800,
+      "wire_only_margin_us": 1771,
+      "margin_against_prior_boot13_completion2649_us": 922,
+      "average_wire_occupancy_percent": 25.704
+    },
+    {
+      "fs": 8,
+      "phase_budget_us": 3125,
+      "last_off_wire_lower_bound_us": 1800,
+      "wire_only_margin_us": 1325,
+      "margin_against_prior_boot13_completion2649_us": 476,
+      "average_wire_occupancy_percent": 29.376
+    },
+    {
+      "fs": 9,
+      "phase_budget_us": 2777,
+      "last_off_wire_lower_bound_us": 1800,
+      "wire_only_margin_us": 977,
+      "margin_against_prior_boot13_completion2649_us": 128,
+      "average_wire_occupancy_percent": 33.048
+    },
+    {
+      "fs": 10,
+      "phase_budget_us": 2500,
+      "last_off_wire_lower_bound_us": 1800,
+      "wire_only_margin_us": 700,
+      "margin_against_prior_boot13_completion2649_us": -149,
+      "average_wire_occupancy_percent": 36.72
+    }
+  ],
+  "model_limits": [
+    "Nine clocks per address/data byte; ACK/NACK included",
+    "Excludes start/stop/repeated-start setup, clock stretching, actual SCL error, driver/ISR/task delays",
+    "Prior2649us observation is boot13, not a new-image WCET",
+    "WiFi RTT is not local phase completion time",
+    "No per-frame warning streaming introduced"
+  ],
+  "source_settings_observed": {
+    "scl_hz": 100000,
+    "cpu_mhz": 160,
+    "compiler_optimization": "DEBUG",
+    "freertos_hz": 100,
+    "led_task_core": 1,
+    "led_task_priority": 5,
+    "i2c_isr_iram_safe": false,
+    "i2c_master_isr_handler_in_iram": true,
+    "gptimer_isr_cache_safe": true,
+    "psram_enabled": false,
+    "power_management_enabled": false
+  },
+  "sources": [
+    "https://www.nxp.com/docs/en/data-sheet/PCA9956B.pdf",
+    "https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32s3/api-reference/peripherals/i2c.html"
+  ],
+  "agent_firmware_build_link_size_map": "NOT RUN",
+  "agent_device_flash_energized_tests": "NOT RUN",
+  "firmware_code_changes": "NONE in this review"
+}

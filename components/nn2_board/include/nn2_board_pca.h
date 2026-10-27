@@ -20,10 +20,11 @@ typedef struct {
 typedef struct {
     nn2_board_pca_io_t io;
     uint8_t on[NN2_OPTICAL_SLOTS][7];
+    uint8_t off[NN2_OPTICAL_SLOTS][2];
     nn2_board_pca_diagnostics_t diagnostics;
     nn2_board_pca_diagnostics_t last_complete, first_fault;
     uint32_t expected_channels;
-    bool short_advisory, fault_saved, frame_checked;
+    bool short_advisory, fault_saved, frame_checked, compact_off;
     int selected;
     bool ready;
 } nn2_board_pca_t;

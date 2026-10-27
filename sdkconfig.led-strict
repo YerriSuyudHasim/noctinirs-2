@@ -1,0 +1,4 @@
+# Explicit strict LED policy, including when switching from an advisory config.
+# CONFIG_NN2_LED_SHORT_BENCH is not set
+CONFIG_NN2_LED_RUNTIME_I2C_HZ=400000
+CONFIG_I2C_ISR_IRAM_SAFE=y

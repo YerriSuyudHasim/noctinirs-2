@@ -27,6 +27,7 @@ menu "NoctiNIRS 2 v0.1.0"
         select GPIO_CTRL_FUNC_IN_IRAM
         select GPTIMER_ISR_CACHE_SAFE
         select GPTIMER_CTRL_FUNC_IN_IRAM
+        select I2C_ISR_IRAM_SAFE
         help
             Real PCA9956B drive on explicit START, 20 optical slots, one channel
             at a time. Boot remains OFF. Default Fs=5 Hz and current=30 mA.
@@ -37,9 +38,21 @@ menu "NoctiNIRS 2 v0.1.0"
         depends on NN2_LED_BRINGUP
         default n
         help
-            Same assembled board only, Fs5, twenty nominal 30 mA slots.
-            One accepted START per boot, absolute two-second engineering cap.
+            Same assembled board only, Fs2..10Hz, twenty nominal 30 mA slots.
+            Host-selected duration, repeat START after completed STOP/cleanup.
+            No firmware duration ceiling; lease timeout and hard faults remain.
             Can mask a real short. Requires specialist review before activation.
+
+    config NN2_LED_RUNTIME_I2C_HZ
+        int "LED async runtime SCL (800kHz is an experimental board setting)"
+        depends on NN2_LED_BRINGUP
+        range 100000 800000
+        default 400000
+        help
+            Boot/configuration uses synchronous100kHz. Only the exclusive LED
+            scan owner uses this async runtime rate. ESP32-S3 documentation
+            specifies400kHz maximum; the Owner-selected800kHz V4-style setting
+            is experimental and is not an SDK/electrical qualification.
 
     config NN2_LED_SETTLE_US
         int "Settle wait between (disabled) LED on and (fake) sample (us)"
