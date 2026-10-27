@@ -11,6 +11,8 @@ typedef struct {
     void *ctx;
 } nn2_board_pca_io_t;
 typedef struct {
+    uint32_t epoch, warning_frames;
+    uint8_t mode2;
     uint32_t valid_channels, open_channels, short_channels, invalid_channels;
     /* Per-channel samples merged into EFLAG layout; not an atomic snapshot. */
     uint8_t flags[6];
@@ -19,6 +21,9 @@ typedef struct {
     nn2_board_pca_io_t io;
     uint8_t on[NN2_OPTICAL_SLOTS][7];
     nn2_board_pca_diagnostics_t diagnostics;
+    nn2_board_pca_diagnostics_t last_complete, first_fault;
+    uint32_t expected_channels;
+    bool short_advisory, fault_saved, frame_checked;
     int selected;
     bool ready;
 } nn2_board_pca_t;

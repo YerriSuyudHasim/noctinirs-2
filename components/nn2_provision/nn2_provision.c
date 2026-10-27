@@ -90,7 +90,7 @@ bool nn2_provision_poll(uint64_t now_us)
                 reply(s_safe_off_callback() == NN2_OK ?
                     "OK safe-off requested; physical=unverified\n" : "ERR safe-off failed\n");
             } else if (s_used == 6 && !memcmp(s_line, "STATUS", 6)) {
-                char status[1024] = { 0 };
+                char status[1536] = { 0 };
                 s_status_callback(status, sizeof(status));
                 status[sizeof(status) - 1] = 0;
                 reply(status);

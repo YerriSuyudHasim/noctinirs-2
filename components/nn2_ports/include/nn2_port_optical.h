@@ -17,5 +17,6 @@ typedef struct {
     nn2_status_t (*clear_fault)(void *);
     void *ctx;
     uint16_t current_limit_ma;
+    const char *policy_info; /* Static capability text, or NULL for strict. */
 } nn2_port_optical_t;
 #endif

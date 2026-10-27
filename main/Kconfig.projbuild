@@ -32,6 +32,15 @@ menu "NoctiNIRS 2 v0.1.0"
             at a time. Boot remains OFF. Default Fs=5 Hz and current=30 mA.
             No ADC/frames. Physical energization requires Owner authorization.
 
+    config NN2_LED_SHORT_BENCH
+        bool "Board-specific SHORT advisory engineering candidate (unqualified)"
+        depends on NN2_LED_BRINGUP
+        default n
+        help
+            Same assembled board only, Fs5, twenty nominal 30 mA slots.
+            One accepted START per boot, absolute two-second engineering cap.
+            Can mask a real short. Requires specialist review before activation.
+
     config NN2_LED_SETTLE_US
         int "Settle wait between (disabled) LED on and (fake) sample (us)"
         range 0 1000

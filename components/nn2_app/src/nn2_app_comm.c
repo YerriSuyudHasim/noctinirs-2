@@ -376,7 +376,8 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
   nn2_core_put_u64(body + 12, now);
   if (!error && op == NN2_CMD_INFO) {
     const char *info = c.optical.state ?
-        "NoctiNIRS2/0.1.0;wire=ADR0004/1;SIMULATED;led=REAL_BRINGUP;frames=unsupported;capture=unsupported" :
+        (c.optical.policy_info ? c.optical.policy_info :
+        "NoctiNIRS2/0.1.0;wire=ADR0004/1;SIMULATED;led=REAL_BRINGUP;short_policy=STRICT;frames=unsupported;capture=unsupported") :
         "NoctiNIRS2/0.1.0;wire=ADR0004/1;SIMULATED;frames=unsupported;capture=unsupported";
     size_t n = strlen(info);
     memcpy(body + 20, info, n);

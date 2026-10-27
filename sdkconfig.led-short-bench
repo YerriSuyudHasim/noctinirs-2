@@ -1,0 +1,2 @@
+# Optional overlay AFTER sdkconfig.led-bringup; never applied implicitly.
+CONFIG_NN2_LED_SHORT_BENCH=y

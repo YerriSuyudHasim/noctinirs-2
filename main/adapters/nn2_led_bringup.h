@@ -8,12 +8,16 @@ typedef struct {
     uint8_t state, pca_mode2;
     uint32_t frames, edges, deadline_misses, transfer_max_us;
     int32_t error;
-    uint32_t stack_free;
+    uint32_t stack_free, dispatch_max_us, completion_max_us;
+    uint8_t first_stop;
+    bool limit_hit, attempt_used;
     bool bus_released;
-    nn2_board_pca_diagnostics_t pca;
+    nn2_board_pca_diagnostics_t pca, last_complete, first_fault;
 } nn2_led_bringup_status_t;
 esp_err_t nn2_led_bringup_init(void);
 nn2_port_optical_t nn2_led_bringup_port(void);
 nn2_port_safety_t nn2_led_bringup_safety_port(void);
 nn2_led_bringup_status_t nn2_led_bringup_status(void);
+/* Pure cached serializer; false indicates truncation, never a clean snapshot. */
+bool nn2_led_bringup_format_status(char *, size_t, const nn2_led_bringup_status_t *);
 #endif

@@ -131,3 +131,21 @@ new flash, energized operation, external write, commit or merge was performed by
 the agent. Accountable activity here is static diagnosis; Hardware/RTOS and
 independent review are pending. No code tests apply to this documentation-only
 addition; reference integrity is checked separately.
+
+## Software implementation update (2026-10-27)
+
+The Owner's [recorded handoff](https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6439754275)
+authorizes implementation/testing now, without new physical measurements or
+board disassembly. No historical measurement records are available. Earlier
+statements in this note that runtime policy has not been implemented describe
+the prior assessment. The optional candidate now exists, disabled by default;
+see [ADR-0006](adr/0006-bounded-short-warning-bench.md) and the
+[implementation handoff](SHORT_ADVISORY_HANDOFF.md). Existing strict/root config
+is not silently changed. The high-headroom premise remains unmeasured and a
+matching real short remains a residual risk. Physical activation is not approved.
+
+NXP's PWM<8 diagnostic exclusion is addressed by PWMALL255/readback during
+prepare, while LEDOUT FULL_ON and IREF current stay unchanged. EFLAG sampling
+moves to the end of the existing ON interval before OFF; frame scratch cannot
+borrow prior-frame evidence. OPEN/code3 immediately requests reset on observation.
+The updated classifier and cap are software mechanisms, not electrical findings.

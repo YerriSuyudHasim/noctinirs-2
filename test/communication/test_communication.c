@@ -285,7 +285,11 @@ static void optical_binding(void) {
   reset(); optical_starts = 0;
   nn2_port_optical_t port = {.start = optical_start, .state = optical_get_state,
       .clear_fault = optical_clear, .current_limit_ma = 30};
+  port.policy_info = "led=REAL_BRINGUP;short_policy=BENCH_WARN;limit_s=2;single_run=1";
   CHECK(nn2_app_comm_bind_optical(&state, &port) == NN2_OK);
+  nn2_core_packet_t info = command(1, 0, NN2_CMD_INFO, NULL, 0);
+  CHECK(info.length == 28 + strlen(port.policy_info));
+  CHECK(!memcmp(info.payload + 28, port.policy_info, strlen(port.policy_info)));
   nn2_core_packet_t started = command(1, 1, NN2_CMD_START, NULL, 0);
   CHECK(error(started) == 0 && started.payload[8] == NN2_COMM_STARTING);
   CHECK(optical_config.fs == 5 && optical_config.current_ma[19] == 30 && optical_starts == 1);

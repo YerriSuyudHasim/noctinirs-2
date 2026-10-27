@@ -1,15 +1,14 @@
 # LED-only bring-up candidate
 
-> Current investigation: Owner selected tested V2/V3 as references; V4 is not
-> the baseline. Normal OFF now uses the full V3-style LEDOUT image, and active
-> channel EFLAG evidence is cached before reset. See
-> [fault267 investigation](PCA9956B_FAULT_267_INVESTIGATION.md). MODE2 ERROR still
-> faults; these changes do not establish that physical LED operation is fixed.
+> The strict profile faults on MODE2 ERROR. An optional, disabled-by-default
+> board-specific SHORT advisory candidate is now implemented under
+> `CONFIG_NN2_LED_SHORT_BENCH`. See [ADR-0006](adr/0006-bounded-short-warning-bench.md)
+> and [the software handoff](SHORT_ADVISORY_HANDOFF.md). This is an engineering
+> candidate; physical qualification, activation and independent approval remain pending.
 
-Current local firmware adds an opt-in real PCA9956B path. Default firmware still
-simulates LED commands. The new candidate has host/static evidence, not a full
-target build, independently approved review or physical qualification.
-[ADR-0005](adr/0005-led-bringup.md) records design, PRs and historical comparison.
+The tested historical references are V2/V3; V4 is excluded as the baseline.
+Default firmware simulates LEDs; real bring-up requires the separate LED overlay.
+No candidate code changes the running device.
 
 ## Behavior
 
@@ -18,8 +17,8 @@ target build, independently approved review or physical qualification.
   slots, one at a time. Physical PCA channels 0..9 and 14..23; 10..13 remain OFF.
 - Default optical Fs=5 Hz, default current=30 mA per slot. Current is a nominal
   setpoint, approximately 29.925 mA after DAC quantization with 1 kOhm REXT.
-- Allowed Fs={1,2,4,5,8,10}. Change while STOPPED only, retained until reboot.
-- Bring-up current range=0..30 mA. Zero skips light in that slot; no simultaneous
+- Strict profile allowed Fs={1,2,4,5,8,10}. Change while STOPPED only, retained until reboot.
+- Strict bring-up current range=0..30 mA. Zero skips light in that slot; no simultaneous
   all-channel test. The global simulation cap of 50 mA is not enabled here.
 - 5 Hz: frame200 ms, slot10 ms, nominal ON/OFF5 ms each. 10 Hz: frame100 ms,
   slot5 ms, nominal ON/OFF2.5 ms each. Wire/dispatch latency affects actual light
@@ -83,7 +82,7 @@ After the specific flash/bench action and the procedure are approved:
 4. Verify STOP/safe-off, lost heartbeat and disconnect cause off; record physical
    traces, not only application state. Do not increase Fs until initial traces
    and temperature/current behavior meet the preselected limits.
-5. If the first stage passes, repeat at 10 Hz and compare phase/commit latency.
+5. For the strict profile only, if separately authorized after the first stage passes, repeat at 10 Hz and compare phase/commit latency.
    Test all configured wavelengths/channels using instruments; a visual check is
    insufficient for NIR. This does not qualify the future ADC settling/K windows.
 6. End with STOPPED, RESET held, led_bus_free=1 and cached telemetry able to
@@ -95,7 +94,7 @@ energy per the fixture procedure, retain the first fault/log/traces and review
 before resuming. No human optical tests, protection bypasses, eFuses or security
 changes are part of this work.
 
-## Commands once the physical entry gate is satisfied
+## Strict-profile commands once the physical entry gate is satisfied
 
 ```powershell
 python tools/nn2ctl.py info
@@ -143,3 +142,45 @@ Include measured current, supply, temperature, reset/phase traces, tested Fs,
 channel mapping and first failure. Keep evidence classes separate. Roll back via
 a matched previously reviewed firmware/client and bootloader recovery procedure;
 source changes alone do not replace a flashed bootloader.
+
+## Optional SHORT advisory software candidate
+
+Append `sdkconfig.led-short-bench` after the LED overlay in a NEW build directory
+with its own SDKCONFIG. This does not select the profile in an existing config:
+
+```powershell
+idf.py -B build/short-advisory -D SDKCONFIG=build/short-advisory/sdkconfig -D 'SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.communication;sdkconfig.led-bringup;sdkconfig.led-short-bench' -D IDF_TARGET=esp32s3 build
+idf.py -B build/short-advisory size
+```
+
+INFO must show `short_policy=BENCH_WARN;limit_s=2;single_run=1`. Strict INFO shows
+`short_policy=STRICT`. Advisory START requires Fs5 and all twenty nominal30mA
+setpoints; changed/zero currents and Fs10 are rejected in firmware. A single
+accepted START consumes the boot attempt even if cancelled during prepare or
+followed by fault-clear. STOP, host expiry and safe-off still cancel. Heartbeats
+cannot extend the absolute two-second timer ceiling. At expiry reset is asserted
+and fault latched. No automatic retry or restart is available.
+
+The CLI additionally requires `--led --ack-short-warning` and rejects advisory
+`run` durations over2s. These switches are protocol guards, not authorization to
+operate hardware. No live command or physical procedure is authorized here.
+
+New on-demand USB fields: `source` (configured source SHA), `image` (ELF identity), `short_policy`, `limit_s`,
+`single_run`, `led_attempt`, `led_cap`, `led_stop`, `led_epoch`, `led_complete`,
+`led_fault_epoch`, `led_warn`, `led_dispatch_us`, `led_completion_us`. `led_stop`
+codes:0 none,1 cancel (STOP/safe-off/lease expiry),2 cap,3 deadline,4 timer,
+5 I/O/readback/diagnostic,6 cleanup. The app fault/lease counters distinguish
+host causes. First cause/error and cached diagnostics survive clear-fault.
+Frame epoch is run-local; boot identity plus accepted attempt identify advisory
+runs. `led_max_us` includes failed operations; dispatch/completion maxima are
+relative to the scheduled phase. Unchanged accepted SHORT adds only a cached
+warning-frame count; it emits no unsolicited messages. Raw EFLAG/masks are merged
+per-slot samples, never an atomic snapshot or proof that a real short is absent.
+
+NXP detection eligibility is explicit: PWM255 is written/read back; full ON/OFF
+images, unused-channel zero and100kHz bus remain. Sampling is at the existing ON
+interval's end. Physical settling and the200ms MODE2 observation interval need
+specialist acceptance. Before flash/energization, Nori must obtain numeric limits,
+complete energy isolation, an isolated nonhuman fixture/procedure, matched source/
+image/config and recovery image, specialist reviews and specific Owner confirmation.
+The2s ceiling is not a qualified thermal/optical exposure limit.

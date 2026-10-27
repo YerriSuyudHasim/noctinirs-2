@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
 import nn2ctl
 
 class ClientModel:
+    advisory = False
     real = True
     calls = []
     closed = False
@@ -19,7 +20,7 @@ class ClientModel:
     def request(self, name, *_):
         self.calls.append(name)
         reply = dict(error='OK', state='STOPPED')
-        if name == 'info': reply['info'] = 'led=REAL_BRINGUP' if self.real else 'SIMULATED'
+        if name == 'info': reply['info'] = ('led=REAL_BRINGUP' if self.real else 'SIMULATED') + (';short_policy=BENCH_WARN;limit_s=2;single_run=1' if self.advisory else '')
         if name == 'start':
             self.session_id = 7
             reply['state'] = 'STARTING'
@@ -44,6 +45,17 @@ class LedCliTests(unittest.TestCase):
             result = nn2ctl.main()
         self.assertTrue(ClientModel.closed)
         return result
+    def test_advisory_requires_ack_and_rejects_duration_and_rate(self):
+        ClientModel.advisory = True
+        try:
+            for args in (['start', '--led'], ['run', '--led', '--ack-short-warning', '--seconds', '3'],
+                         ['start', '--led', '--ack-short-warning', '--rate', '10']):
+                self.assertEqual(self.run_cli(args, True), 1)
+                self.assertEqual(ClientModel.calls, ['info'])
+            self.assertEqual(self.run_cli(['start', '--led', '--ack-short-warning'], True), 0)
+            self.assertEqual(ClientModel.calls, ['info', 'start'])
+        finally:
+            ClientModel.advisory = False
     def test_plain_start_rejects_real_profile_before_start(self):
         self.assertEqual(self.run_cli(['start'], True), 1)
         self.assertEqual(ClientModel.calls, ['info'])

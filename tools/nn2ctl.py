@@ -210,7 +210,7 @@ def usb_status(serial_port):
         port.reset_input_buffer();port.write(b'\n');time.sleep(.1);port.reset_input_buffer()
         port.write(b'STATUS\n');deadline=time.monotonic()+5
         while time.monotonic()<deadline:
-            line=port.readline(1024).decode('utf8',errors='replace').strip()
+            line=port.readline(1536).decode('utf8',errors='replace').strip()
             if line.startswith('STATUS '):
                 print(line)
                 try: diagnostic = describe_led_diagnostics(line)
@@ -237,6 +237,8 @@ def main():
     parser.add_argument("--seconds",type=float,default=10)
     parser.add_argument("--led",action="store_true",
                         help="Explicitly start real LEDs in the opt-in bring-up profile; requires an approved bench procedure")
+    parser.add_argument("--ack-short-warning", action="store_true",
+                        help="Acknowledge the unqualified board SHORT advisory candidate")
     args=parser.parse_args()
     client=None
     try:
@@ -255,6 +257,13 @@ def main():
                 raise RuntimeError("Real LED profile: START can energize emitters. Use --led only under the approved bench procedure")
             if args.led and not real_led:
                 raise RuntimeError("Real LED bring-up is not enabled in this firmware")
+            if "short_policy=BENCH_WARN" in info["info"]:
+                if not (args.led and args.ack_short_warning):
+                    raise RuntimeError("SHORT advisory requires --led --ack-short-warning")
+                if args.rate is not None and args.rate != 5:
+                    raise ValueError("SHORT advisory requires Fs5")
+                if args.command == "run" and args.seconds > 2:
+                    raise ValueError("SHORT advisory engineering cap is 2 seconds")
             if args.rate is not None:
                 require_ok(client.request("set-fs", bytes([args.rate])))
         if args.command=="run":

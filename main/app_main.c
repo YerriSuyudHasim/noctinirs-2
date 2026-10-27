@@ -7,6 +7,7 @@
 #include <string.h>
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_app_desc.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -34,6 +35,14 @@ static nn2_status_t usb_safe_off(void)
 
 static void describe_status(char *out, size_t capacity)
 {
+    const esp_app_desc_t *image = esp_app_get_description();
+    char image_sha[65];
+    static const char hex[] = "0123456789abcdef";
+    for (unsigned i = 0; i < 32; ++i) {
+        image_sha[2 * i] = hex[image->app_elf_sha256[i] >> 4];
+        image_sha[2 * i + 1] = hex[image->app_elf_sha256[i] & 15];
+    }
+    image_sha[64] = 0;
     nn2_wifi_status_t wifi = nn2_wifi_get_status();
     nn2_net_status_t net = nn2_net_get_status();
     nn2_app_comm_status_t app = nn2_app_comm_get_status(&s_application);
@@ -44,13 +53,13 @@ static void describe_status(char *out, size_t capacity)
     uint64_t battery_age_ms = battery.valid ?
         (clock.now_us(clock.ctx) - battery.last_success_us) / 1000u : 0;
     snprintf(out, capacity,
-        "STATUS ip=%s link=%u state=%u fault=%u boot=%" PRIu64
+        "STATUS source=%s image=%s ip=%s link=%u state=%u fault=%u boot=%" PRIu64
         " reset=%u heap=%u min_heap=%u stack=%u rx=%" PRIu32 " tx=%" PRIu32 " invalid=%" PRIu32
         " socket_err=%" PRIu32 " send_err=%" PRIu32 " usb_reject=%" PRIu32 " usb_drop=%" PRIu32
         " off_requested=%u wifi_err=%d clients=%u ap=%u usb_timeout=%" PRIu32
         " battery_valid=%u battery_uv=%" PRIu32 " battery_mperm=%" PRIu32
         " battery_age_ms=%" PRIu64 " battery_error=%u",
-        wifi.ipv4, (unsigned)wifi.connected, (unsigned)app.state, (unsigned)app.fault, app.boot_id,
+        NN2_SOURCE_SHA, image_sha, wifi.ipv4, (unsigned)wifi.connected, (unsigned)app.state, (unsigned)app.fault, app.boot_id,
         board.reset_reason, (unsigned)esp_get_free_heap_size(),
         (unsigned)esp_get_minimum_free_heap_size(), (unsigned)uxTaskGetStackHighWaterMark(NULL),
         net.received, net.replied, net.invalid, net.socket_errors, net.send_errors,
@@ -61,19 +70,8 @@ static void describe_status(char *out, size_t capacity)
 #if CONFIG_NN2_LED_BRINGUP
     nn2_led_bringup_status_t led = nn2_led_bringup_status();
     size_t used = strlen(out);
-    if (used < capacity) snprintf(out + used, capacity - used,
-        " led_state=%u led_frames=%" PRIu32 " led_edges=%" PRIu32
-        " led_missed=%" PRIu32 " led_max_us=%" PRIu32 " led_error=%" PRId32
-        " led_stack=%" PRIu32 " led_bus_free=%u led_mode2=%02X"
-        " led_eflags=%02X%02X%02X%02X%02X%02X led_ef_valid=%06" PRIX32
-        " led_open=%06" PRIX32 " led_short=%06" PRIX32 " led_ef_invalid=%06" PRIX32 "\n",
-        (unsigned)led.state, led.frames, led.edges, led.deadline_misses,
-        led.transfer_max_us, led.error, led.stack_free, (unsigned)led.bus_released,
-        (unsigned)led.pca_mode2,
-        (unsigned)led.pca.flags[0], (unsigned)led.pca.flags[1], (unsigned)led.pca.flags[2],
-        (unsigned)led.pca.flags[3], (unsigned)led.pca.flags[4], (unsigned)led.pca.flags[5],
-        led.pca.valid_channels, led.pca.open_channels, led.pca.short_channels,
-        led.pca.invalid_channels);
+    if (used < capacity && !nn2_led_bringup_format_status(out + used, capacity - used, &led))
+        snprintf(out, capacity, "ERR status-capacity\n");
 #else
     size_t used = strlen(out);
     if (used < capacity) snprintf(out + used, capacity - used, "\n");
