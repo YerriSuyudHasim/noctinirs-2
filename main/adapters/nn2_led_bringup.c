@@ -242,6 +242,7 @@ static esp_err_t prepare(const nn2_port_optical_config_t *config)
     err = gptimer_set_alarm_action(s_timer, &alarm);
     if (err != ESP_OK) return err;
     portENTER_CRITICAL(&s_lock);
+    s_status.pca = s_chip.diagnostics;
     bool valid = s_armed && s_generation == s_worker_generation;
     if (valid) {
         s_half_us = nn2_core_optical_half_slot_us(config->fs);
@@ -269,6 +270,7 @@ static void phase_work(uint32_t phase, uint64_t alarm)
     if (result == NN2_OK && phase == 39) result = nn2_board_pca_health(&s_chip);
     if (gptimer_get_raw_count(s_timer, &after) != ESP_OK) result = NN2_ERR_IO;
     portENTER_CRITICAL(&s_lock);
+    s_status.pca = s_chip.diagnostics;
     bool valid = s_armed && s_generation == s_worker_generation;
     if (valid && result == NN2_OK && after < alarm + s_half_us) {
         ++s_status.edges;

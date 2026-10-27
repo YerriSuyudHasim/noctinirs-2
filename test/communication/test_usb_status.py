@@ -1,6 +1,7 @@
 """Host-only serial-control regression; never opens a physical COM port."""
 import contextlib
 import io
+import json
 from pathlib import Path
 import sys
 import types
@@ -56,6 +57,30 @@ class SerialModel:
 
 
 class UsbStatusTests(unittest.TestCase):
+    def test_cached_eflag_decode_uses_hardware_channels(self):
+        line = ('STATUS led_ef_valid=FFC3FF led_open=800000 '
+                'led_short=000001 led_ef_invalid=004000')
+        result = json.loads(nn2ctl.describe_led_diagnostics(line).split(' ', 1)[1])
+        self.assertEqual(result['open_pca_channels'], [23])
+        self.assertEqual(result['short_pca_channels'], [0])
+        self.assertEqual(result['invalid_code_pca_channels'], [14])
+        self.assertNotIn(10, result['sampled_pca_channels'])
+        self.assertEqual(len(result['sampled_pca_channels']), 20)
+
+    def test_unknown_and_unobserved_eflag_data_is_not_reported_clean(self):
+        self.assertIsNone(nn2ctl.describe_led_diagnostics('STATUS led_mode2=45'))
+        line = 'STATUS led_ef_valid=000000 led_open=000001 led_short=0 led_ef_invalid=0'
+        with self.assertRaises(ValueError): nn2ctl.describe_led_diagnostics(line)
+        line = 'STATUS led_ef_valid=1000000 led_open=0 led_short=0 led_ef_invalid=0'
+        with self.assertRaises(ValueError): nn2ctl.describe_led_diagnostics(line)
+
+    def test_usb_prints_raw_status_and_decoded_snapshot(self):
+        line = b'STATUS led_ef_valid=000001 led_open=0 led_short=1 led_ef_invalid=0\n'
+        result = self.invoke(lambda port: setattr(port, 'lines', [line]))
+        self.assertTrue(result.startswith(line.decode()))
+        decoded = json.loads(result.splitlines()[1].split(' ', 1)[1])
+        self.assertEqual(decoded['short_pca_channels'], [0])
+
     def invoke(self, configure=None, clock=None):
         ports = []
 

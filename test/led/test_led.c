@@ -15,6 +15,7 @@ static uint32_t io_cost = 100;
 static uint64_t clock_count, next_alarm;
 static void por(void) {
     memset(regs, 0, sizeof(regs));
+    regs[1] = 0x05; /* MODE2 read-only reserved bits, per V2 and datasheet. */
     for (unsigned i = 2; i < 8; ++i) regs[i] = 0xaa;
 }
 esp_err_t gpio_set_level(int pin, uint32_t level) {
@@ -55,8 +56,11 @@ esp_err_t i2c_master_transmit(i2c_master_dev_handle_t device, const uint8_t *dat
     if (++io_count == fail_at || reset_low) return ESP_FAIL;
     if (cancel_at_write) { cancel_at_write = false; (void)cancel(NULL); return ESP_FAIL; }
     uint8_t address = data[0] & 0x7f;
+    if (s_status.state == NN2_OPTICAL_RUNNING && address >= 2 && address <= 7)
+        CHECK(n == 7 && data[0] == 0x82); /* V3 full ON and OFF wire images. */
     if (address == 0x40) memset(regs + 0x22, data[1], 24);
     else if (address == 0x3f) memset(regs + 0x0a, data[1], 24);
+    else if (address == 1) regs[1] = (uint8_t)((regs[1] & 0xc7) | (data[1] & 0x28));
     else for (size_t i = 1; i < n; ++i) regs[address + (data[0] & 0x80 ? i - 1 : 0)] = data[i];
     return ESP_OK;
 }
@@ -137,9 +141,9 @@ static void fault_paths(void) {
     CHECK(state(NULL) == NN2_OPTICAL_FAULT && reset_low); restore();
     cancel_at_write = true; begin(5);
     CHECK(state(NULL) == NN2_OPTICAL_IDLE && reset_low && s_status.bus_released); restore();
-    begin(5); regs[1] = 0x80;
+    begin(5); regs[1] = 0x85;
     for (unsigned i = 0; i < 40; ++i) alarm_tick(true);
-    CHECK(state(NULL) == NN2_OPTICAL_FAULT && reset_low && s_status.pca_mode2 == 0x80); restore();
+    CHECK(state(NULL) == NN2_OPTICAL_FAULT && reset_low && s_status.pca_mode2 == 0x85); restore();
     begin(10); alarm_tick(false); alarm_tick(false);
     CHECK(reset_low && state(NULL) == NN2_OPTICAL_FAULT && s_status.deadline_misses == 1);
     owner_step(); restore();
@@ -163,6 +167,38 @@ static void fault_paths(void) {
     CHECK(start(NULL, &config) == NN2_ERR_INVALID_ARG);
     config = configuration(11); CHECK(start(NULL, &config) == NN2_ERR_INVALID_ARG);
 }
+static void eflag_evidence(void) {
+    begin(5);
+    /* Reproduce the Owner's exact aggregate status, with distinguishable
+     * hardware-channel evidence. Physical light is not modeled. */
+    regs[1] = 0x45;
+    regs[0x41] = 0x01; /* ch0 SHORT */
+    regs[0x46] = 0x80; /* ch23 OPEN */
+    for (unsigned i = 0; i < 40; ++i) alarm_tick(true);
+    CHECK(state(NULL) == NN2_OPTICAL_FAULT && reset_low && s_status.bus_released);
+    CHECK(s_status.edges == 39 && s_status.frames == 0 && s_status.deadline_misses == 0);
+    CHECK(s_status.pca_mode2 == 0x45 && s_status.error == ESP_ERR_INVALID_RESPONSE);
+    CHECK(s_status.pca.valid_channels == 0xffc3ff);
+    CHECK(s_status.pca.short_channels == 1 && s_status.pca.open_channels == 0x800000);
+    CHECK(s_status.pca.flags[0] == 1 && s_status.pca.flags[5] == 0x80);
+    CHECK(regs[0x41] == 0 && regs[0x46] == 0); /* Reset erased device flags only. */
+    owner_step(); CHECK(s_status.pca.open_channels == 0x800000);
+    restore();
+    nn2_port_optical_config_t config = configuration(5);
+    config.current_ma[0] = 0;
+    CHECK(start(NULL, &config) == NN2_OK); owner_step();
+    regs[0x41] = 3; /* No sample for skipped zero-current slot0. */
+    alarm_tick(true); alarm_tick(true);
+    CHECK(s_status.pca.valid_channels == 0 && s_status.pca.invalid_channels == 0);
+    regs[0x41] = 0xc; /* slot1/ch1 reserved error code3; preserve it as unknown. */
+    alarm_tick(true);
+    CHECK(s_status.pca.valid_channels == 2 && s_status.pca.invalid_channels == 2);
+    CHECK(s_status.pca.open_channels == 0 && s_status.pca.short_channels == 0);
+    restore();
+    begin(5); fail_at = io_count + 2; alarm_tick(true); /* ON succeeded, EFLAG read failed. */
+    CHECK(reset_low && state(NULL) == NN2_OPTICAL_FAULT && s_status.pca.valid_channels == 0);
+    restore();
+}
 static void boot_faults(void) {
     for (unsigned step = 1; step <= 38; ++step) {
         s_armed = true; s_worker_generation = ++s_generation;
@@ -175,7 +211,7 @@ static void boot_faults(void) {
 }
 int main(void) {
     CHECK(nn2_led_bringup_init() == ESP_OK && reset_low && !occupied);
-    geometry_and_scan(); fault_paths(); boot_faults();
+    geometry_and_scan(); fault_paths(); boot_faults(); eflag_evidence();
     printf("%u LED checks, %u failures\n", checks, failures);
     return failures ? 1 : 0;
 }

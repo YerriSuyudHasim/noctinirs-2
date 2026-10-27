@@ -167,7 +167,9 @@ class Client:
         raise TimeoutError(f"no matching {command} reply after {self.retries+1} attempts")
 
 def require_ok(result):
-    if result["error"] != "OK": raise RuntimeError("device returned "+result["error"])
+    if result["error"] != "OK":
+        raise RuntimeError("device returned "+result["error"]+
+                           f" (state={result.get('state', 'unknown')}, fault={result.get('fault', 'unknown')})")
     return result
 
 def provision_line(ssid,password):
@@ -176,6 +178,20 @@ def provision_line(ssid,password):
     if not 1<=len(s)<=32 or b"\0" in s or not 8<=len(p)<=63 or any(c<32 or c>126 for c in p):
         raise ValueError("credential encoding")
     return b"WIFI "+s.hex().encode()+b" "+p.hex().encode()+b"\n"
+
+def describe_led_diagnostics(line):
+    """Decode cached per-channel masks; never infer light from a valid bit."""
+    fields = dict(item.split('=', 1) for item in line.split() if '=' in item)
+    names = ('led_ef_valid', 'led_open', 'led_short', 'led_ef_invalid')
+    if not all(name in fields for name in names): return None
+    masks = [int(fields[name], 16) for name in names]
+    if any(mask < 0 or mask > 0xffffff for mask in masks) or any(mask & ~masks[0] for mask in masks[1:]):
+        raise ValueError('invalid cached EFLAG masks')
+    decoded = {name: [ch for ch in range(24) if mask & (1 << ch)] for name, mask in
+               zip(('sampled_pca_channels', 'open_pca_channels', 'short_pca_channels',
+                    'invalid_code_pca_channels'), masks)}
+    return 'PCA_EFLAG '+json.dumps(decoded)
+
 
 def usb_status(serial_port):
     if not serial_port: raise ValueError('--serial-port is required')
@@ -195,7 +211,12 @@ def usb_status(serial_port):
         port.write(b'STATUS\n');deadline=time.monotonic()+5
         while time.monotonic()<deadline:
             line=port.readline(1024).decode('utf8',errors='replace').strip()
-            if line.startswith('STATUS '): print(line);return
+            if line.startswith('STATUS '):
+                print(line)
+                try: diagnostic = describe_led_diagnostics(line)
+                except ValueError: diagnostic = 'PCA_EFLAG invalid cached diagnostics; retain raw STATUS'
+                if diagnostic: print(diagnostic)
+                return
             if line.startswith('ERR '): raise RuntimeError(line)
         raise TimeoutError('no complete USB STATUS response')
     finally:

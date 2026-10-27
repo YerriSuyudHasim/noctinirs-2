@@ -64,10 +64,16 @@ static void describe_status(char *out, size_t capacity)
     if (used < capacity) snprintf(out + used, capacity - used,
         " led_state=%u led_frames=%" PRIu32 " led_edges=%" PRIu32
         " led_missed=%" PRIu32 " led_max_us=%" PRIu32 " led_error=%" PRId32
-        " led_stack=%" PRIu32 " led_bus_free=%u led_mode2=%02X\n",
+        " led_stack=%" PRIu32 " led_bus_free=%u led_mode2=%02X"
+        " led_eflags=%02X%02X%02X%02X%02X%02X led_ef_valid=%06" PRIX32
+        " led_open=%06" PRIX32 " led_short=%06" PRIX32 " led_ef_invalid=%06" PRIX32 "\n",
         (unsigned)led.state, led.frames, led.edges, led.deadline_misses,
         led.transfer_max_us, led.error, led.stack_free, (unsigned)led.bus_released,
-        (unsigned)led.pca_mode2);
+        (unsigned)led.pca_mode2,
+        (unsigned)led.pca.flags[0], (unsigned)led.pca.flags[1], (unsigned)led.pca.flags[2],
+        (unsigned)led.pca.flags[3], (unsigned)led.pca.flags[4], (unsigned)led.pca.flags[5],
+        led.pca.valid_channels, led.pca.open_channels, led.pca.short_channels,
+        led.pca.invalid_channels);
 #else
     size_t used = strlen(out);
     if (used < capacity) snprintf(out + used, capacity - used, "\n");

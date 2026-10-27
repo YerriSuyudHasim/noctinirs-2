@@ -1,5 +1,12 @@
 # ADR-0005: Opt-in LED-only bring-up and 5 Hz default
 
+> 2026-10-27 follow-up: Owner confirmed V2/V3 as tested reference baselines and
+> excludes V4 from the current investigation. Normal OFF now uses the full V3
+> seven-byte image; ON adds one active-channel EFLAG read and cached diagnostics.
+> Current/Fs/fault limits are unchanged. Earlier V4 comparison rows below are a
+> historical study record, not validation or the basis for this corrective work.
+> See ../PCA9956B_FAULT_267_INVESTIGATION.md and its evidence record.
+
 Date: 2026-10-27. Status: local implementation candidate for specialist and
 independent review. Not a flash/energization authorization or timing acceptance.
 

@@ -31,6 +31,9 @@ class ClientModel:
         return reply
 
 class LedCliTests(unittest.TestCase):
+    def test_optical_fault_context_is_retained_in_error(self):
+        with self.assertRaisesRegex(RuntimeError, 'state=FAULTED, fault=267'):
+            nn2ctl.require_ok(dict(error='INVALID_STATE', state='FAULTED', fault=267))
     def run_cli(self, argv, real):
         ClientModel.real, ClientModel.calls, ClientModel.closed = real, [], False
         with patch.object(nn2ctl, 'Client', ClientModel), \

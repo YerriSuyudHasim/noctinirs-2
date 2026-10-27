@@ -1,5 +1,11 @@
 # LED-only bring-up candidate
 
+> Current investigation: Owner selected tested V2/V3 as references; V4 is not
+> the baseline. Normal OFF now uses the full V3-style LEDOUT image, and active
+> channel EFLAG evidence is cached before reset. See
+> [fault267 investigation](PCA9956B_FAULT_267_INVESTIGATION.md). MODE2 ERROR still
+> faults; these changes do not establish that physical LED operation is fixed.
+
 Current local firmware adds an opt-in real PCA9956B path. Default firmware still
 simulates LED commands. The new candidate has host/static evidence, not a full
 target build, independently approved review or physical qualification.
@@ -118,6 +124,15 @@ led_max_us (phase work duration, not total deadline-to-commit latency), led_erro
 different: STARTING2, STREAMING3, STOPPING4, STOPPED1, FAULTED6, SAFE_OFF7.
 First alarm begins slot0 after one half-slot delay; subsequent frame periods are
 absolute. These are software scheduling semantics, not measured optical times.
+
+New diagnostics: led_eflags is12 hex digits in EFLAG0..5 order, containing the
+last per-channel samples taken while that channel was ON. led_ef_valid is a
+24-bit hex mask; only set bits are observed channels. led_open, led_short and
+led_ef_invalid use the same hardware PCA channel bit positions. Zero-current and
+unused channels are not marked sampled. Reset/cleanup retain cached evidence;
+the next START clears it. These are samples from different slots, not an atomic
+snapshot or proof of optical output. The CLI prints a PCA_EFLAG JSON line with
+decoded channel lists when these fields are present.
 
 ## Report
 
