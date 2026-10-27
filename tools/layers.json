@@ -5,7 +5,8 @@
     "esp_.*", "freertos/.*", "driver/.*", "lwip/.*", "hal/.*", "soc/.*", "rom/.*",
     "esp32s3/rom/.*", "xtensa/.*", "esp_private/.*", "sdkconfig\\.h", "nimble/.*",
     "host/ble_.*", "bt_.*", "nvs(?:_.*)?\\.h", "FreeRTOS\\.h", "task\\.h", "queue\\.h",
-    "semphr\\.h", "timers\\.h", "event_groups\\.h", "nn2_adapters?_.*"
+    "semphr\\.h", "timers\\.h", "event_groups\\.h", "nn2_adapters?_.*",
+    "nn2_(board|config|provision|wifi|net)(?:_.*)?\\.h"
   ],
   "layers": [
     {"name": "core", "path": "components/nn2_core", "requires": [], "header_prefixes": ["nn2_core_"]},

@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.16)
+project(nn2_led_host C)
+get_filename_component(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+add_executable(nn2_led_tests test_led.c "${ROOT}/components/nn2_board/nn2_board_pca.c")
+target_include_directories(nn2_led_tests PRIVATE stubs
+    "${ROOT}/components/nn2_board/include" "${ROOT}/components/nn2_core/include"
+    "${ROOT}/components/nn2_ports/include" "${ROOT}/main/adapters")
+if(MSVC)
+    target_compile_options(nn2_led_tests PRIVATE /W4 /WX)
+else()
+    target_compile_options(nn2_led_tests PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+enable_testing()
+add_test(NAME led_owner_and_pca COMMAND nn2_led_tests)

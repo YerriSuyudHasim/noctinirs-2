@@ -1,13 +1,36 @@
-menu "NoctiNIRS 2 (draft v0.1.0)"
+menu "NoctiNIRS 2 v0.1.0"
 
     choice NN2_PROFILE
         prompt "Firmware profile"
-        default NN2_PROFILE_FAKE
+        default NN2_PROFILE_COMMUNICATION
+        config NN2_PROFILE_COMMUNICATION
+            bool "Communication Foundation / emitter reset held low"
+            help
+                SoftAP-only, NVS boot identity, USB diagnostics and UDP request/reply.
+                LED/ADC commands are simulated; RESET_LED remains asserted.
+                Use sdkconfig.communication for the required main task stack.
         config NN2_PROFILE_FAKE
             bool "Fake ADC / disabled emitter baseline"
         config NN2_PROFILE_ADS131_DIAGNOSTIC
             bool "ADS131 diagnostic / emitter energy unavailable fixture required"
     endchoice
+
+    config NN2_UDP_PORT
+        int "Communication Foundation UDP control port"
+        range 1024 65535
+        default 3333
+
+    config NN2_LED_BRINGUP
+        bool "Enable real LED-only bring-up commands (requires reviewed bench procedure)"
+        depends on NN2_PROFILE_COMMUNICATION
+        default n
+        select GPIO_CTRL_FUNC_IN_IRAM
+        select GPTIMER_ISR_CACHE_SAFE
+        select GPTIMER_CTRL_FUNC_IN_IRAM
+        help
+            Real PCA9956B drive on explicit START, 20 optical slots, one channel
+            at a time. Boot remains OFF. Default Fs=5 Hz and current=30 mA.
+            No ADC/frames. Physical energization requires Owner authorization.
 
     config NN2_LED_SETTLE_US
         int "Settle wait between (disabled) LED on and (fake) sample (us)"

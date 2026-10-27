@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "paths": [
+    "components/nn2_board",
+    "components/nn2_config",
+    "components/nn2_provision",
+    "components/nn2_wifi",
+    "components/nn2_net"
+  ]
+}

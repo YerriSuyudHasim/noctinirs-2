@@ -1,6 +1,25 @@
+> Current local communication revision (2026-10-27): ADR-0004/1 replaces CF1.
+> See [local ADR binding](docs/adr/0004-local-implementation.md) for exact wire
+> layouts, CLI commands and simulation limits, and [evidence](docs/ADR004_EVIDENCE.md).
+> SoftAP stays active. The current opt-in [LED-only bring-up](docs/LED_BRINGUP.md)
+> adds real sequential LED drive and an early reset hook; ADC/frames remain absent.
+
 # NoctiNIRS 2
 
-NoctiNIRS 2 is a new clean-architecture ESP32-S3 firmware project starting at **v0.1.0**. It is governed by the separate private [`ai-engineering-hub`](https://github.com/YerriSuyudHasim/ai-engineering-hub) repository. The active firmware is intentionally a minimal scaffold; no NoctiNIRS V2, V3, or V4 implementation has been copied into it.
+NoctiNIRS 2 targets ESP32-S3 / ESP-IDF v6.1. Current v0.1.0 is **SoftAP-only**:
+SSID **NoctiNIRS**, public prototype password **123456789**, device **192.168.4.1**,
+UDP **3333**. WPA2/WPA3 transition mode; one computer; no router required.
+By default, LED/ADC commands remain simulated and emitter reset stays asserted.
+CONFIG_NN2_LED_BRINGUP enables real LED drive on explicit START: 20 optical slots,
+default 5 Hz / 30 mA, maximum 10 Hz. SIMULATED does not mean LEDs are disabled
+in this opt-in mode. Read the bring-up procedure before changing profiles.
+
+Start with [current SoftAP setup](docs/SOFTAP_CURRENT.md). The Owner has reported
+working SoftAP control tests on the preceding communication candidate; the new
+LED candidate has host/static evidence only. The Owner performs full builds and
+flash. Previous STA provisioning instructions
+are superseded; no router credentials or USB provisioning are needed.
+
 
 ## Repository layout
 
@@ -24,7 +43,7 @@ noctinirs-2/
 └── VERSION
 ```
 
-Only the root build definition and `main/` form the active firmware. Files under `reference/` are evidence and design input, not build inputs.
+The root build definition, `main/` and `components/` form the active firmware. Platform components are `nn2_board`, `nn2_config`, `nn2_provision`, `nn2_wifi`, `nn2_net`; the existing `nn2_core`, `nn2_ports`, and `nn2_app` are extended. Files under `reference/` are evidence and design input, not build inputs.
 
 ## Toolchain baseline
 
@@ -36,11 +55,10 @@ Only the root build definition and `main/` form the active firmware. Files under
 ESP-IDF is not bundled with this repository. With ESP-IDF v6.1 activated:
 
 ```powershell
-idf.py set-target esp32s3
-idf.py build
+idf.py -B build/communication -D SDKCONFIG=build/communication/sdkconfig -D 'SDKCONFIG_DEFAULTS=sdkconfig.defaults;sdkconfig.communication' -D IDF_TARGET=esp32s3 build
 ```
 
-The current scaffold only logs its version and an explicit warning that hardware behavior is not implemented.
+Run this yourself in an activated ESP-IDF v6.1 terminal; the separate build/configuration preserves the existing root sdkconfig and old build cache. See the setup guide for details. Changing a defaults file does not override an existing generated configuration.
 
 ## Historical references
 
@@ -56,6 +74,11 @@ A directory name cannot enforce immutability. Any intentional reference update t
 
 ## Governance and workflow
 
+For this local development track, the Owner has explicitly selected the bounded
+workflow in `docs/DECISIONS.md`: local implementation now, with build/flash performed
+by the Owner. Remote publication and independent review are not part of this task.
+The following describes the repository's normal remote workflow.
+
 Read `AGENTS.md` before changing this repository. Normal work follows issue → branch → pull request → CI → independent review → human merge approval. Hardware, timing, power, sensor, RF, and safety claims require evidence from the applicable test class; a successful build is not hardware validation.
 
 The relationship to `ai-engineering-hub` is documentation and governance only—there is no Git submodule. This repository's `project.yaml` links to the canonical hub record at `projects/noctinirs-2/project.yaml`; the hub record links back here. Product source remains owned by this repository.
@@ -65,12 +88,13 @@ The relationship to `ai-engineering-hub` is documentation and governance only—
 - Local working tree prepared.
 - Private GitHub repository URL: verified from local `origin`.
 - Reciprocal hub registration: prepared in both repositories; human owner, backup owner, risk class, and evidence-retention fields remain unresolved.
-- ESP-IDF build: not run because ESP-IDF is not available in the current shell.
+- ESP-IDF build: NOT RUN for this candidate, per Owner instruction. Local v6.1 headers were inspected.
 - On-target and HIL testing: not run.
 
 ## Issue 35 diagnostic candidate (draft PR 36)
 
-Default boot remains the fake ADC / disabled emitter demo. The proposed opt-in
+The fake ADC / disabled emitter demo remains selectable. The default for a fresh
+configuration is now Communication Foundation. The existing opt-in
 ADS131 diagnostic is built with `SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ads131-diagnostic"`
 and a clean generated sdkconfig. It initializes, verifies and reads four signed
 channels, stops, then demonstrates explicit reinitialization. It has no emitter

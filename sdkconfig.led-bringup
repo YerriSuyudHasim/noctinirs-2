@@ -1,0 +1,5 @@
+# Opt-in LED-only adapter; build with defaults + communication + this file.
+CONFIG_NN2_LED_BRINGUP=y
+CONFIG_GPIO_CTRL_FUNC_IN_IRAM=y
+CONFIG_GPTIMER_ISR_CACHE_SAFE=y
+CONFIG_GPTIMER_CTRL_FUNC_IN_IRAM=y

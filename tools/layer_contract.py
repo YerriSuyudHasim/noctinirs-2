@@ -82,6 +82,29 @@ def load_manifest(path=MANIFEST):
 def linked(path):
     return path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction())
 
+def platform_paths(root, inner_paths):
+    """Explicit platform inventory; absence still rejects unknown components."""
+    manifest = Path(root) / 'tools/platform_components.json'
+    if linked(manifest):
+        raise ValueError('platform manifest must be a real file')
+    if not manifest.exists():
+        return []
+    data = json.loads(manifest.read_text(encoding='utf-8'), object_pairs_hook=unique_object)
+    if (not isinstance(data, dict) or set(data) != {'schema_version', 'paths'}
+            or type(data['schema_version']) is not int or data['schema_version'] != 1):
+        raise ValueError('invalid platform manifest schema')
+    paths = data['paths']
+    if (not isinstance(paths, list) or not paths
+            or any(not isinstance(p, str) or not re.fullmatch(r'components/nn2_[a-z0-9_]+', p) for p in paths)
+            or len(set(paths)) != len(paths) or set(paths).intersection(inner_paths)):
+        raise ValueError('invalid, duplicate or inner-layer platform path')
+    for path in paths:
+        directory = Path(root) / path
+        if linked(directory) or not directory.is_dir():
+            raise ValueError('platform component must be a real directory: ' + path)
+    return paths
+
+
 def detect(root, rows):
     root = Path(root)
     if not root.is_dir():
@@ -90,10 +113,11 @@ def detect(root, rows):
     if linked(base) or (base.exists() and not base.is_dir()):
         raise ValueError('components must be a real directory')
     paths = [row['path'] for row in rows]
+    platforms = platform_paths(root, paths)
     if base.exists():
         with os.scandir(base) as entries:
             for entry in sorted(entries, key=lambda x: x.name):
-                if entry.name.startswith('nn2_') and 'components/' + entry.name not in paths:
+                if entry.name.startswith('nn2_') and 'components/' + entry.name not in paths + platforms:
                     raise ValueError('unmapped component: ' + entry.name)
     present = []
     for path in paths:

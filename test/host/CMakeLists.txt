@@ -26,7 +26,10 @@ target_compile_options(nn2_host_tests PRIVATE -Wall -Wextra -Werror -pedantic)
 nn2_require_c11(nn2_host_tests)
 
 # Each header gets fresh preprocessor state. Intentional combined probes follow.
-file(GLOB_RECURSE headers CONFIGURE_DEPENDS "${ROOT}/components/*.h")
+file(GLOB_RECURSE headers CONFIGURE_DEPENDS
+    "${ROOT}/components/nn2_core/*.h"
+    "${ROOT}/components/nn2_ports/*.h"
+    "${ROOT}/components/nn2_app/*.h")
 file(WRITE "${CMAKE_BINARY_DIR}/host_headers.tsv" "header\tprobe\n")
 foreach(header IN LISTS headers)
     file(RELATIVE_PATH relative "${ROOT}" "${header}")
