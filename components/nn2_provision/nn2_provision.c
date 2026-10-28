@@ -74,7 +74,7 @@ bool nn2_provision_poll(uint64_t now_us)
     if (s_used && now_us - s_started_at >= UINT64_C(10000000)) {
         wipe(s_line, sizeof(s_line));
         s_used = 0;
-        s_discard = true; /* Drain through LF before accepting another command. */
+        s_discard = true; /* Drain through CR or LF before accepting another command. */
         ++s_status.timed_out_lines;
     }
     uint8_t chunk[64];
@@ -82,7 +82,14 @@ bool nn2_provision_poll(uint64_t now_us)
     bool stored = false;
     for (int i = 0; i < count; ++i) {
         uint8_t byte = chunk[i];
-        if (byte == '\n') {
+        /* V4 console intent: CR and LF terminate a command; CRLF is one
+         * terminator even across polls. ESP-IDF Monitor normally sends CR. */
+        if (byte == '\n' && s_cr) {
+            s_cr = false;
+            continue;
+        }
+        s_cr = false;
+        if (byte == '\n' || byte == '\r') {
             if (s_discard) {
                 ++s_status.rejected_lines;
                 reply("ERR malformed-or-expired-line\n");
@@ -111,11 +118,10 @@ bool nn2_provision_poll(uint64_t now_us)
                 }
             }
             reset_line();
+            s_cr = byte == '\r';
         } else if (s_discard) {
             continue;
-        } else if (byte == '\r' && !s_cr) {
-            s_cr = true;
-        } else if (s_cr || !byte || s_used == sizeof(s_line) - 1) {
+        } else if (!byte || s_used == sizeof(s_line) - 1) {
             wipe(s_line, sizeof(s_line));
             s_used = 0;
             s_discard = true;
