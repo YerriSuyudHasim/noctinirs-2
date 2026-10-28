@@ -52,6 +52,16 @@ static void filter_and_underk(void)
     TEST_ASSERT_EQUAL(NN2_ACQ_UNDER_K,payload[39]);
     TEST_ASSERT_EQUAL(800,nn2_core_get_u32(payload+44)); /* Raw ON survives invalid pair. */
 }
+static void unequal_and_minimum_pair_quality(void)
+{
+    for (unsigned off=8;off<=9;++off) {
+        setup();window(1,0,101000);window(1,1,103500);
+        for(unsigned k=0;k<8;++k) sample(102000+k*125,100);
+        for(unsigned k=0;k<off;++k) sample(104500+k*125,40);
+        window(2,0,201000);TEST_ASSERT_EQUAL(NN2_OK,sample(201125,0));
+        TEST_ASSERT_EQUAL(off==8?NN2_ACQ_MINIMUM:NN2_ACQ_INVALID,payload[39]);
+    }
+}
 static void gap_session_and_restart(void)
 {
     setup(); window(1,0,101000); sample(102000,100); ++seq;
@@ -106,5 +116,5 @@ static void frame_session_provenance(void)
 void test_acquisition_suite(void)
 {
     RUN_TEST(frame_session_provenance); RUN_TEST(paired_frame); RUN_TEST(filter_and_underk);
-    RUN_TEST(gap_session_and_restart); RUN_TEST(allowed_rates);
+    RUN_TEST(unequal_and_minimum_pair_quality); RUN_TEST(gap_session_and_restart); RUN_TEST(allowed_rates);
 }

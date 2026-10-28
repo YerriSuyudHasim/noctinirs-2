@@ -30,8 +30,9 @@ static void encode(const nn2_core_acquisition_t *a, uint8_t *p)
         const nn2_core_acq_slot_t *v=&a->slots[s]; uint8_t *q=p+36+s*56;
         bool valid=v->used[0]>=8 && v->used[0]==v->used[1] && a->frame != 0;
         q[0]=(uint8_t)s; q[1]=v->used[0]; q[2]=v->used[1];
-        q[3]=a->frame==0 ? NN2_ACQ_WARMUP : !valid ? NN2_ACQ_UNDER_K :
-            v->used[0]<10 ? NN2_ACQ_MINIMUM : NN2_ACQ_TARGET;
+        q[3]=a->frame==0 ? NN2_ACQ_WARMUP :
+            (v->used[0]<8 || v->used[1]<8) ? NN2_ACQ_UNDER_K :
+            !valid ? NN2_ACQ_INVALID : v->used[0]<10 ? NN2_ACQ_MINIMUM : NN2_ACQ_TARGET;
         nn2_core_put_u32(q+4, valid ? 0u : 1u); /* Invalid pair / warmup. */
         for (unsigned phase=0; phase<2; ++phase) {
             for (unsigned ch=0; ch<4; ++ch) {
