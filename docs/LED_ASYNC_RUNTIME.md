@@ -122,6 +122,15 @@ Expected resulting INFO includes `short_policy=BENCH_WARN;i2c=ASYNC@800000`,
 `duration=HOST;fs_min=2;fs_max=10;limit_s=0;single_run=0`.
 This procedure builds only. It is not an agent flash/energization instruction.
 
+## Subsequent Owner results
+
+The Owner built/flashed commit197134e and reported successful Fs5/10s and Fs10/10s
+runs on the same boot23. Fs10 completed99 frames, with zero deadline/I2C errors
+and an806us reported maximum completion against a2500us phase budget. See
+[Owner result analysis and limits](LED_ASYNC_OWNER_RESULTS.md) and its raw evidence.
+These later Owner results supersede the earlier unknown-image/untested-on-target
+state for this exact image only; the original author checks remain unchanged.
+
 ## Verification, risks and recovery
 
 Actual lightweight results and source fingerprint are recorded in
