@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(PROJECT_VER "0.1.0")
+include(cmake/nn2_branch_profile.cmake)
+nn2_prepare_branch_profile()
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(noctinirs2)
+nn2_validate_branch_profile()
 
 # VS Code / CLI board selection asserts the GENERATED policy, not just defaults.
 set(NN2_EXPECT_LED_POLICY "" CACHE STRING "Explicit owner-selected LED policy (STRICT or BENCH_WARN)")

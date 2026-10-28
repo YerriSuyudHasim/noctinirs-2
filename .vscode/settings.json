@@ -11,7 +11,7 @@
     "clangd.arguments": [
         "--background-index",
         "--query-driver=**",
-        "--compile-commands-dir=c:\\Users\\doeki\\Documents\\GitHub\\noctinirs-2/build"
+        "--compile-commands-dir=c:\\Users\\doeki\\Documents\\GitHub\\noctinirs-2/build/ads131-acquisition"
     ],
     "idf.flashType": "UART",
     "idf.port": "COM11",
@@ -19,11 +19,16 @@
         "-G",
         "Ninja",
         "-DPYTHON_DEPS_CHECKED=1",
-        "-DESP_PLATFORM=1"
+        "-DESP_PLATFORM=1",
+        "-DNN2_USE_BRANCH_PROFILE=ON"
     ],
-    "idf.buildPath": "${workspaceFolder}/build",
-    "idf.sdkconfigFilePath": "${workspaceFolder}/sdkconfig",
+    "idf.buildPath": "${workspaceFolder}/build/ads131-acquisition",
+    "idf.sdkconfigFilePath": "${workspaceFolder}/build/profile-configs/ads131-acquisition/sdkconfig",
     "idf.sdkconfigDefaults": [
-        "sdkconfig.defaults"
+        "sdkconfig.defaults",
+        "sdkconfig.communication",
+        "sdkconfig.led-bringup",
+        "sdkconfig.led-short-bench",
+        "sdkconfig.acquisition"
     ]
 }
