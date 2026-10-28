@@ -31,3 +31,15 @@ endforeach()
 enable_testing()
 add_test(NAME led_short_owner_and_pca COMMAND nn2_led_short_tests)
 add_test(NAME led_owner_and_pca COMMAND nn2_led_tests)
+
+add_executable(nn2_acquisition_led_tests "${ROOT}/components/nn2_core/src/nn2_core_acquisition.c" test_acquisition_led.c "${ROOT}/components/nn2_board/nn2_board_pca.c"
+    "${ROOT}/components/nn2_app/src/nn2_app_comm.c" "${ROOT}/components/nn2_core/src/nn2_core_protocol.c")
+target_include_directories(nn2_acquisition_led_tests PRIVATE stubs "${ROOT}/components/nn2_board/include"
+    "${ROOT}/components/nn2_core/include" "${ROOT}/components/nn2_ports/include"
+    "${ROOT}/components/nn2_app/include" "${ROOT}/main/adapters")
+if(MSVC)
+    target_compile_options(nn2_acquisition_led_tests PRIVATE /W4 /WX)
+else()
+    target_compile_options(nn2_acquisition_led_tests PRIVATE -Wall -Wextra -Werror -pedantic)
+endif()
+add_test(NAME acquisition_led_windows COMMAND nn2_acquisition_led_tests)

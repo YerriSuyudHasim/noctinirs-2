@@ -123,7 +123,7 @@ static void preserved(uint32_t op,bool expired)
     TEST_ASSERT_EQUAL(2u,transfer_count); TEST_ASSERT_EQUAL(2u,d.logic.count);
     TEST_ASSERT_EQUAL(0u,d.logic.observation.lost); TEST_ASSERT_EQUAL(0u,d.logic.observation.loss_unknown);
     TEST_ASSERT_EQUAL(NN2_ADC_FAULT_NONE,d.logic.observation.fault);
-    TEST_ASSERT_EQUAL(0u,d.logic.items[1].quality);
+    TEST_ASSERT_EQUAL(NN2_ADC_QUALITY_NO_EDGE,d.logic.items[1].quality);
     owner_iteration(&d,0u); TEST_ASSERT_EQUAL(2u,transfer_count);
 }
 static void r1_rejected_init(void) { preserved(CMD_INIT,false); }
@@ -146,7 +146,7 @@ static void positive_acquisition(void)
 {
     fresh(); clock_us=100u; owner_iteration(&d,1u); clock_us=225u; owner_iteration(&d,1u);
     TEST_ASSERT_EQUAL(2u,d.logic.observation.sequence); TEST_ASSERT_EQUAL(2u,d.logic.count);
-    TEST_ASSERT_EQUAL(0u,d.logic.observation.lost); TEST_ASSERT_EQUAL(0u,d.logic.items[1].quality);
+    TEST_ASSERT_EQUAL(0u,d.logic.observation.lost); TEST_ASSERT_EQUAL(NN2_ADC_QUALITY_NO_EDGE,d.logic.items[1].quality);
 }
 static void positive_start_stop_resynchronization(void)
 {

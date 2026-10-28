@@ -129,6 +129,7 @@ nn2_status_t nn2_ads131_start(nn2_ads131_logic_t *d)
     if (d->observation.state != NN2_ADC_READY) return NN2_ERR_INVALID_STATE;
     if (d->io.sync(d->io.ctx) != NN2_OK) return nn2_ads131_fail(d, NN2_ADC_FAULT_RESET);
     d->last_service_us = d->io.now_us(d->io.ctx); d->settling = 2u;
+    if (d->io.drdy_latch) (void)d->io.drdy_latch(d->io.ctx, &d->edge_serial);
     d->observation.state = NN2_ADC_RUNNING; return NN2_OK;
 }
 nn2_status_t nn2_ads131_stop(nn2_ads131_logic_t *d)
@@ -140,7 +141,8 @@ nn2_status_t nn2_ads131_stop(nn2_ads131_logic_t *d)
 nn2_status_t nn2_ads131_service(nn2_ads131_logic_t *d, uint32_t notifications)
 {
     uint8_t rx[NN2_ADS131_BYTES]; nn2_core_adc_record_t frame;
-    uint64_t now;
+    uint64_t now, edge = 0u;
+    uint32_t serial = 0u;
     if (!d) return NN2_ERR_INVALID_ARG;
     if (d->observation.state != NN2_ADC_RUNNING) return NN2_ERR_INVALID_STATE;
     now = d->io.now_us(d->io.ctx);
@@ -155,7 +157,23 @@ nn2_status_t nn2_ads131_service(nn2_ads131_logic_t *d, uint32_t notifications)
         d->observation.lost += notifications; d->observation.loss_unknown++;
         return nn2_ads131_fail(d, NN2_ADC_FAULT_GAP);
     }
+    if (d->io.drdy_latch) {
+        edge = d->io.drdy_latch(d->io.ctx, &serial);
+        if (!edge || serial - d->edge_serial != 1u || now < edge || now - edge >= 125u) {
+            d->observation.lost++; d->observation.loss_unknown++;
+            return nn2_ads131_fail(d, NN2_ADC_FAULT_GAP);
+        }
+    }
     if (exchange(d, 0u, 0u, rx) != NN2_OK) { d->observation.lost++; return NN2_ERR_IO; }
+    if (d->io.drdy_latch) {
+        uint32_t after_serial;
+        (void)d->io.drdy_latch(d->io.ctx, &after_serial);
+        if (serial != after_serial || d->io.now_us(d->io.ctx) - edge >= 125u) {
+            d->observation.lost++; d->observation.loss_unknown++;
+            return nn2_ads131_fail(d, NN2_ADC_FAULT_GAP);
+        }
+        d->edge_serial = serial;
+    }
     now = d->io.now_us(d->io.ctx);
     d->last_service_us = now;
     if (d->settling) { d->settling--; return NN2_OK; }
@@ -168,7 +186,8 @@ nn2_status_t nn2_ads131_service(nn2_ads131_logic_t *d, uint32_t notifications)
         d->quality |= NN2_ADC_QUALITY_OVERFLOW | NN2_ADC_QUALITY_GAP;
     }
     frame.sequence = d->observation.sequence; frame.session = d->observation.session;
-    frame.quality = d->quality;
+    frame.drdy_us = edge;
+    frame.quality = d->quality | (d->io.drdy_latch ? 0u : NN2_ADC_QUALITY_NO_EDGE);
     d->items[(d->head + d->count) % NN2_ADS131_CAPACITY] = frame; d->count++;
     d->observation.produced++; d->observation.occupancy = d->count;
     if (d->count > d->observation.max_occupancy) d->observation.max_occupancy = d->count;

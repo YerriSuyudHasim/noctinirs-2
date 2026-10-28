@@ -1,6 +1,12 @@
 /* Opt-in LED-only owner. Host controls duration; STOP/lease/faults cancel.
  * No ADC, no streaming samples, no I2C from ISR. Stop code2 is reserved. */
+#include "sdkconfig.h"
 #include "nn2_led_bringup.h"
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+#include "nn2_acquisition_esp.h"
+#include "esp_timer.h"
+static uint64_t s_clock_origin;
+#endif
 #include "nn2_board.h"
 #include "nn2_board_pca.h"
 #include "nn2_board_wiring.h"
@@ -413,6 +419,9 @@ static esp_err_t prepare(const nn2_port_optical_config_t *config)
         s_status.state = NN2_OPTICAL_RUNNING;
     }
     if (valid) {
+        #if CONFIG_NN2_OPTICAL_ACQUISITION
+        s_clock_origin = (uint64_t)esp_timer_get_time();
+#endif
         err = gptimer_start(s_timer);
         if (err == ESP_OK) s_timer_started = true;
     } else err = ESP_ERR_INVALID_STATE;
@@ -438,6 +447,21 @@ static void phase_work(uint32_t phase, uint64_t alarm)
     nn2_status_t result = (phase & 1u) ? nn2_board_pca_off(&s_chip) :
         nn2_board_pca_on(&s_chip, (uint8_t)(phase / 2));
     if (result == NN2_OK && phase == 39) result = nn2_board_pca_health(&s_chip);
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    uint64_t commit = (uint64_t)esp_timer_get_time();
+    uint64_t frame_origin = s_clock_origin + alarm - (uint64_t)phase * s_half_us;
+    nn2_core_acq_window_t window = {
+        .commit_us = commit,
+        .end_us = s_clock_origin + alarm + s_half_us - NN2_ACQ_GUARD_US,
+        .origin_us = frame_origin,
+        .slot_start_us = frame_origin + (uint64_t)(phase / 2u) * 2u * s_half_us,
+        .frame = s_status.frames,
+        .phase = (uint8_t)phase,
+    };
+    if (result == NN2_OK && still_armed() && !nn2_acquisition_window(&window)) {
+        fault(ESP_ERR_NO_MEM); return;
+    }
+#endif
     esp_err_t count_result = gptimer_get_raw_count(s_timer, &after);
     portENTER_CRITICAL(&s_lock);
     s_status.pca = s_chip.diagnostics;
@@ -505,7 +529,12 @@ static void owner_task(void *ctx)
 static nn2_status_t start(void *ctx, const nn2_port_optical_config_t *config)
 {
     (void)ctx;
-    if (!config || !nn2_core_optical_fs_valid(config->fs)) return NN2_ERR_INVALID_ARG;
+    if (!config) return NN2_ERR_INVALID_ARG;
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    if (!nn2_core_acquisition_fs_valid(config->fs)) return NN2_ERR_INVALID_ARG;
+#else
+    if (!nn2_core_optical_fs_valid(config->fs)) return NN2_ERR_INVALID_ARG;
+#endif
     for (unsigned i = 0; i < 20; ++i)
         if (config->current_ma[i] > NN2_OPTICAL_BRINGUP_MA) return NN2_ERR_INVALID_ARG;
     if (CONFIG_NN2_LED_SHORT_BENCH) {

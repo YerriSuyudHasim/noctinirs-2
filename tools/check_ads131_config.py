@@ -40,14 +40,23 @@ def check(path, diagnostic=False, profile=None):
     selected = profile or ('diagnostic' if diagnostic else 'fake')
     choices = {'fake': 'FAKE', 'communication': 'COMMUNICATION', 'diagnostic': 'ADS131_DIAGNOSTIC'}
     enabled = [name for name in choices.values() if config.get('CONFIG_NN2_PROFILE_' + name) == 'y']
-    if enabled != [choices[selected]]:
+    if enabled != [choices['communication' if selected == 'acquisition' else selected]]:
         raise ValueError('expected exactly one profile: ' + selected)
-    if selected == 'communication':
+    if selected in ('communication', 'acquisition'):
         for name in ('ESP_CONSOLE_USB_SERIAL_JTAG', 'ESP_WIFI_SOFTAP_SUPPORT'):
             if config.get('CONFIG_' + name) != 'y':
                 raise ValueError('required communication option: ' + name)
         if int(config.get('CONFIG_ESP_MAIN_TASK_STACK_SIZE', '0')) < 12288:
             raise ValueError('communication main stack below required12288 bytes')
+    if selected == 'acquisition':
+        for name in ('NN2_OPTICAL_ACQUISITION', 'NN2_LED_BRINGUP', 'ESP_TASK_WDT_EN', 'ESP_TASK_WDT_INIT', 'ESPTOOLPY_FLASHMODE_DIO', 'ESPTOOLPY_FLASHSIZE_16MB'):
+            if config.get('CONFIG_' + name) != 'y':
+                raise ValueError('required acquisition option: ' + name)
+        for name in ('SPIRAM', 'SPIRAM_MODE_OCT', 'ESPTOOLPY_OCT_FLASH'):
+            if config.get('CONFIG_' + name, 'n') != 'n':
+                raise ValueError('prohibited acquisition option: ' + name)
+        if config.get('CONFIG_NN2_LED_RUNTIME_I2C_HZ') != '800000':
+            raise ValueError('acquisition LED runtime must remain800kHz')
     if selected == 'diagnostic':
         for name in ('SPIRAM', 'SPIRAM_MODE_OCT', 'ESPTOOLPY_OCT_FLASH'):
             if config.get('CONFIG_' + name, 'n') != 'n':
@@ -91,7 +100,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('config', nargs='?', type=Path)
     parser.add_argument('--diagnostic', action='store_true')
-    parser.add_argument('--profile', choices=('fake', 'communication', 'diagnostic'))
+    parser.add_argument('--profile', choices=('fake', 'communication', 'diagnostic', 'acquisition'))
     parser.add_argument('--selftest', action='store_true')
     parser.add_argument('--cc', help='compile production guard against generated config/header')
     parser.add_argument('--generated-header', type=Path)

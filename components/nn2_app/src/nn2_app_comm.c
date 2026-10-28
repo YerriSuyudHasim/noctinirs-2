@@ -1,4 +1,5 @@
 #include "nn2_app_comm.h"
+#include "nn2_core_acquisition.h"
 #include <string.h>
 #define MAGIC UINT32_C(0x41445234)
 #define REPLY_MAX 256u
@@ -260,7 +261,8 @@ static uint16_t execute(comm_t *c, uint64_t peer, uint64_t now, uint16_t op,
     end_session(c, NN2_COMM_IDLE);
     return NN2_REPLY_OK;
   case NN2_CMD_SET_FS:
-    if (!nn2_core_optical_fs_valid(arg[0]))
+    if (!nn2_core_optical_fs_valid(arg[0]) || (c->optical.real_samples &&
+        !(arg[0]==2 || arg[0]==4 || arg[0]==5 || arg[0]==8 || arg[0]==10)))
       return NN2_REPLY_ARGUMENT;
     if (c->state != NN2_COMM_IDLE)
       return NN2_REPLY_STATE;
@@ -360,7 +362,7 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
   }
   nn2_core_packet_t reply = {.type = NN2_MSG_REPLY,
                              .protocol_version = 1,
-                             .flags = NN2_FLAG_SIMULATED,
+                             .flags = c.optical.real_samples ? 0 : NN2_FLAG_SIMULATED,
                              .session_id = c.session,
                              .sequence = ++c.sequence,
                              .timestamp_us = now,
@@ -371,7 +373,7 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
   uint8_t *body = reply.payload + 8;
   body[0] = c.state;
   nn2_core_put_u16(body + 1, c.fault);
-  body[3] = 1;
+  body[3] = c.optical.real_samples ? 0 : 1;
   nn2_core_put_u64(body + 4, c.boot);
   nn2_core_put_u64(body + 12, now);
   if (!error && op == NN2_CMD_INFO) {
@@ -431,4 +433,23 @@ void nn2_app_comm_stamp_tx(uint8_t *reply, size_t length, uint64_t now) {
   nn2_core_put_u64(reply + 20, now);
   nn2_core_put_u64(reply + 72, now);
   nn2_core_put_u32(reply + length - 4, nn2_core_crc32(reply, length - 4));
+}
+
+/* Same Application/network caller as command processing; FRAME sequence shares
+ * envelope sequence, while ACQ1 has a separate optical-frame counter. */
+size_t nn2_app_comm_frame(nn2_app_comm_storage_t *s, uint64_t *peer,
+                         uint8_t *output, size_t capacity)
+{
+    comm_t c; nn2_core_packet_t packet={.type=NN2_MSG_FRAME,
+        .protocol_version=1,.flags=NN2_FLAG_TS_ESTIMATED};
+    if (!peer || !output || capacity<NN2_CORE_PACKET_MAX || !load(s,&c) ||
+        c.state!=NN2_COMM_STREAMING || !c.owner || !c.optical.read_frame)
+        return 0;
+    if (c.optical.read_frame(c.optical.ctx,packet.payload,sizeof(packet.payload),
+        &packet.timestamp_us)!=NN2_OK) return 0;
+    packet.length=NN2_ACQ_PAYLOAD_SIZE; /* ACQ1: versioned local binding. */
+    packet.session_id=c.session; packet.sequence=++c.sequence;
+    *peer=c.owner;
+    size_t count=nn2_core_packet_encode(&packet,output,capacity);
+    save(s,&c); return count;
 }

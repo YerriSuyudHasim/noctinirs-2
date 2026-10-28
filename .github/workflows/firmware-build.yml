@@ -151,6 +151,9 @@ jobs:
           - profile: communication
             suffix: '-communication'
             defaults: sdkconfig.defaults;sdkconfig.communication
+          - profile: acquisition
+            suffix: '-ads131-acquisition'
+            defaults: sdkconfig.defaults;sdkconfig.communication;sdkconfig.led-bringup;sdkconfig.led-short-bench;sdkconfig.acquisition
           - profile: diagnostic
             suffix: '-ads131-diagnostic'
             defaults: sdkconfig.defaults;sdkconfig.ads131-diagnostic

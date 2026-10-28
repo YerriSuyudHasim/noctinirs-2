@@ -2,9 +2,10 @@
 #ifndef NN2_CORE_ADC_RECORD_H
 #define NN2_CORE_ADC_RECORD_H
 #include "nn2_core_types.h"
-enum { NN2_ADC_QUALITY_GAP = 1u, NN2_ADC_QUALITY_OVERFLOW = 2u };
+enum { NN2_ADC_QUALITY_GAP = 1u, NN2_ADC_QUALITY_OVERFLOW = 2u, NN2_ADC_QUALITY_NO_EDGE = 4u };
 typedef struct {
-    uint64_t read_complete_us; /* Software time, never conversion/optical edge. */
+    uint64_t read_complete_us; /* Software SPI completion time. */
+    uint64_t drdy_us; /* ISR software latch; estimated conversion-ready time. */
     int32_t channel[4]; /* CH0..CH3 simultaneous signed int24. */
     uint32_t sequence, session, quality;
     uint16_t status, crc_received;

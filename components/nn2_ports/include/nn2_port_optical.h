@@ -17,6 +17,11 @@ typedef struct {
     nn2_status_t (*clear_fault)(void *);
     void *ctx;
     uint16_t current_limit_ma;
+    /* Optional acquisition consumer: one Application task, nonblocking pop.
+     * Copies a FRAME payload; EMPTY leaves output unchanged. real_samples
+     * changes provenance only for this explicit, complete ADC+LED binding. */
+    nn2_status_t (*read_frame)(void *, uint8_t *, size_t, uint64_t *timestamp);
+    bool real_samples;
     const char *policy_info; /* Static capability text, or NULL for strict. */
 } nn2_port_optical_t;
 #endif

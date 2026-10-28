@@ -23,6 +23,9 @@ typedef struct {
     bool high, ready_failure, reset_failure, corrupt, bad_ack;
 } fake_t;
 static fake_t fake;
+static uint64_t latched_edge;
+static uint32_t latched_serial;
+static bool edge_during_transfer;
 static nn2_ads131_logic_t dev;
 static const nn2_ads131_config_t config = {8192000u,512u,8000u,8000000u};
 static nn2_status_t fake_transfer(void *ctx, const uint8_t *tx, uint8_t *rx)
@@ -44,6 +47,7 @@ static nn2_status_t fake_transfer(void *ctx, const uint8_t *tx, uint8_t *rx)
     }
     uint16_t crc=oracle_crc(rx);rx[15]=(uint8_t)(crc>>8);rx[16]=(uint8_t)crc;
     if (f->corrupt) rx[3]^=1u;
+    if (edge_during_transfer) ++latched_serial;
     f->time+=18u; return NN2_OK;
 }
 static nn2_status_t fake_reset(void *ctx,bool high)
@@ -65,7 +69,7 @@ static uint64_t fake_now(void *ctx) { return ((fake_t*)ctx)->time; }
 static void bind_fake(void)
 {
     memset(&fake,0,sizeof(fake));fake.mismatch=99u;
-    nn2_ads131_io_t io={&fake,fake_transfer,fake_reset,fake_sync,fake_delay,fake_ready,fake_now};
+    nn2_ads131_io_t io={&fake,fake_transfer,fake_reset,fake_sync,fake_delay,fake_ready,fake_now,NULL};
     nn2_ads131_logic_bind(&dev,io);
 }
 static void running(void)
@@ -248,8 +252,35 @@ static void diagnostic_retained_fault_is_not_success(void)
     TEST_ASSERT_EQUAL_MEMORY(&before,&out,sizeof(out));
     app_observed_fault=false;
 }
+static uint64_t fake_latch(void *ctx,uint32_t *serial)
+{ (void)ctx; *serial=latched_serial; return latched_edge; }
+static void drdy_timestamp_and_crossing(void)
+{
+    running(); dev.io.drdy_latch=fake_latch; dev.edge_serial=0;
+    latched_edge=fake.time;latched_serial=1;edge_during_transfer=false;
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_service(&dev,1));
+    nn2_core_adc_record_t r;
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_pop(&dev,&r));
+    TEST_ASSERT_EQUAL_UINT64(latched_edge,r.drdy_us);
+    TEST_ASSERT_EQUAL_UINT64(latched_edge+18,r.read_complete_us);
+    TEST_ASSERT_EQUAL(0,r.quality);
+    fake.time=latched_edge+125;latched_edge=fake.time;latched_serial=2;
+    edge_during_transfer=true;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_service(&dev,1));
+    TEST_ASSERT_EQUAL(NN2_ADC_FAULT_GAP,dev.observation.fault);
+    TEST_ASSERT_EQUAL(0,dev.count);
+    edge_during_transfer=false;
+}
+static void stale_drdy_rejected(void)
+{
+    running();dev.io.drdy_latch=fake_latch;dev.edge_serial=0;
+    latched_edge=fake.time;latched_serial=1;fake.time+=125;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_service(&dev,1));
+    TEST_ASSERT_EQUAL(1,dev.observation.loss_unknown);
+}
 void test_ads131_suite(void)
 {
+    RUN_TEST(drdy_timestamp_and_crossing); RUN_TEST(stale_drdy_rejected);
     RUN_TEST(complete_vectors);RUN_TEST(corruption_output_validity);RUN_TEST(signed_and_crc_answers);
     RUN_TEST(tuple_rejection);RUN_TEST(initialize_pipeline_readback);RUN_TEST(mismatch_rollback);
     RUN_TEST(masked_id);RUN_TEST(each_spi_failure_rolls_back);RUN_TEST(ready_reset_timeout);

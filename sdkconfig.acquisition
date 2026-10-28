@@ -1,0 +1,5 @@
+# Overlay defaults + communication + led-bringup + led-short-bench, then this.
+CONFIG_NN2_OPTICAL_ACQUISITION=y
+CONFIG_NN2_LED_RUNTIME_I2C_HZ=800000
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y

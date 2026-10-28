@@ -16,6 +16,7 @@ typedef struct {
     void (*delay_us)(void *, uint32_t);
     nn2_status_t (*wait_ready)(void *, uint32_t timeout_ms);
     uint64_t (*now_us)(void *);
+    uint64_t (*drdy_latch)(void *, uint32_t *serial); /* Optional diagnostic seam. */
 } nn2_ads131_io_t;
 typedef struct {
     nn2_ads131_io_t io;
@@ -23,6 +24,7 @@ typedef struct {
     nn2_core_adc_observation_t observation;
     uint32_t head, count, quality, settling;
     uint64_t last_service_us;
+    uint32_t edge_serial;
 } nn2_ads131_logic_t;
 uint16_t nn2_ads131_crc(const uint8_t *data, size_t size);
 int32_t nn2_ads131_sext24(uint32_t value);

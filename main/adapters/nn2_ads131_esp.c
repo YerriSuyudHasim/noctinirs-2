@@ -36,11 +36,22 @@ typedef struct {
     uint8_t command_storage[sizeof(request_t)], reply_storage[sizeof(reply_t)];
     uint32_t next_id;
 } device_t;
-_Static_assert(sizeof(device_t) <= 12288u, "Review internal static memory budget");
+_Static_assert(sizeof(device_t) <= 14336u, "Review internal static memory budget");
 static device_t device;
 static portMUX_TYPE sync_lock = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE edge_lock = portMUX_INITIALIZER_UNLOCKED;
+static uint64_t edge_time;
+static uint32_t edge_serial;
+static uint64_t drdy_latch(void *ctx, uint32_t *serial)
+{
+    (void)ctx;
+    portENTER_CRITICAL(&edge_lock);
+    uint64_t stamp = edge_time; *serial = edge_serial;
+    portEXIT_CRITICAL(&edge_lock);
+    return stamp;
+}
 _Static_assert(sizeof(StackType_t) == 1u, "IDF Xtensa stack depth is bytes");
-_Static_assert(sizeof(nn2_core_adc_record_t) <= 48u, "Review queue memory budget if record grows");
+_Static_assert(sizeof(nn2_core_adc_record_t) <= 56u, "Review queue memory budget if record grows");
 static TickType_t ticks(uint32_t ms)
 {
     return (TickType_t)(((uint64_t)ms * configTICK_RATE_HZ + 999u) / 1000u);
@@ -96,6 +107,9 @@ static nn2_status_t transfer(void *ctx, const uint8_t *tx, uint8_t *rx)
 static void drdy_isr(void *arg)
 {
     BaseType_t wake = pdFALSE;
+    portENTER_CRITICAL_ISR(&edge_lock);
+    edge_time = (uint64_t)esp_timer_get_time(); ++edge_serial;
+    portEXIT_CRITICAL_ISR(&edge_lock);
     xTaskNotifyFromISR((TaskHandle_t)arg, 0u, eIncrement, &wake);
     if (wake) portYIELD_FROM_ISR();
 }
@@ -127,6 +141,7 @@ static nn2_status_t setup(device_t *d)
     err = spi_bus_add_device((spi_host_device_t)d->board.host, &spi, &d->spi);
     if (err != ESP_OK) { (void)spi_bus_free((spi_host_device_t)d->board.host); return mapped(d, err); }
     err = gpio_install_isr_service(0);
+    if (err == ESP_ERR_INVALID_STATE) err = ESP_OK; /* Existing GPIO ISR service. */
     if (err == ESP_OK) err = gpio_set_intr_type(d->board.drdy, GPIO_INTR_NEGEDGE);
     if (err == ESP_OK) err = gpio_isr_handler_add(d->board.drdy, drdy_isr, xTaskGetCurrentTaskHandle());
     if (err != ESP_OK) {
@@ -155,7 +170,7 @@ nn2_status_t nn2_adapter_ads131_create(const nn2_ads131_board_t *board, nn2_port
     if (d->created) return NN2_ERR_INVALID_STATE;
     d->board = *board; d->caller = xTaskGetCurrentTaskHandle();
     nn2_ads131_io_t io = { .ctx=d, .transfer=transfer, .reset=reset, .sync=sync_adc,
-        .delay_us=delay_us, .wait_ready=wait_ready, .now_us=now_us };
+        .delay_us=delay_us, .wait_ready=wait_ready, .now_us=now_us, .drdy_latch=drdy_latch };
     nn2_ads131_logic_bind(&d->logic, io);
     d->commands = xQueueCreateStatic(1u, sizeof(request_t), d->command_storage, &d->commands_control);
     d->replies = xQueueCreateStatic(1u, sizeof(reply_t), d->reply_storage, &d->replies_control);
