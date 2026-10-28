@@ -1,4 +1,4 @@
-/* Real communication, optional LED-only bench drive; no optical acquisition. */
+/* Communication with optional LED-only or ADS131 optical acquisition. */
 #include "sdkconfig.h"
 
 #if CONFIG_NN2_PROFILE_COMMUNICATION
@@ -180,7 +180,11 @@ void app_main(void)
     if (result != ESP_OK) {
         goto fail;
     }
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    ESP_LOGI(TAG, "v0.1.0 ADR0004/1 boot=%" PRIu64 " real ADC/LED capability; acquisition stopped", boot_id);
+#else
     ESP_LOGI(TAG, "v0.1.0 ADR0004/1 boot=%" PRIu64 " SIMULATED; RESET_LED held low", boot_id);
+#endif
     ESP_LOGI(TAG, "SoftAP NoctiNIRS; device 192.168.4.1; UDP port %u", (unsigned)CONFIG_NN2_UDP_PORT);
     stage = "network startup";
     result = nn2_wifi_start();
