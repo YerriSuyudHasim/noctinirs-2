@@ -2,5 +2,14 @@
 # Select the target explicitly with: idf.py set-target esp32s3
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+# Generic checkout uses FAKE; COMMUNICATION and real LED profiles are explicit.
+CONFIG_NN2_PROFILE_FAKE=y
+# Keep sufficient main-task stack when an explicit communication overlay is used.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=12288
 # Issue #9: omit IDF build timestamps and map source/debug paths deterministically.
 CONFIG_APP_REPRODUCIBLE_BUILD=y
+
+# WPA2/WPA3 transition SoftAP, ESP-IDF v6.1.
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+CONFIG_ESP_WIFI_ENABLE_WPA3_SAE=y
+CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT=y

@@ -1,0 +1,63 @@
+{
+  "base_commit": "d53a0b345575f12d94e290628269bff006dc07e0",
+  "branch": "feat/33-board-bringup",
+  "dirty_workspace": true,
+  "scope": "Affected source and test inputs for fault267 investigation; not a full firmware source fingerprint",
+  "affected_inputs_sha256": "94e5fa8d0c8c55abde7378b6a0cb84c484ee5cd3fb91f1f4cedfeee32e2cae7f",
+  "files": [
+    {
+      "path": "components/nn2_board/include/nn2_board_pca.h",
+      "sha256": "9d65512cffc8bf927b5e780ab78b2b4e4c616bf0df5930bbf5e6fd8a9acac273"
+    },
+    {
+      "path": "components/nn2_board/nn2_board_pca.c",
+      "sha256": "916e1dbb424f203ed8c0b5ec9a6d9df14b203564023b2d54b1e3f52c95834ec0"
+    },
+    {
+      "path": "main/adapters/nn2_led_bringup.c",
+      "sha256": "492db7d18df72f07c752271c1a218c62646c89c53be87cb23ef49e012e436a89"
+    },
+    {
+      "path": "main/adapters/nn2_led_bringup.h",
+      "sha256": "374368c7dc24069b10d45dd544586d20c5eeaf03a1116e227dce072f072fe33d"
+    },
+    {
+      "path": "main/app_main.c",
+      "sha256": "fb983ae2eeef9096f7233f17470027306e4b3212e9d7795b1fff8fb70ad5d981"
+    },
+    {
+      "path": "test/led/test_led.c",
+      "sha256": "53625dac3464b02cbd258365e0681f1dbe1ebe99d842f0d4ffc1356be01be969"
+    },
+    {
+      "path": "test/communication/test_usb_status.py",
+      "sha256": "b608ea6f3efae0b6c3f65825206302d6471607a4e8c96fccb8a9479169a68612"
+    },
+    {
+      "path": "test/communication/test_led_cli.py",
+      "sha256": "fdad4f78e8b092e95c8ecb52a736bd10cd1890910fe029d83e93ca331b2a17b7"
+    },
+    {
+      "path": "tools/nn2ctl.py",
+      "sha256": "cddb09ac0cbe7b158631076b02957705dd490f48a2b27dd817ecc6d76d5bb5f3"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build/pca-eflag-syntax.json",
+      "sha256": "e4b8f7d3cb930ee57b022f3ab9ceb62087ad314cbb0b5d26d748e144e142ce47"
+    },
+    {
+      "path": "build/led-eflag-host/final-tests.log",
+      "sha256": "4083366514ffcc6d8a7f53941db2a472a988cc3e9db3be312ff38dac7fbc2361"
+    },
+    {
+      "path": "build/led-eflag-host/usb-tests.log",
+      "sha256": "51ba3f8bf3bf4490a953ab4147d5a115b4dd620a374fc5dd617fb295ea843132"
+    },
+    {
+      "path": "build/led-eflag-host/cli-tests.log",
+      "sha256": "6bbd64f630664752c45778658f9ecc8a6c7f095a128a3a5f61801de764471235"
+    }
+  ]
+}

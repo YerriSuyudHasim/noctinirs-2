@@ -14,7 +14,45 @@ import shlex
 import shutil
 import subprocess
 
+from layer_contract import load_contract, detect, linked
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def inner_inventory(root):
+    """Use the build's canonical roots; platform components are a separate class."""
+    root = Path(root)
+    contract = load_contract(root / 'tools/layers.json')
+    paths = [row['path'] for row in contract['layers']]
+    if set(detect(root, contract['layers'])) != set(paths):
+        raise RuntimeError('Missing canonical inner layer')
+    headers, sources = [], set()
+    def enumeration_error(error):
+        raise error
+    for path in paths:
+        for directory, dirs, files in os.walk(root / path, followlinks=False, onerror=enumeration_error):
+            for name in dirs + files:
+                if linked(Path(directory) / name):
+                    raise RuntimeError('Linked inner-layer input: ' + str(Path(directory) / name))
+            for name in files:
+                f = Path(directory) / name
+                if f.suffix == '.h': headers.append(f.relative_to(root).as_posix())
+                if f.suffix == '.c': sources.add(f.resolve())
+    return sorted(headers), sources
+
+
+def select_units(root, build, mode, rows, commands):
+    headers, sources = inner_inventory(root)
+    header_col, probe_col = (0, 1) if mode == 'host' else (1, 2)
+    if sorted(r[header_col] for r in rows) != headers:
+        raise RuntimeError('Independent product header coverage mismatch')
+    expected = sources | {Path(r[probe_col]).resolve() for r in rows}
+    if mode == 'host':
+        expected.update((Path(build) / ('combined_' + order + '.c')).resolve() for order in ('forward', 'reverse'))
+    selected = [c for c in commands if Path(c['file']).resolve() in expected]
+    if len(selected) != len(expected) or {Path(c['file']).resolve() for c in selected} != expected:
+        raise RuntimeError('Product source/probe compile-command coverage mismatch')
+    return headers, sources, selected
+
 
 
 def main():
@@ -30,17 +68,7 @@ def main():
     inventory = args.build / ('host_headers.tsv' if args.mode == 'host' else 'nn2_c11_header_probes.tsv')
     shutil.copy2(inventory, dest / inventory.name)
     rows = [line.split('\t') for line in inventory.read_text().splitlines()[1:]]
-    header_col, probe_col = (0, 1) if args.mode == 'host' else (1, 2)
-    headers = sorted(str(f.relative_to(ROOT)) for f in (ROOT / 'components').rglob('*.h'))
-    if sorted(r[header_col] for r in rows) != headers:
-        raise RuntimeError('Independent product header coverage mismatch')
-    expected = {f.resolve() for f in (ROOT / 'components').rglob('*.c')}
-    expected.update(Path(r[probe_col]).resolve() for r in rows)
-    if args.mode == 'host':
-        expected.update((args.build / ('combined_' + order + '.c')).resolve() for order in ('forward', 'reverse'))
-    selected = [c for c in commands if Path(c['file']).resolve() in expected]
-    if len(selected) != len(expected) or {Path(c['file']).resolve() for c in selected} != expected:
-        raise RuntimeError('Product source/probe compile-command coverage mismatch')
+    headers, sources, selected = select_units(ROOT, args.build, args.mode, rows, commands)
     records = []
     for i, item in enumerate(selected):
         original = item.get('arguments') or shlex.split(item['command'])
@@ -66,12 +94,12 @@ def main():
         version = subprocess.check_output([original[0], '--version'], cwd=item['directory'], text=True)
         records.append({'source': item['file'], 'cwd': item['directory'], 'command': original,
                         'dependency_command': cmd, 'compiler_version': version, 'exit': result.returncode})
-        if Path(item['file']).resolve() not in {f.resolve() for f in (ROOT / 'components').rglob('*.c')}:
+        if Path(item['file']).resolve() not in sources:
             shutil.copy2(item['file'], dest / (str(i) + '-probe.c'))
     report = {'source_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
               'utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'mode': args.mode,
               'environment': {k: os.environ.get(k) for k in ('CPATH','C_INCLUDE_PATH','CPLUS_INCLUDE_PATH','INCLUDE','SDKROOT')},
-              'source_count': len(list((ROOT / 'components').rglob('*.c'))), 'header_count': len(headers),
+              'source_count': len(sources), 'header_count': len(headers),
               'compiled_units': len(records), 'records': records}
     if args.mode == 'idf':
         # Owner decision 6306981230 is bounded to these unmodified shim bytes.

@@ -1,0 +1,360 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-27T04:46:31.470164+00:00",
+  "repository": "YerriSuyudHasim/noctinirs-2",
+  "base_commit": "5958a0eafec6b03c2b158c4026f3f10b8a3366d1",
+  "dirty_worktree": true,
+  "source_sha256": "c79efb10091e1160ab0521d466657e9875a3bdc4892ce9a685a3f248d68b3fe2",
+  "scope": "Active C sources/headers, build defaults, board-power mocks and decision/evidence documents; excludes historical reference and generated firmware build inputs",
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "4a511f6899ca96e8d2e6cf2fb867d493b2ad082bd35a9a7a4be59f3bf7906797"
+    },
+    {
+      "path": "cmake/nn2_c11.cmake",
+      "sha256": "ee9f99b9a72d56a15fcb83d5bd38ddfc9945630e03e2cf554dcc096a1e8e9713"
+    },
+    {
+      "path": "cmake/nn2_c11_guard.h",
+      "sha256": "512fc7625f5958c9eac37007bb90aab3fe9d6f6b29147290bdc1aca7f0e32fa6"
+    },
+    {
+      "path": "components/nn2_app/CMakeLists.txt",
+      "sha256": "5286900b2459087b73667c762932bc785d5341daca6e19b34d4772b94cadb5bb"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_adc_diagnostic.h",
+      "sha256": "a28eadf887bc13cad4073f0268e5a326721bdc94d868044544c050fc1cbabbb2"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_battery.h",
+      "sha256": "57acd6a1bc6df3dd49a522950a409628bc87bacd7aeb704fbee663ffe9ceefb3"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_comm.h",
+      "sha256": "d10ff67e613fd57cca70cfa5aa8da1ec23693890a9d6cdd04af3dd3144db1f46"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_provision.h",
+      "sha256": "5eeb486627dea6a8173e6afe6b3fc624558bdacf15f2e71e8f69ba8220ea4574"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_sequencer.h",
+      "sha256": "0b8e3983dfb7ed62f727285b829948901d3e0ea255aa459eace36f140ce53218"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_adc_diagnostic.c",
+      "sha256": "fe7964c3677d726fca6f363475c4c20d0b7290e7b0e28faf9457a1d342f760b4"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_battery.c",
+      "sha256": "074e5bda435cc332bee06b1a965f0489065a197327af17f723200db1e0b8bfa1"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_comm.c",
+      "sha256": "0886b1dc9d05b01ddb390df74db41b168b6cfbd8dcd85679af9870c5cea06ef7"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_provision.c",
+      "sha256": "fe5399bca1b1e9e775aebb14605816d5c17597f14b808d8fb6b6b097490a580b"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_sequencer.c",
+      "sha256": "ec675dc6678a9ae138128eeeb3a6bb3b0b8462e4809dcc4c0ed9a28731df13c9"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_sequencer_internal.h",
+      "sha256": "56e787883938f1070f56bdef7cd16b8aba0c4b0fdbadb8a4a5804d3ba5c5201c"
+    },
+    {
+      "path": "components/nn2_board/CMakeLists.txt",
+      "sha256": "4d8bfa6add536fbeb9ff9cc092a8d6300bb056ca57ea1d0256e7d0a58a55d32d"
+    },
+    {
+      "path": "components/nn2_board/include/nn2_board.h",
+      "sha256": "9031108a27e23689ed92b3a43954a7420b4739d40c3fa86c4b032f703c0a1126"
+    },
+    {
+      "path": "components/nn2_board/include/nn2_board_power.h",
+      "sha256": "e0681631d311ddeb395638e02b3a85083dc371ea1cf1fa44f3c7d1e73b64bc0c"
+    },
+    {
+      "path": "components/nn2_board/nn2_board.c",
+      "sha256": "1bd6142b1361a72e1e65453f2b1bb3a80fc48897ac068a9195e4f5913fb295a7"
+    },
+    {
+      "path": "components/nn2_board/nn2_board_power.c",
+      "sha256": "8813ce23ebd65b6baf842f58befb00dd475eadf8689633968c930b49bdc5a831"
+    },
+    {
+      "path": "components/nn2_config/CMakeLists.txt",
+      "sha256": "600c550507381149e3a83ca4ed87300a50430bd92b2571fbd1d31364656a8211"
+    },
+    {
+      "path": "components/nn2_config/include/nn2_config.h",
+      "sha256": "aae784b937a301f1d903aa7c2df493bd1e65c5e3383b52fa5fdd8aa06cfce1c3"
+    },
+    {
+      "path": "components/nn2_config/nn2_config.c",
+      "sha256": "40c8d795d1eed6828f1f64c7c904ef7a03dedafd10f7797b5dec39132f127b6e"
+    },
+    {
+      "path": "components/nn2_core/CMakeLists.txt",
+      "sha256": "82089a6fad25f338a070b572737ebc6225cda4336ca88778d97dec6eba75fbdf"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_adc_record.h",
+      "sha256": "6f114f5f54f041a56d5632041e01dd95efba171dd4cef5bc1222df53e2935623"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_protocol.h",
+      "sha256": "5df0a629de7f74ace89ac4a48fc4517333f825ec5197c0ba15af2ca79653e0f5"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_ring.h",
+      "sha256": "58590ef5274238b06bf4413bca91782328fdd729647b5bc445eabcba1c1730f2"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_types.h",
+      "sha256": "98176616c2d4f9f75a51aac667b7b5412e8ed9767dce7ee090b17bfe8492338e"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_protocol.c",
+      "sha256": "1278bbeb30e7be7e9379e59f64c28d32f0d754af7fd304ba77ad711535dd26eb"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_ring.c",
+      "sha256": "49057b29ce781930b63f5475c0293d05bba4bc0627de5c50257018f764c71f4d"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_ring_internal.h",
+      "sha256": "7a889b22515b9d2f5ce073440dd124f75d67404279c6f8682564709eb5ebc41d"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_status.c",
+      "sha256": "fa41d3df11ebd31a963de87dc1246f0aec63a8b470683f51583fb802877e306f"
+    },
+    {
+      "path": "components/nn2_net/CMakeLists.txt",
+      "sha256": "155c68a439f45401dbc1186374496e5c73468c707a2a9794518721d2977dbafa"
+    },
+    {
+      "path": "components/nn2_net/include/nn2_net.h",
+      "sha256": "704b42879b444aeb6ca9a56a1a904617e50bcc5f715d6f404ada516b9feac7b8"
+    },
+    {
+      "path": "components/nn2_net/nn2_net.c",
+      "sha256": "7c6ed503b4908ff7b82fae7f2472778b8686245ca78aa1b0463ddd8033495311"
+    },
+    {
+      "path": "components/nn2_ports/CMakeLists.txt",
+      "sha256": "21c968b6d40f73bcd9f7bb39460dee31f167df019ff8bd949e8a922bc33eb37d"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_adc.h",
+      "sha256": "6f9e35ff364b16b589d28adb24c445843a0357091f54ea4cc51beb609e41d5ee"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_adc_stream.h",
+      "sha256": "8feb64df2c0632edf1363d25cfe9c91802090d62959c3bb0afcec3ef406c06d4"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_battery.h",
+      "sha256": "951c1b03e83715df9a54faaed0881c6547dfd293ecf07bb35caf409bc06da938"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_clock.h",
+      "sha256": "8e6835a7ef4dc43d4112306fe81025acf8d60e1393e534877dfea30bfe4e3ef9"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_led.h",
+      "sha256": "0a1ef831cd0d6aa8048eed2179742ac6cd7f202b212455f11d7797cb4e520e11"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_log.h",
+      "sha256": "43f5209ed3439640dff9472149246b7dc4bca2ac36f7df1a0c918feb89b75280"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_network_config.h",
+      "sha256": "b6e8de6ef9b50ee36bf29e694c9c712909db2e9794cefd38b4b03d79b3cbadd4"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_safety.h",
+      "sha256": "ab5a4e3c79c9976194818f07627ef5f965414636ca8fbbf2ef969723e939b6f3"
+    },
+    {
+      "path": "components/nn2_provision/CMakeLists.txt",
+      "sha256": "ab401f6651a39a1e50323124a40e7792b727051bdf35738f51243152946423d0"
+    },
+    {
+      "path": "components/nn2_provision/include/nn2_provision.h",
+      "sha256": "bb27fbfc80dd5d70bed9bbe82141bb250fd89473b4bd0d6b1774bf0866ec52a9"
+    },
+    {
+      "path": "components/nn2_provision/nn2_provision.c",
+      "sha256": "5fd293439fbc2f1c90918b2fa23fa7d1f806085510950ffc5f97be77d84a7676"
+    },
+    {
+      "path": "components/nn2_wifi/CMakeLists.txt",
+      "sha256": "0e5ad282dafd5f79c6d02b84313f1c6af64b6f6704eb0565bf1c3ad9cf2091ec"
+    },
+    {
+      "path": "components/nn2_wifi/include/nn2_wifi.h",
+      "sha256": "dbb0f4732a8d4cd5a8680a0a2972eaacb6a1010e8e31c90398a753d722f0f4d5"
+    },
+    {
+      "path": "components/nn2_wifi/nn2_wifi.c",
+      "sha256": "a1a46c3d5fecbd688f71c903134544493657a4394bd9364920b8f3cca36045e6"
+    },
+    {
+      "path": "docs/BOARD_POWER.md",
+      "sha256": "7dbf72f162214b67cca872b20cd3a0f503580775e4406e8f7e4403708a6fba88"
+    },
+    {
+      "path": "docs/BOARD_POWER_EVIDENCE.md",
+      "sha256": "7c08bef57be1298de77463ce1c92afe7a64c30aa9204eb72c485116b856d16d7"
+    },
+    {
+      "path": "docs/adr/2026-10-27-board-power-and-shared-i2c.md",
+      "sha256": "19f6a6229d22615579fc1e7f4e2b3885929d52a63b1700d7a8dd4df0d44d0cff"
+    },
+    {
+      "path": "main/CMakeLists.txt",
+      "sha256": "df635c1d59832b4bcb08d85641a0630780350fc8c5aa9048586ae3da5d9e86b4"
+    },
+    {
+      "path": "main/Kconfig.projbuild",
+      "sha256": "0bf3c994ed572b859d5b9cef6c8e5f62b48e433a21b92cd6ef51c042f80acaba"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_adc_fake.c",
+      "sha256": "052b5b186fcd0ef68059611991a1ede4cfb9b45a2cb7ef4ad72c1333ad35753e"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_ads131.h",
+      "sha256": "6bf51313795ac70ae521ab4d48b19831acf676550f0ac086b4edd211de20c1da"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_clock_esp.c",
+      "sha256": "1543a308fb61e78866f99c38dc31d63beb987ca7cf090ece99265e793f65e1ab"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_esp32s3.h",
+      "sha256": "391242ca7bf3813ab07af067382f09e96b77b7577ef0974379b5edeb977ebc2e"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_led_disabled.c",
+      "sha256": "57a61ab86da9804392fee3f9efbfcd36763ee304ee4ad941e529447fcb587ebb"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_log_esp.c",
+      "sha256": "a6d946948060311523d7969de84e355f18e4eb8e979c85a1b3067b91b27633a1"
+    },
+    {
+      "path": "main/adapters/nn2_ads131_build_guard.h",
+      "sha256": "806acc8338ed302c0ef6d1da7159d4bd061a97c6d711f78f7710f8826eebfd67"
+    },
+    {
+      "path": "main/adapters/nn2_ads131_esp.c",
+      "sha256": "8a66aa037978367cb7ad3c86e8ce2ceb52cb905ccc91f26c2a5493a5f54fcbc4"
+    },
+    {
+      "path": "main/adapters/nn2_ads131_logic.c",
+      "sha256": "82a953b7e33736ea48c870a0565022723b0b8ed54180c842b73058eb2696eef6"
+    },
+    {
+      "path": "main/adapters/nn2_ads131_logic.h",
+      "sha256": "3ebf2f1e0d3e754521371e6be3d572da6e7e5959f32a5302bc7cd06241a37b98"
+    },
+    {
+      "path": "main/adapters/nn2_rtos_config.h",
+      "sha256": "f36fb23ce38ae42c44379bef09afef897347adb4afa6f58825fbb92c458a8431"
+    },
+    {
+      "path": "main/app_main.c",
+      "sha256": "9fe3fd1cd0b4ef06ca3ba5236abbc33ae102f2fd04146c79760c40d1863b7edb"
+    },
+    {
+      "path": "main/nn2_board_v1.c",
+      "sha256": "27d161eb61a755103436a77551e3c137f0868e00e72385da6e547dc6aa22b614"
+    },
+    {
+      "path": "main/nn2_board_v1.h",
+      "sha256": "e80c1f32ca783cb33d6b7a7bcc4789e78af174e116396a9cef99b6d2fa029c6b"
+    },
+    {
+      "path": "main/nn2_legacy_profiles.c",
+      "sha256": "e8efa4d0e370fe1d2d29a75660e586791dd7d0b3df9833c8a903c0a59b4095f6"
+    },
+    {
+      "path": "sdkconfig.communication",
+      "sha256": "8cbe42110bd8c7579d5697f15810450be437a99ab64132deac5c12e94405dcf1"
+    },
+    {
+      "path": "sdkconfig.defaults",
+      "sha256": "bf063ee7b3897ffb4e6d018e666f605e68f48a32cecdedcdd211b274d508e0f1"
+    },
+    {
+      "path": "test/board_power/CMakeLists.txt",
+      "sha256": "b948012d1af3cce7f1021f09e1d0f7466a9b7eeb59c0f0137101d6fde1c42119"
+    },
+    {
+      "path": "test/board_power/stubs/driver/gpio.h",
+      "sha256": "b53c0ff5b0ab4b85e63e2525c1b974b17dcd59586f5dd3d70fe9acd7a51b1aa7"
+    },
+    {
+      "path": "test/board_power/stubs/driver/i2c_master.h",
+      "sha256": "3b26bd321531597065eed899bace944cd3ef90c35c127910a3b05eb629e9a276"
+    },
+    {
+      "path": "test/board_power/stubs/esp_err.h",
+      "sha256": "2cbded7700cfd5679e189698dfe21577f8c1fc82f1ecd0841cd5ecd244a322e0"
+    },
+    {
+      "path": "test/board_power/stubs/freertos/FreeRTOS.h",
+      "sha256": "933ee2ae24ee8c7004ee03386236d873e8b44461cd6ba5bd1339cc5a5300d106"
+    },
+    {
+      "path": "test/board_power/stubs/freertos/task.h",
+      "sha256": "3a7825b71642cdacb1dc626ca091f8bd7b61f34598ed688e255635aac146c455"
+    },
+    {
+      "path": "test/board_power/test_power.c",
+      "sha256": "4dc91c483ec70933d93bbe29173cf8b91d54f823024df43c953d043508a6569e"
+    },
+    {
+      "path": "tools/layers.json",
+      "sha256": "775512d12dbae3f29b8711096ef0ef9487c4f36fe98fae24892ae36947cf965d"
+    },
+    {
+      "path": "tools/platform_components.json",
+      "sha256": "7f78123d10ab8b6d61818c817801d05e3b204e24da975b48f7f3df0ad1839f21"
+    }
+  ],
+  "local_host_artifacts": [
+    {
+      "path": "build/board-power-msvc/power-build.log",
+      "sha256": "9d3085162c1f632c202bfc3bf633712266ca102a4b5bb4d33ae9c8da4339e455"
+    },
+    {
+      "path": "build/board-power-msvc/power-tests.log",
+      "sha256": "3b5399ea8474d32fcae1ed0e69a872fca925301516abe7f0aa7afd960b866204"
+    },
+    {
+      "path": "build/board-power-msvc/board-power-tests.xml",
+      "sha256": "5461d8b570317fd95475d204400a9f36fd7eeb0f6deb999935653dac3ed06587"
+    }
+  ],
+  "evidence_classes": {
+    "host_unit": "PASS 28/28 mocked cases; native MSVC C11, not firmware",
+    "static_dependency_gate": "PASS",
+    "static_platform_boundary": "PASS 5/5",
+    "full_architecture_suite": "FAIL 52 test methods, 15 failure reports; see BOARD_POWER_EVIDENCE.md",
+    "reference_integrity": "PASS 319 files",
+    "firmware_build": "NOT RUN",
+    "on_target_bench": "NOT RUN",
+    "HIL_integration": "NOT RUN",
+    "field_production": "NOT RUN"
+  }
+}

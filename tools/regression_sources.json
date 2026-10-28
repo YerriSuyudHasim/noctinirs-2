@@ -1,0 +1,25 @@
+{
+  "c11": {
+    "commit": "789b4fa8bb2904a85116c6c6116973c348565c05",
+    "provenance": "https://github.com/YerriSuyudHasim/noctinirs-2/pull/39",
+    "files": {
+      "cmake/nn2_c11.cmake": "b2b04a39a4f0ee0963f95798c3f757629f8cd7439a0373a5cc0cb8f92fdbec95",
+      "cmake/nn2_c11_guard.h": "512fc7625f5958c9eac37007bb90aab3fe9d6f6b29147290bdc1aca7f0e32fa6"
+    }
+  },
+  "reproducibility": {
+    "commit": "f97767035e0ab4f801e655ec751141314668c407",
+    "provenance": "https://github.com/YerriSuyudHasim/noctinirs-2/pull/40",
+    "files": {
+      "tools/reproducible_build.py": "fcfd5b8da918841942dc3d69b6104b83fc270b182979a26bfea49bc3d181e74f",
+      ".github/workflows/firmware-build.yml": "f2e17f4e2cd75c58e23e5c816b7f3bc8ebdfe7f9f8634dd7724178f8f7610ac4"
+    }
+  },
+  "adc": {
+    "commit": "99ffe66e51f95a17bf62194d2b7216390c08aa33",
+    "provenance": "tools/verify_ads131_control_regression.py: OLD and HASH",
+    "files": {
+      "main/adapters/nn2_ads131_esp.c": "063dad59eb1c439d7f592a6aa431e3e27f12f1a8ea273412287d1bedd57cf7c2"
+    }
+  }
+}

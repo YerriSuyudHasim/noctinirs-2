@@ -1,0 +1,825 @@
+{
+  "observed_at_utc": "2026-10-27T11:34:33.553632+00:00",
+  "base_commit": "23eb04217463772887cd5b755d5a0b3920a679a5",
+  "evidence_class": "static inspection of existing Owner artifacts; no build/device access",
+  "owner_build_directory": "C:/Users/doeki/Documents/GitHub/noctinirs-2/build",
+  "owner_sdkconfig": "C:/Users/doeki/Documents/GitHub/noctinirs-2/sdkconfig",
+  "owner_defaults": "C:/Users/doeki/Documents/GitHub/noctinirs-2/sdkconfig.defaults",
+  "generated_policy": "STRICT",
+  "source_sha_from_compile_commands": "23eb04217463772887cd5b755d5a0b3920a679a5",
+  "binary_sha256": "8009b32f1c88420836ad8c12c30d61b64a278c052ba6849e280ba551e725408d",
+  "elf_sha256_embedded_in_binary": "c39444a276e6b937b2e9e22abdccc2b148cb7e774540835523eab0280025a421",
+  "root_sdkconfig_sha256_before_selection": "297fa68396be28eee522a9bc74f3b1f973f48a9a3e8cc6c3784a3c5e7dc9656b",
+  "vscode_settings_sha256_before_selection": "f5b6f9e4d58b6b097a8b6904bac9093717c87f57b11922d44eec3011852e2650",
+  "owner_run_report": {
+    "boot_id": 13,
+    "requested_fs": 5,
+    "requested_seconds": 15,
+    "start_device_us": 18937472,
+    "fault_reply_device_us": 19467668,
+    "application_fault": 267,
+    "elapsed_to_fault_reply_us": 530196
+  },
+  "flashed_image_identity": "CONFIRMED against Owner-supplied cached USB STATUS boot13: source and ELF identity match local Owner artifact",
+  "interpretation": "Confirmed strict ERROR rejection at frame1 with MODE2=0x45 and fresh valid=SHORT=0xFFC3FF, OPEN=invalid=0. Error264 is ESP_ERR_INVALID_RESPONSE from diagnostic rejection, wrapped by application fault267. No deadline miss; OVERTEMP clear; cap not enabled/hit. Eligible signature for the existing advisory classifier, without establishing physical absence of a real short.",
+  "agent_firmware_builds": "NOT RUN",
+  "agent_device_access": "NOT RUN",
+  "previously_tested_advisory": {
+    "source_commit": "23eb04217463772887cd5b755d5a0b3920a679a5",
+    "build_directory": "build/short-idf",
+    "defaults": [
+      "sdkconfig.defaults",
+      "sdkconfig.communication",
+      "sdkconfig.led-bringup",
+      "sdkconfig.led-short-bench"
+    ],
+    "policy": "BENCH_WARN",
+    "sdkconfig_sha256": "d0869ccd34f7a5d326d40e8c5886db72103484e6ccd73eeb451ca819ab85d11f",
+    "binary_sha256": "84ae3f0587e1845e224bbb437700a80a24837b446bb989285f5f768b368b13ba",
+    "elf_sha256": "b80bab81c1cb13ca82f348121ac4a2e2fba6e52a838f5aa27e1f17bfb19f11b9",
+    "provenance": "Previous-turn author results; no firmware build rerun in this diagnosis"
+  },
+  "profile_selection": {
+    "selected_profile": "main-board-short-advisory",
+    "root_change": "Only CONFIG_NN2_LED_SHORT_BENCH changed from unset to y; all unrelated root bytes preserved",
+    "root_sdkconfig_sha256_after_selection": "b3097a229c86326eba4662ff3e9f94b71364e1c73151e7d4573b6a10f1c25ec8",
+    "backup_directory": "build\\profile-backups\\20261027T113433Z-t9rvs988",
+    "existing_vscode_values_and_paths_semantically_preserved": true,
+    "extension_normalized_equivalent_clangd_path_separator": true,
+    "generated_build_still": "STRICT: no build run; deliberately stale relative to selected config",
+    "duration_s": 2,
+    "fifteen_second_revision": "PROPOSED ONLY, not implemented or selected"
+  },
+  "owner_usb_status_raw": "STATUS source=23eb04217463772887cd5b755d5a0b3920a679a5 image=c39444a276e6b937b2e9e22abdccc2b148cb7e774540835523eab0280025a421 ip=192.168.4.1 link=1 state=6 fault=267 boot=13 reset=11 heap=240428 min_heap=232976 stack=3076 rx=6 tx=6 invalid=0 socket_err=0 send_err=0 usb_reject=0 usb_drop=0 off_requested=1 wifi_err=0 clients=1 ap=1 usb_timeout=0 battery_valid=1 battery_uv=4100000 battery_mperm=88801 battery_age_ms=840392 battery_error=0 led_state=4 led_frames=0 led_edges=39 led_missed=0 led_max_us=2599 led_error=264 led_stack=4648 led_bus_free=1 led_mode2=45 led_eflags=555505505555 led_ef_valid=FFC3FF led_open=000000 led_short=FFC3FF led_ef_invalid=000000 short_policy=STRICT limit_s=0 single_run=0 led_attempt=1 led_cap=0 led_stop=5 led_epoch=1 led_complete=0 led_fault_epoch=1 led_warn=0 led_dispatch_us=72 led_completion_us=2649",
+  "owner_usb_status_fields": {
+    "source": "23eb04217463772887cd5b755d5a0b3920a679a5",
+    "image": "c39444a276e6b937b2e9e22abdccc2b148cb7e774540835523eab0280025a421",
+    "ip": "192.168.4.1",
+    "link": "1",
+    "state": "6",
+    "fault": "267",
+    "boot": "13",
+    "reset": "11",
+    "heap": "240428",
+    "min_heap": "232976",
+    "stack": "3076",
+    "rx": "6",
+    "tx": "6",
+    "invalid": "0",
+    "socket_err": "0",
+    "send_err": "0",
+    "usb_reject": "0",
+    "usb_drop": "0",
+    "off_requested": "1",
+    "wifi_err": "0",
+    "clients": "1",
+    "ap": "1",
+    "usb_timeout": "0",
+    "battery_valid": "1",
+    "battery_uv": "4100000",
+    "battery_mperm": "88801",
+    "battery_age_ms": "840392",
+    "battery_error": "0",
+    "led_state": "4",
+    "led_frames": "0",
+    "led_edges": "39",
+    "led_missed": "0",
+    "led_max_us": "2599",
+    "led_error": "264",
+    "led_stack": "4648",
+    "led_bus_free": "1",
+    "led_mode2": "45",
+    "led_eflags": "555505505555",
+    "led_ef_valid": "FFC3FF",
+    "led_open": "000000",
+    "led_short": "FFC3FF",
+    "led_ef_invalid": "000000",
+    "short_policy": "STRICT",
+    "limit_s": "0",
+    "single_run": "0",
+    "led_attempt": "1",
+    "led_cap": "0",
+    "led_stop": "5",
+    "led_epoch": "1",
+    "led_complete": "0",
+    "led_fault_epoch": "1",
+    "led_warn": "0",
+    "led_dispatch_us": "72",
+    "led_completion_us": "2649"
+  },
+  "info_output": "Not supplied separately; no further INFO request needed because USB STATUS establishes exact image and policy.",
+  "corrected_workspace": {
+    "source_base_commit": "23eb04217463772887cd5b755d5a0b3920a679a5",
+    "state": "base plus uncommitted profile/host-tool/documentation changes; no PR packaging",
+    "implementation_sha256": "30e427e12f6b7f21b51ec9a14482108f64613d2db804d7a99ec3fcfaee47f83e",
+    "input_files": [
+      {
+        "path": "CMakeLists.txt",
+        "sha256": "dc25b29c81e0d8f67468bfffcafda1fd00c64eb3a0ccfb08d18db78f41f5f66d"
+      },
+      {
+        "path": "VERSION",
+        "sha256": "3d097c315a1c543040f548da4c7051265e94c77211a2411ced1d4621344270de"
+      },
+      {
+        "path": "bootloader_components/nn2_reset_led_hook/CMakeLists.txt",
+        "sha256": "feaf52f3196fbc600b0c7cb857bcd6c7d01e8624426f44042cb58746de1e25d4"
+      },
+      {
+        "path": "bootloader_components/nn2_reset_led_hook/nn2_reset_led_hook.c",
+        "sha256": "dabb7aa5f6444381c499f0dd09875ead0815d3bae634cddf187c5bd1d5e71679"
+      },
+      {
+        "path": "cmake/nn2_c11.cmake",
+        "sha256": "ee9f99b9a72d56a15fcb83d5bd38ddfc9945630e03e2cf554dcc096a1e8e9713"
+      },
+      {
+        "path": "cmake/nn2_c11_guard.h",
+        "sha256": "512fc7625f5958c9eac37007bb90aab3fe9d6f6b29147290bdc1aca7f0e32fa6"
+      },
+      {
+        "path": "cmake/nn2_led_profile.cmake",
+        "sha256": "c2b840636864810cf570faf14ef8ec1635ffd547156adf5a38d80e618c9ec6b9"
+      },
+      {
+        "path": "components/nn2_app/CMakeLists.txt",
+        "sha256": "5286900b2459087b73667c762932bc785d5341daca6e19b34d4772b94cadb5bb"
+      },
+      {
+        "path": "components/nn2_app/README.md",
+        "sha256": "cb06a5fedd2ca4dcceb628b235e37bd4b6fb1720680b97f792630d33b4408e74"
+      },
+      {
+        "path": "components/nn2_app/include/nn2_app_adc_diagnostic.h",
+        "sha256": "a28eadf887bc13cad4073f0268e5a326721bdc94d868044544c050fc1cbabbb2"
+      },
+      {
+        "path": "components/nn2_app/include/nn2_app_battery.h",
+        "sha256": "57acd6a1bc6df3dd49a522950a409628bc87bacd7aeb704fbee663ffe9ceefb3"
+      },
+      {
+        "path": "components/nn2_app/include/nn2_app_comm.h",
+        "sha256": "c82dc9f6c13a7e6c7c86c1403385e73238dbb0df27d2f8426e424fc069bd88ca"
+      },
+      {
+        "path": "components/nn2_app/include/nn2_app_provision.h",
+        "sha256": "5eeb486627dea6a8173e6afe6b3fc624558bdacf15f2e71e8f69ba8220ea4574"
+      },
+      {
+        "path": "components/nn2_app/include/nn2_app_sequencer.h",
+        "sha256": "0b8e3983dfb7ed62f727285b829948901d3e0ea255aa459eace36f140ce53218"
+      },
+      {
+        "path": "components/nn2_app/src/nn2_app_adc_diagnostic.c",
+        "sha256": "fe7964c3677d726fca6f363475c4c20d0b7290e7b0e28faf9457a1d342f760b4"
+      },
+      {
+        "path": "components/nn2_app/src/nn2_app_battery.c",
+        "sha256": "074e5bda435cc332bee06b1a965f0489065a197327af17f723200db1e0b8bfa1"
+      },
+      {
+        "path": "components/nn2_app/src/nn2_app_comm.c",
+        "sha256": "ec4a126c19ac266b76cffb19fe20cdc0011ab493aaa0736b1e9d45b1775d0584"
+      },
+      {
+        "path": "components/nn2_app/src/nn2_app_provision.c",
+        "sha256": "fe5399bca1b1e9e775aebb14605816d5c17597f14b808d8fb6b6b097490a580b"
+      },
+      {
+        "path": "components/nn2_app/src/nn2_app_sequencer.c",
+        "sha256": "ec675dc6678a9ae138128eeeb3a6bb3b0b8462e4809dcc4c0ed9a28731df13c9"
+      },
+      {
+        "path": "components/nn2_app/src/nn2_app_sequencer_internal.h",
+        "sha256": "56e787883938f1070f56bdef7cd16b8aba0c4b0fdbadb8a4a5804d3ba5c5201c"
+      },
+      {
+        "path": "components/nn2_board/CMakeLists.txt",
+        "sha256": "ce0eefcc730ae56437eeda59125425728c177ce40724fe6eb8cad1e47e54930e"
+      },
+      {
+        "path": "components/nn2_board/include/nn2_board.h",
+        "sha256": "a646b1148d6baf828f7aa2ddef99e03d654bd5cc960f975f0c734c80a1b4e33e"
+      },
+      {
+        "path": "components/nn2_board/include/nn2_board_pca.h",
+        "sha256": "8019176756b57d0f0d6ac6fde5acf97efe1c6ca05d9a70cc2c202cdfb7566fc3"
+      },
+      {
+        "path": "components/nn2_board/include/nn2_board_power.h",
+        "sha256": "accf59876c0b6a8c655c8af35fb87396b1cdea2d4bb86d4ca0158e3f2def5a60"
+      },
+      {
+        "path": "components/nn2_board/include/nn2_board_wiring.h",
+        "sha256": "989c6af1c03690ebede1ad7bd1acf5b38566edaa6daf21f07ace5ca627589d82"
+      },
+      {
+        "path": "components/nn2_board/nn2_board.c",
+        "sha256": "9b5464cbb5e5a1d04a1f471ee8f4c466371a3338e6360882332a927db3f2a2f9"
+      },
+      {
+        "path": "components/nn2_board/nn2_board_pca.c",
+        "sha256": "ef63b72cde3f6ad7cd7fb891b9f423b851d79f6ea431730c7ebe3509e8d46377"
+      },
+      {
+        "path": "components/nn2_board/nn2_board_power.c",
+        "sha256": "f13754fde67830b32853869e2f537b40047aed905f190eab18a34a881b624e10"
+      },
+      {
+        "path": "components/nn2_config/CMakeLists.txt",
+        "sha256": "600c550507381149e3a83ca4ed87300a50430bd92b2571fbd1d31364656a8211"
+      },
+      {
+        "path": "components/nn2_config/include/nn2_config.h",
+        "sha256": "0b843a75f7854b3e40b557e8d724df907173575d6b202055f4d01d06895074d6"
+      },
+      {
+        "path": "components/nn2_config/nn2_config.c",
+        "sha256": "5e950a0f1419e51232fc949ca8d9dfd0d45a2972b1ab9285f0262c3dd4dbc953"
+      },
+      {
+        "path": "components/nn2_core/CMakeLists.txt",
+        "sha256": "82089a6fad25f338a070b572737ebc6225cda4336ca88778d97dec6eba75fbdf"
+      },
+      {
+        "path": "components/nn2_core/README.md",
+        "sha256": "f52eae591db3539ea48c4b9e96073073161e414d6b65782cd9b34b56d88b2d17"
+      },
+      {
+        "path": "components/nn2_core/include/nn2_core_adc_record.h",
+        "sha256": "6f114f5f54f041a56d5632041e01dd95efba171dd4cef5bc1222df53e2935623"
+      },
+      {
+        "path": "components/nn2_core/include/nn2_core_optical.h",
+        "sha256": "a6432bbbf25b55b315bca5878bb92a7a6dc21a7120ce43ed2f65b8d1acac04a8"
+      },
+      {
+        "path": "components/nn2_core/include/nn2_core_protocol.h",
+        "sha256": "6188eabba1916a2d02c8df2b66dbc00cfab98311c8def358b63867dcd43c5b89"
+      },
+      {
+        "path": "components/nn2_core/include/nn2_core_ring.h",
+        "sha256": "58590ef5274238b06bf4413bca91782328fdd729647b5bc445eabcba1c1730f2"
+      },
+      {
+        "path": "components/nn2_core/include/nn2_core_types.h",
+        "sha256": "98176616c2d4f9f75a51aac667b7b5412e8ed9767dce7ee090b17bfe8492338e"
+      },
+      {
+        "path": "components/nn2_core/src/nn2_core_protocol.c",
+        "sha256": "0cc092f0be8e866a4373b7a0c5cc788e7f7c57008724144f6b86f0a9609b7aef"
+      },
+      {
+        "path": "components/nn2_core/src/nn2_core_ring.c",
+        "sha256": "49057b29ce781930b63f5475c0293d05bba4bc0627de5c50257018f764c71f4d"
+      },
+      {
+        "path": "components/nn2_core/src/nn2_core_ring_internal.h",
+        "sha256": "7a889b22515b9d2f5ce073440dd124f75d67404279c6f8682564709eb5ebc41d"
+      },
+      {
+        "path": "components/nn2_core/src/nn2_core_status.c",
+        "sha256": "fa41d3df11ebd31a963de87dc1246f0aec63a8b470683f51583fb802877e306f"
+      },
+      {
+        "path": "components/nn2_net/CMakeLists.txt",
+        "sha256": "155c68a439f45401dbc1186374496e5c73468c707a2a9794518721d2977dbafa"
+      },
+      {
+        "path": "components/nn2_net/include/nn2_net.h",
+        "sha256": "704b42879b444aeb6ca9a56a1a904617e50bcc5f715d6f404ada516b9feac7b8"
+      },
+      {
+        "path": "components/nn2_net/nn2_net.c",
+        "sha256": "18fcb965e3af2fefbc160c482bf4676ee3b9793c3d1df10dfc4e9804c9c2a8d5"
+      },
+      {
+        "path": "components/nn2_ports/CMakeLists.txt",
+        "sha256": "21c968b6d40f73bcd9f7bb39460dee31f167df019ff8bd949e8a922bc33eb37d"
+      },
+      {
+        "path": "components/nn2_ports/README.md",
+        "sha256": "7055b8ed5e1b1d68b8eba047eb6e470c8d60d7ad4318065bbbb21a347027593e"
+      },
+      {
+        "path": "components/nn2_ports/include/nn2_port_adc.h",
+        "sha256": "6f9e35ff364b16b589d28adb24c445843a0357091f54ea4cc51beb609e41d5ee"
+      },
+      {
+        "path": "components/nn2_ports/include/nn2_port_adc_stream.h",
+        "sha256": "8feb64df2c0632edf1363d25cfe9c91802090d62959c3bb0afcec3ef406c06d4"
+      },
+      {
+        "path": "components/nn2_ports/include/nn2_port_battery.h",
+        "sha256": "951c1b03e83715df9a54faaed0881c6547dfd293ecf07bb35caf409bc06da938"
+      },
+      {
+        "path": "components/nn2_ports/include/nn2_port_clock.h",
+        "sha256": "8e6835a7ef4dc43d4112306fe81025acf8d60e1393e534877dfea30bfe4e3ef9"
+      },
+      {
+        "path": "components/nn2_ports/include/nn2_port_led.h",
+        "sha256": "0a1ef831cd0d6aa8048eed2179742ac6cd7f202b212455f11d7797cb4e520e11"
+      },
+      {
+        "path": "components/nn2_ports/include/nn2_port_log.h",
+        "sha256": "43f5209ed3439640dff9472149246b7dc4bca2ac36f7df1a0c918feb89b75280"
+      },
+      {
+        "path": "components/nn2_ports/include/nn2_port_network_config.h",
+        "sha256": "b6e8de6ef9b50ee36bf29e694c9c712909db2e9794cefd38b4b03d79b3cbadd4"
+      },
+      {
+        "path": "components/nn2_ports/include/nn2_port_optical.h",
+        "sha256": "3595a2bdeac868902afdb9164d7560b3cd797f6550be133e015bb4ebf850e885"
+      },
+      {
+        "path": "components/nn2_ports/include/nn2_port_safety.h",
+        "sha256": "ab5a4e3c79c9976194818f07627ef5f965414636ca8fbbf2ef969723e939b6f3"
+      },
+      {
+        "path": "components/nn2_provision/CMakeLists.txt",
+        "sha256": "ab401f6651a39a1e50323124a40e7792b727051bdf35738f51243152946423d0"
+      },
+      {
+        "path": "components/nn2_provision/include/nn2_provision.h",
+        "sha256": "959652c6f7f8f7a4b6c1f0e2f0ffb037e068cdd7883e884d9ae5b219d372a2ad"
+      },
+      {
+        "path": "components/nn2_provision/nn2_provision.c",
+        "sha256": "139198c427c562e73b094114bce4f0adf9f7e18cc5e72afff146a7dabe9a0218"
+      },
+      {
+        "path": "components/nn2_wifi/CMakeLists.txt",
+        "sha256": "0e5ad282dafd5f79c6d02b84313f1c6af64b6f6704eb0565bf1c3ad9cf2091ec"
+      },
+      {
+        "path": "components/nn2_wifi/include/nn2_wifi.h",
+        "sha256": "c781a2241382d899457402a25e85f259135f7694ac83521d488b95b0b09098d8"
+      },
+      {
+        "path": "components/nn2_wifi/nn2_wifi.c",
+        "sha256": "ac4b81c1961cb86a21641341050c10daf99921039af6e2ecb6649f91d09a3f8b"
+      },
+      {
+        "path": "config/board-profiles.json",
+        "sha256": "004f3279544008554139966c64ccad14eec0f1bd8ce88ded36ef0860b44b1324"
+      },
+      {
+        "path": "main/CMakeLists.txt",
+        "sha256": "49d15b04a53ecfe917e9a5465b0b5dfe555f0e263c355a34e689c857f677ec03"
+      },
+      {
+        "path": "main/Kconfig.projbuild",
+        "sha256": "4972d9ad266503feca60542e1166382ec84e3deb1c6743793b2e69a29d1ce5c2"
+      },
+      {
+        "path": "main/README.md",
+        "sha256": "e79b6fee85db8dd9457bed0f7af2553685a46bc7e0092ec60117d36a29328e82"
+      },
+      {
+        "path": "main/adapters/nn2_adapter_adc_fake.c",
+        "sha256": "052b5b186fcd0ef68059611991a1ede4cfb9b45a2cb7ef4ad72c1333ad35753e"
+      },
+      {
+        "path": "main/adapters/nn2_adapter_ads131.h",
+        "sha256": "6bf51313795ac70ae521ab4d48b19831acf676550f0ac086b4edd211de20c1da"
+      },
+      {
+        "path": "main/adapters/nn2_adapter_clock_esp.c",
+        "sha256": "1543a308fb61e78866f99c38dc31d63beb987ca7cf090ece99265e793f65e1ab"
+      },
+      {
+        "path": "main/adapters/nn2_adapter_esp32s3.h",
+        "sha256": "391242ca7bf3813ab07af067382f09e96b77b7577ef0974379b5edeb977ebc2e"
+      },
+      {
+        "path": "main/adapters/nn2_adapter_led_disabled.c",
+        "sha256": "57a61ab86da9804392fee3f9efbfcd36763ee304ee4ad941e529447fcb587ebb"
+      },
+      {
+        "path": "main/adapters/nn2_adapter_log_esp.c",
+        "sha256": "a6d946948060311523d7969de84e355f18e4eb8e979c85a1b3067b91b27633a1"
+      },
+      {
+        "path": "main/adapters/nn2_ads131_build_guard.h",
+        "sha256": "806acc8338ed302c0ef6d1da7159d4bd061a97c6d711f78f7710f8826eebfd67"
+      },
+      {
+        "path": "main/adapters/nn2_ads131_control.inc",
+        "sha256": "ec62c75d5594e25f944bd5585a3fbe6ca39b0b53da722c5935523517430b2f4d"
+      },
+      {
+        "path": "main/adapters/nn2_ads131_esp.c",
+        "sha256": "8a66aa037978367cb7ad3c86e8ce2ceb52cb905ccc91f26c2a5493a5f54fcbc4"
+      },
+      {
+        "path": "main/adapters/nn2_ads131_logic.c",
+        "sha256": "82a953b7e33736ea48c870a0565022723b0b8ed54180c842b73058eb2696eef6"
+      },
+      {
+        "path": "main/adapters/nn2_ads131_logic.h",
+        "sha256": "3ebf2f1e0d3e754521371e6be3d572da6e7e5959f32a5302bc7cd06241a37b98"
+      },
+      {
+        "path": "main/adapters/nn2_led_bringup.c",
+        "sha256": "2bceda7743b024f07d4644bb309064ddcf44d81b48cce46a19e88061c0a4e917"
+      },
+      {
+        "path": "main/adapters/nn2_led_bringup.h",
+        "sha256": "4396e5d735b02128834d5c1fe0b4d20946f72688723c902f9008c25317bb45e4"
+      },
+      {
+        "path": "main/adapters/nn2_rtos_config.h",
+        "sha256": "f56911526d0c72c045179dc8c04a500f69588d81ebe0ba50ed52f27f0f333da3"
+      },
+      {
+        "path": "main/app_main.c",
+        "sha256": "c33e89e63911cba1aa9e648d28b25de4235f973a0e124155bb7e688853897fde"
+      },
+      {
+        "path": "main/nn2_board_v1.c",
+        "sha256": "27d161eb61a755103436a77551e3c137f0868e00e72385da6e547dc6aa22b614"
+      },
+      {
+        "path": "main/nn2_board_v1.h",
+        "sha256": "e80c1f32ca783cb33d6b7a7bcc4789e78af174e116396a9cef99b6d2fa029c6b"
+      },
+      {
+        "path": "main/nn2_legacy_profiles.c",
+        "sha256": "40f09e6d1b2a8062b759d3f1ddee12efdbe4504b45e29d221d6b6b43b0ec3fb0"
+      },
+      {
+        "path": "reference/MANIFEST.sha256",
+        "sha256": "6fa5856b5aee1bea3ca0b71abaea9978f4053b219ccfbfd997f6c74ca53e39cf"
+      },
+      {
+        "path": "sdkconfig.ads131-diagnostic",
+        "sha256": "5fe868b40647d1df409f4aebaceaef058a2398569b3f21d25ca70ff5d756a192"
+      },
+      {
+        "path": "sdkconfig.communication",
+        "sha256": "8cbe42110bd8c7579d5697f15810450be437a99ab64132deac5c12e94405dcf1"
+      },
+      {
+        "path": "sdkconfig.defaults",
+        "sha256": "bf063ee7b3897ffb4e6d018e666f605e68f48a32cecdedcdd211b274d508e0f1"
+      },
+      {
+        "path": "sdkconfig.led-bringup",
+        "sha256": "bf6f4a8030d2a79bd36b8e266b1dd7687e6ce7db6636c2a9f0d92f8e47e39def"
+      },
+      {
+        "path": "sdkconfig.led-short-bench",
+        "sha256": "90daa4007850072e2945f38a1ada89bda5fd7b4d8a3ca0e04c5120f9304b44c2"
+      },
+      {
+        "path": "sdkconfig.led-strict",
+        "sha256": "f9daa15b590690f2755c64816a173b2419cb08bfd64444aa27f78499c1d1118d"
+      },
+      {
+        "path": "test/board_power/CMakeLists.txt",
+        "sha256": "10731185a9ebe2b180d062100fb08c1f1a6bfcc70085e0de32ab81a338558476"
+      },
+      {
+        "path": "test/board_power/stubs/driver/gpio.h",
+        "sha256": "b53c0ff5b0ab4b85e63e2525c1b974b17dcd59586f5dd3d70fe9acd7a51b1aa7"
+      },
+      {
+        "path": "test/board_power/stubs/driver/i2c_master.h",
+        "sha256": "3b26bd321531597065eed899bace944cd3ef90c35c127910a3b05eb629e9a276"
+      },
+      {
+        "path": "test/board_power/stubs/esp_err.h",
+        "sha256": "2cbded7700cfd5679e189698dfe21577f8c1fc82f1ecd0841cd5ecd244a322e0"
+      },
+      {
+        "path": "test/board_power/stubs/freertos/FreeRTOS.h",
+        "sha256": "933ee2ae24ee8c7004ee03386236d873e8b44461cd6ba5bd1339cc5a5300d106"
+      },
+      {
+        "path": "test/board_power/stubs/freertos/task.h",
+        "sha256": "3a7825b71642cdacb1dc626ca091f8bd7b61f34598ed688e255635aac146c455"
+      },
+      {
+        "path": "test/board_power/test_power.c",
+        "sha256": "1b39ec5a2a313766b9a2d398d1dd38f0f556d0c90ef768bde1e2ee285b0dec94"
+      },
+      {
+        "path": "test/communication/CMakeLists.txt",
+        "sha256": "187b37eb6adb4444717af7857b78b4f967891f06d9329a50698febea112cb0ef"
+      },
+      {
+        "path": "test/communication/golden_vectors.json",
+        "sha256": "1febb7b9f19284563cdf6181c6300368a77ce1073b54e7b6cd4207ba501bbeec"
+      },
+      {
+        "path": "test/communication/loopback.c",
+        "sha256": "10a1fddebc9c7009c1823e0992a4b3e9967c0a280bc5b8147178d1c8d62a5e3b"
+      },
+      {
+        "path": "test/communication/test_board_profile.py",
+        "sha256": "5996d9cb1f5e1e12710e383a6ad8fa0b4fcb8dcaa2cb351fe8ac81cdecedd96a"
+      },
+      {
+        "path": "test/communication/test_communication.c",
+        "sha256": "e81ce1b69e62344956f08183248afc863953bd69fdb9e6dd62654d56ac3c0699"
+      },
+      {
+        "path": "test/communication/test_host.py",
+        "sha256": "6dbe6ba48f68d0d186cbe90c1f30032989497c7b48b27c5dce497aece0f627fc"
+      },
+      {
+        "path": "test/communication/test_led_cli.py",
+        "sha256": "e160fa4a5f8420ca9834fda6a27a3ded918faa6ef698681a100403473ddf6c74"
+      },
+      {
+        "path": "test/communication/test_usb_status.py",
+        "sha256": "b608ea6f3efae0b6c3f65825206302d6471607a4e8c96fccb8a9479169a68612"
+      },
+      {
+        "path": "test/communication/test_windows_wifi.py",
+        "sha256": "475e238b1d57b88468396c107f2c160a166bab2b46a60425d7102de33d051aae"
+      },
+      {
+        "path": "test/host/CMakeLists.txt",
+        "sha256": "e9d5b6533106c9a2f8b92d5542d19eb9857ac3e3329154cb3c644be0b89f93cc"
+      },
+      {
+        "path": "test/host/ads131_golden.h",
+        "sha256": "058c93302f415b001930fb529af8587ba5591d0ef35b020413982ff5ff604635"
+      },
+      {
+        "path": "test/host/nn2_test.h",
+        "sha256": "4b4d8e4cce51639d998e129622a47ecd2212b0ef8042948e2fa45a86a60253f0"
+      },
+      {
+        "path": "test/host/nn2_test_private.h",
+        "sha256": "5bb8c7515820b85afa427be0e935223dbdac71f5e3205b2852024c51b92091fb"
+      },
+      {
+        "path": "test/host/test_ads131.c",
+        "sha256": "a1e74d36abbd7d3ce5b4d4575e223bc1a22117fc506bfe48de286ebe4c04359b"
+      },
+      {
+        "path": "test/host/test_ads131_control.c",
+        "sha256": "7f365dbdb9fcdf353ca5eed9a9d9ffb6a24238322415f34076dac4d83ea9ec30"
+      },
+      {
+        "path": "test/host/test_contract.c",
+        "sha256": "86e866f69afc0e0ef7b336bb9f52b594c81cea8e33f763c23f43c887f69c8158"
+      },
+      {
+        "path": "test/host/test_main.c",
+        "sha256": "795293dcaa6efd5becdf6b56f34cf04655879564963e07fae37596e80e2d44ec"
+      },
+      {
+        "path": "test/host/test_ring.c",
+        "sha256": "6a48a79cf1d4ed65bb720f7623bb6a443277af71fb553a8e0cb7771e7ea02828"
+      },
+      {
+        "path": "test/host/test_sequencer.c",
+        "sha256": "a5451c85b5db6b164928df3da348e17a20e6c0d96aee46b7e5f0c03dfd9bd01e"
+      },
+      {
+        "path": "test/host/test_storage.c",
+        "sha256": "34b1ec049c993ba4a930bf47a4abe27dcc51f0478c1fea75e90c07d6153ed288"
+      },
+      {
+        "path": "test/host/unity/LICENSE.txt",
+        "sha256": "f53f7d62d1cd9d584a76062575ebc092d05af6df1b0f8e473ecc4aa7824b3861"
+      },
+      {
+        "path": "test/host/unity/PROVENANCE.json",
+        "sha256": "7c2c4a08fe3d20005df9e424849d1d07d6e9f4a898ecbd6a068fb7d90444b048"
+      },
+      {
+        "path": "test/host/unity/unity.c",
+        "sha256": "b90e735a54cf3b3765ab6caa955d11a1488ee73d9c6152cdc98576c2d17cb871"
+      },
+      {
+        "path": "test/host/unity/unity.h",
+        "sha256": "9db174d3c2c6424fd35c0980c5941d124c5ebb0f48e8172f997a2aa9554b64ea"
+      },
+      {
+        "path": "test/host/unity/unity_internals.h",
+        "sha256": "fcd8b3f6b412ac0ab599547eb8a30b6d7f3f0af77aab31f7a1822a2a8fc9a2b2"
+      },
+      {
+        "path": "test/led/CMakeLists.txt",
+        "sha256": "37f64758da7293e2cb82dbdb1ed6572501e37805e9823c92a0d5f057f136d15d"
+      },
+      {
+        "path": "test/led/stubs/driver/gpio.h",
+        "sha256": "8590b4da9e1464041f8ccfc39169d9ca15931b3db4b7c6a37cc1b4487033c191"
+      },
+      {
+        "path": "test/led/stubs/driver/gptimer.h",
+        "sha256": "6bab1d53fcfec4f678e07df71a4cc29324e8354d41b616a4bcf0417446639a1a"
+      },
+      {
+        "path": "test/led/stubs/driver/i2c_master.h",
+        "sha256": "8c46560599031c10375fa01a70a0096814b89e89faf7aab015372ce12f155bec"
+      },
+      {
+        "path": "test/led/stubs/esp_attr.h",
+        "sha256": "aa095722a75b4b2d972e885ce9dedf8354d8b914a7be25b9a2609a536019066b"
+      },
+      {
+        "path": "test/led/stubs/esp_err.h",
+        "sha256": "5a083d82da1a55819e0525ff7dee715f0fb9fba33d92abd4b82e97d84cc3d070"
+      },
+      {
+        "path": "test/led/stubs/esp_rom_sys.h",
+        "sha256": "cbd21b383551097d5db809a93c810f3ce2870859550014069afccc86c19d0dcd"
+      },
+      {
+        "path": "test/led/stubs/freertos/FreeRTOS.h",
+        "sha256": "199d670140813ac21b54e2f7c5760728a11504a5315a31b593e2d8a72f14c037"
+      },
+      {
+        "path": "test/led/stubs/freertos/task.h",
+        "sha256": "19236e8f91152a510fc4545278aaa952b12b5360f9e36022ddb40ea91f25e9bf"
+      },
+      {
+        "path": "test/led/stubs/sdkconfig.h",
+        "sha256": "fc29d4b889d7348af786f12a00fd4bf15004cc4851e975bb8ab0a94d82ca9027"
+      },
+      {
+        "path": "test/led/test_led.c",
+        "sha256": "a232b3f92813762105acb307c7452f34a41ea2c19c88df10e5477118b8b508ed"
+      },
+      {
+        "path": "tests/architecture/test_c11.py",
+        "sha256": "ab38bbaca9e17833e86d53deff07afb492633340106361225146a1e34ac91ed6"
+      },
+      {
+        "path": "tests/architecture/test_manifest.py",
+        "sha256": "0eff66f7e68c6e7a3d8c106b7f97d7e81ef2f143883800b79b18e509d82f26e6"
+      },
+      {
+        "path": "tests/architecture/test_n6.py",
+        "sha256": "1538d07ebd939b311d13a8d504f7f80a71385704aeb19a2c356bd244220c88fe"
+      },
+      {
+        "path": "tests/architecture/test_platform_boundary.py",
+        "sha256": "fcb8812d44cccb12fbe848321f552358d3839250e6f4749af76df72def1eae43"
+      },
+      {
+        "path": "tests/architecture/test_workflow.py",
+        "sha256": "c422a719b9aa96ad97eacc739dc56ca0e5dcb2e33bb50940d9825f591b0e1d14"
+      },
+      {
+        "path": "tests/gate-fixtures/test_issue10_gate.py",
+        "sha256": "ea739a5ae0d16fc477ca0dc07fc5b3c1e7efd0c4cb524a0865400c6d88a3cadb"
+      },
+      {
+        "path": "tests/gate-fixtures/test_issue10_lexical.py",
+        "sha256": "6691d077bed1cf525bacb6316945ba47846932189f8158e3aa5b20f4e1db35e1"
+      },
+      {
+        "path": "tests/reproducibility/test_comparison.py",
+        "sha256": "ed18b7a591e799a2f6cf003ad651d75a00aa469a3bd7631f9fb3c3770642a351"
+      },
+      {
+        "path": "tests/reproducibility/test_fail_closed.py",
+        "sha256": "424a472d8220404e967aa8e9c021faae3474d28aaabb85abe954a6546b7fb7f0"
+      },
+      {
+        "path": "tests/reproducibility/test_runner.py",
+        "sha256": "66a8cdea2b38c6e817ddfc9d755c27d3a8c9138ea8a4adc77c1fc03c8d635046"
+      },
+      {
+        "path": "tools/analyze_m0_reproducibility.py",
+        "sha256": "d87759dfe1455b9788db21e8819de51465663051eea67896187d303ba684fcc9"
+      },
+      {
+        "path": "tools/build_twice.sh",
+        "sha256": "5d4167dd2dbafd0d9c0217513e059642f4162c78ce013681e1e67b362264487b"
+      },
+      {
+        "path": "tools/check_ads131_config.py",
+        "sha256": "f51b850a2d43e47a825a17d0bc8694e52928375941c270f43de3fcd6847458ac"
+      },
+      {
+        "path": "tools/class-s-gate-selftest.sh",
+        "sha256": "122445273881cc33b50f2bea392fc1a991a97a2bb95daa2e16f131b06e2bc1da"
+      },
+      {
+        "path": "tools/class-s-gate.py",
+        "sha256": "f28cb7d1b6f74e3541e3de8bbd9e2d122bdc75e8c893a99114615eb49fdf7c82"
+      },
+      {
+        "path": "tools/class-s-gate.sh",
+        "sha256": "4bb8f2f20d81a1762ae7399ecafb228bea159fd42a15efc6baac98406ba53826"
+      },
+      {
+        "path": "tools/collect_adc_adapter_build.py",
+        "sha256": "219ee63b5374d83c99c90de6df13278e1eba207656ab3d76e6b3878d5b43c8a2"
+      },
+      {
+        "path": "tools/collect_inner_build.py",
+        "sha256": "a9f47f3d02fc1272cb6a60adb833edcd02a374c2b06ae86c16cb61efd5cc95f6"
+      },
+      {
+        "path": "tools/communication_source_identity.py",
+        "sha256": "9a59cc4559f6af7328ac6b55da3fc4f9dfd15a83614dd2d5dcd53da93212a584"
+      },
+      {
+        "path": "tools/layer_contract.py",
+        "sha256": "f2dd87b67ac2fa03327f9570a7867cc33fdcdf05c7065c99a49ee6006b23704e"
+      },
+      {
+        "path": "tools/layers.json",
+        "sha256": "775512d12dbae3f29b8711096ef0ef9487c4f36fe98fae24892ae36947cf965d"
+      },
+      {
+        "path": "tools/nn2_board_profile.py",
+        "sha256": "8f9284c6a69ee0d9186d0e8f08a664e1e8dc882a3b0befdd883424cab135f333"
+      },
+      {
+        "path": "tools/nn2_windows_wifi.py",
+        "sha256": "50d9d387fbc6fb6e8c8827671e8d181f6150bcd85dcc7777236334e57d489452"
+      },
+      {
+        "path": "tools/nn2ctl.py",
+        "sha256": "c6551eba03e0349430b3d1347f0b022bb5b9e8f86c142fa06e70d955598c7527"
+      },
+      {
+        "path": "tools/platform_components.json",
+        "sha256": "f52945ec3188aaa7eb4c9c74308cf6850c59b724d70bea45ff43c0a2430f471f"
+      },
+      {
+        "path": "tools/reproducible_build.py",
+        "sha256": "0da382fe3a93b3f8aa60991010bcb7924181dc35984b097a689df2f0dc93150c"
+      },
+      {
+        "path": "tools/run_host_tests.py",
+        "sha256": "d5b4ee999451b750e0cd824a685b4e8be6f6a821c4b5ea5e061992a2d388a185"
+      },
+      {
+        "path": "tools/verify-reference.ps1",
+        "sha256": "617f24de7b0c2460777705884b42219aac592b15cbb7bad1dadd8d5ccb00b2d0"
+      },
+      {
+        "path": "tools/verify_ads131_control_regression.py",
+        "sha256": "a2f730aae0492b1ebd843a6f605745e7ce6d8133fbac962daec4d61b6757a432"
+      },
+      {
+        "path": "tools/verify_c11_idf.py",
+        "sha256": "32dd430147dc452741dba76ac25914a3d754edc036cf8eb0b0f7ef24440ad5c8"
+      },
+      {
+        "path": "tools/verify_c11_regression.py",
+        "sha256": "2413bbdc269cd02e486f69c3de84e2904fcae21c44009d46fa51e64240e38784"
+      },
+      {
+        "path": "tools/verify_idf_image.py",
+        "sha256": "b82d7cbcd821ec080125d87c7779fa9020fea211ace96b26e3a38df25fe3d7ba"
+      },
+      {
+        "path": "tools/verify_repro_regression.py",
+        "sha256": "164ee8326785a0a22f9e63cb2261792724fabd1eefd13554f084bdb00fc2b710"
+      }
+    ],
+    "vscode_settings_sha256": "084c409a259939a1087af2b7ba154f6e289b2e01434d6dc141609c74e3f9af8f"
+  },
+  "validation": {
+    "utc": "2026-10-27T11:42:21.425976+00:00",
+    "operator": "Agent03 Codex/OpenAI agent03-short-20261027-profile",
+    "python_version": "3.13.5",
+    "communication_python": {
+      "command": "python -m unittest discover -s test/communication -p test_*.py",
+      "cases": 40,
+      "passed": 33,
+      "skipped": 7,
+      "failures": 0,
+      "skip_reason": "optional native C loopback executable not supplied; no native relink"
+    },
+    "profile_tests": {
+      "cases": 8,
+      "cmake_script_scenarios": 6,
+      "result": "PASS",
+      "method": "CMake -P only; no SDK, project configure, compiler or linker"
+    },
+    "cli_tests": {
+      "cases": 8,
+      "result": "PASS",
+      "includes": "15-second advisory request rejected before START; one INFO preflight"
+    },
+    "platform_boundary": {
+      "cases": 5,
+      "result": "PASS"
+    },
+    "manifest": {
+      "cases": 15,
+      "result": "PASS"
+    },
+    "static_gate": "PASS",
+    "reference_integrity": "PASS:319 files before/after",
+    "whitespace": "PASS",
+    "native_led_regression": "NOT RERUN; production runtime and strict/advisory native test sources unchanged",
+    "firmware_build_clean_link_size_map": "NOT RUN by agent",
+    "device_flash_energized_tests": "NOT RUN by agent"
+  }
+}

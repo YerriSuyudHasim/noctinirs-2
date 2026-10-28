@@ -8,6 +8,7 @@ from pathlib import Path
 import shlex
 import subprocess
 
+from layer_contract import load_manifest, platform_paths
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -19,7 +20,9 @@ def main():
     dest = args.evidence.resolve()
     dest.mkdir(parents=True, exist_ok=False)
     entries = json.loads((args.build / 'compile_commands.json').read_text())
-    selected = [entry for entry in entries if Path(entry['file']).resolve().is_relative_to(ROOT / 'main')]
+    platform = platform_paths(ROOT, [r['path'] for r in load_manifest()])
+    roots = [ROOT / 'main', *(ROOT / path for path in platform)]
+    selected = [entry for entry in entries if any(Path(entry['file']).resolve().is_relative_to(path) for path in roots)]
     if not selected:
         raise RuntimeError('No actual adapter/composition compile commands')
     records = []

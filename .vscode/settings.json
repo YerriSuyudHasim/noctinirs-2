@@ -1,0 +1,26 @@
+{
+    "idf.currentSetup": "C:\\esp\\v6.1\\esp-idf",
+    "idf.openOcdConfigs": [
+        "board/esp32s3-builtin.cfg"
+    ],
+    "idf.customExtraVars": {},
+    "clangd.path": "C:\\Espressif\\tools\\esp-clangd\\esp-21.1.3_20260408\\esp-clangd\\bin\\clangd.exe",
+    "clangd.arguments": [
+        "--background-index",
+        "--query-driver=**",
+        "--compile-commands-dir=c:\\Users\\doeki\\Documents\\GitHub\\noctinirs-2/build"
+    ],
+    "idf.flashType": "UART",
+    "idf.port": "COM11",
+    "idf.cmakeCompilerArgs": [
+        "-G",
+        "Ninja",
+        "-DPYTHON_DEPS_CHECKED=1",
+        "-DESP_PLATFORM=1"
+    ],
+    "idf.buildPath": "${workspaceFolder}/build",
+    "idf.sdkconfigFilePath": "${workspaceFolder}/sdkconfig",
+    "idf.sdkconfigDefaults": [
+        "sdkconfig.defaults"
+    ]
+}

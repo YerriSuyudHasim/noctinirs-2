@@ -1,0 +1,4 @@
+# Optional overlay AFTER sdkconfig.led-bringup; never applied implicitly.
+CONFIG_NN2_LED_SHORT_BENCH=y
+CONFIG_NN2_LED_RUNTIME_I2C_HZ=800000
+CONFIG_I2C_ISR_IRAM_SAFE=y

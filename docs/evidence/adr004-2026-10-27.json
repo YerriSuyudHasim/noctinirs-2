@@ -1,0 +1,462 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-27T05:52:37.315921+00:00",
+  "base_commit": "5958a0eafec6b03c2b158c4026f3f10b8a3366d1",
+  "dirty_worktree": true,
+  "source_sha256": "e7e09fba3b242c35f702fbc8809637b92e805ceb6befd8112dbe98f730623753",
+  "scope": "Active C/Python sources, headers and CMake; control/power tests and current ADR/evidence; excludes generated firmware configuration and reference snapshots",
+  "files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "4a511f6899ca96e8d2e6cf2fb867d493b2ad082bd35a9a7a4be59f3bf7906797"
+    },
+    {
+      "path": "cmake/nn2_c11.cmake",
+      "sha256": "ee9f99b9a72d56a15fcb83d5bd38ddfc9945630e03e2cf554dcc096a1e8e9713"
+    },
+    {
+      "path": "cmake/nn2_c11_guard.h",
+      "sha256": "512fc7625f5958c9eac37007bb90aab3fe9d6f6b29147290bdc1aca7f0e32fa6"
+    },
+    {
+      "path": "components/nn2_app/CMakeLists.txt",
+      "sha256": "5286900b2459087b73667c762932bc785d5341daca6e19b34d4772b94cadb5bb"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_adc_diagnostic.h",
+      "sha256": "a28eadf887bc13cad4073f0268e5a326721bdc94d868044544c050fc1cbabbb2"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_battery.h",
+      "sha256": "57acd6a1bc6df3dd49a522950a409628bc87bacd7aeb704fbee663ffe9ceefb3"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_comm.h",
+      "sha256": "37f2b1762410300c841a2da4fe652af9622a9e52fed7afbf9390e2ab8af255a6"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_provision.h",
+      "sha256": "5eeb486627dea6a8173e6afe6b3fc624558bdacf15f2e71e8f69ba8220ea4574"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_sequencer.h",
+      "sha256": "0b8e3983dfb7ed62f727285b829948901d3e0ea255aa459eace36f140ce53218"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_adc_diagnostic.c",
+      "sha256": "fe7964c3677d726fca6f363475c4c20d0b7290e7b0e28faf9457a1d342f760b4"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_battery.c",
+      "sha256": "074e5bda435cc332bee06b1a965f0489065a197327af17f723200db1e0b8bfa1"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_comm.c",
+      "sha256": "17138fb68565f664eed3e7e2e826ef447062e725c985c5799ff8c5875ffc8867"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_provision.c",
+      "sha256": "fe5399bca1b1e9e775aebb14605816d5c17597f14b808d8fb6b6b097490a580b"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_sequencer.c",
+      "sha256": "ec675dc6678a9ae138128eeeb3a6bb3b0b8462e4809dcc4c0ed9a28731df13c9"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_sequencer_internal.h",
+      "sha256": "56e787883938f1070f56bdef7cd16b8aba0c4b0fdbadb8a4a5804d3ba5c5201c"
+    },
+    {
+      "path": "components/nn2_board/CMakeLists.txt",
+      "sha256": "4d8bfa6add536fbeb9ff9cc092a8d6300bb056ca57ea1d0256e7d0a58a55d32d"
+    },
+    {
+      "path": "components/nn2_board/include/nn2_board.h",
+      "sha256": "9031108a27e23689ed92b3a43954a7420b4739d40c3fa86c4b032f703c0a1126"
+    },
+    {
+      "path": "components/nn2_board/include/nn2_board_power.h",
+      "sha256": "ffe824abb42cf0073710b2d42e27e455ade5c8c32095bf0418a67346b0560c98"
+    },
+    {
+      "path": "components/nn2_board/nn2_board.c",
+      "sha256": "1bd6142b1361a72e1e65453f2b1bb3a80fc48897ac068a9195e4f5913fb295a7"
+    },
+    {
+      "path": "components/nn2_board/nn2_board_power.c",
+      "sha256": "baf3f2306897408b6828c78b01293bc6ba70145a212449aa9ee1621bff91363c"
+    },
+    {
+      "path": "components/nn2_config/CMakeLists.txt",
+      "sha256": "600c550507381149e3a83ca4ed87300a50430bd92b2571fbd1d31364656a8211"
+    },
+    {
+      "path": "components/nn2_config/include/nn2_config.h",
+      "sha256": "aae784b937a301f1d903aa7c2df493bd1e65c5e3383b52fa5fdd8aa06cfce1c3"
+    },
+    {
+      "path": "components/nn2_config/nn2_config.c",
+      "sha256": "40c8d795d1eed6828f1f64c7c904ef7a03dedafd10f7797b5dec39132f127b6e"
+    },
+    {
+      "path": "components/nn2_core/CMakeLists.txt",
+      "sha256": "82089a6fad25f338a070b572737ebc6225cda4336ca88778d97dec6eba75fbdf"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_adc_record.h",
+      "sha256": "6f114f5f54f041a56d5632041e01dd95efba171dd4cef5bc1222df53e2935623"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_protocol.h",
+      "sha256": "f0dc28a8f0cc8561f0882c15e145fbb072690803f7c1bdcad8996408fa2f5c76"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_ring.h",
+      "sha256": "58590ef5274238b06bf4413bca91782328fdd729647b5bc445eabcba1c1730f2"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_types.h",
+      "sha256": "98176616c2d4f9f75a51aac667b7b5412e8ed9767dce7ee090b17bfe8492338e"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_protocol.c",
+      "sha256": "7cfd1499600c9703fa57121b4ee357d44210667385478e3d3af0782106b33d7f"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_ring.c",
+      "sha256": "49057b29ce781930b63f5475c0293d05bba4bc0627de5c50257018f764c71f4d"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_ring_internal.h",
+      "sha256": "7a889b22515b9d2f5ce073440dd124f75d67404279c6f8682564709eb5ebc41d"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_status.c",
+      "sha256": "fa41d3df11ebd31a963de87dc1246f0aec63a8b470683f51583fb802877e306f"
+    },
+    {
+      "path": "components/nn2_net/CMakeLists.txt",
+      "sha256": "155c68a439f45401dbc1186374496e5c73468c707a2a9794518721d2977dbafa"
+    },
+    {
+      "path": "components/nn2_net/include/nn2_net.h",
+      "sha256": "704b42879b444aeb6ca9a56a1a904617e50bcc5f715d6f404ada516b9feac7b8"
+    },
+    {
+      "path": "components/nn2_net/nn2_net.c",
+      "sha256": "08692c31b78b525a044a6c95b9977583ec4170dc7e87ceaa6b0363e51ec4131a"
+    },
+    {
+      "path": "components/nn2_ports/CMakeLists.txt",
+      "sha256": "21c968b6d40f73bcd9f7bb39460dee31f167df019ff8bd949e8a922bc33eb37d"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_adc.h",
+      "sha256": "6f9e35ff364b16b589d28adb24c445843a0357091f54ea4cc51beb609e41d5ee"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_adc_stream.h",
+      "sha256": "8feb64df2c0632edf1363d25cfe9c91802090d62959c3bb0afcec3ef406c06d4"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_battery.h",
+      "sha256": "951c1b03e83715df9a54faaed0881c6547dfd293ecf07bb35caf409bc06da938"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_clock.h",
+      "sha256": "8e6835a7ef4dc43d4112306fe81025acf8d60e1393e534877dfea30bfe4e3ef9"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_led.h",
+      "sha256": "0a1ef831cd0d6aa8048eed2179742ac6cd7f202b212455f11d7797cb4e520e11"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_log.h",
+      "sha256": "43f5209ed3439640dff9472149246b7dc4bca2ac36f7df1a0c918feb89b75280"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_network_config.h",
+      "sha256": "b6e8de6ef9b50ee36bf29e694c9c712909db2e9794cefd38b4b03d79b3cbadd4"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_safety.h",
+      "sha256": "ab5a4e3c79c9976194818f07627ef5f965414636ca8fbbf2ef969723e939b6f3"
+    },
+    {
+      "path": "components/nn2_provision/CMakeLists.txt",
+      "sha256": "ab401f6651a39a1e50323124a40e7792b727051bdf35738f51243152946423d0"
+    },
+    {
+      "path": "components/nn2_provision/include/nn2_provision.h",
+      "sha256": "6a25f0e4d01a0bce7086a489dbbbd9a865cce7f4f609b53205a6a87704fcf676"
+    },
+    {
+      "path": "components/nn2_provision/nn2_provision.c",
+      "sha256": "81a5e1da203c0341553887a1704dd4ca2468619e28fdc7724fce568532f5be87"
+    },
+    {
+      "path": "components/nn2_wifi/CMakeLists.txt",
+      "sha256": "0e5ad282dafd5f79c6d02b84313f1c6af64b6f6704eb0565bf1c3ad9cf2091ec"
+    },
+    {
+      "path": "components/nn2_wifi/include/nn2_wifi.h",
+      "sha256": "dbb0f4732a8d4cd5a8680a0a2972eaacb6a1010e8e31c90398a753d722f0f4d5"
+    },
+    {
+      "path": "components/nn2_wifi/nn2_wifi.c",
+      "sha256": "a1a46c3d5fecbd688f71c903134544493657a4394bd9364920b8f3cca36045e6"
+    },
+    {
+      "path": "docs/ADR004_EVIDENCE.md",
+      "sha256": "7df0ee6602e0c7911c31cf8c55df7cc6b9a9c6fe449c2e9746cdac780e0c79f3"
+    },
+    {
+      "path": "docs/adr/0004-host-protocol.md",
+      "sha256": "a9e8135ba29bcad69adb08d80dd9a3005ca2d446d4ddc91f56e64faf5d6899e5"
+    },
+    {
+      "path": "docs/adr/0004-local-implementation.md",
+      "sha256": "e2d4c8f9ea071d96f0879b426db028ad7a88fc4ce3019f3938940f3857387b8a"
+    },
+    {
+      "path": "main/CMakeLists.txt",
+      "sha256": "e8e458f0b190cc50604089d6b6a5ca2773043b396ef9175cf1b44e26ca915432"
+    },
+    {
+      "path": "main/Kconfig.projbuild",
+      "sha256": "0bf3c994ed572b859d5b9cef6c8e5f62b48e433a21b92cd6ef51c042f80acaba"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_adc_fake.c",
+      "sha256": "052b5b186fcd0ef68059611991a1ede4cfb9b45a2cb7ef4ad72c1333ad35753e"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_ads131.h",
+      "sha256": "6bf51313795ac70ae521ab4d48b19831acf676550f0ac086b4edd211de20c1da"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_clock_esp.c",
+      "sha256": "1543a308fb61e78866f99c38dc31d63beb987ca7cf090ece99265e793f65e1ab"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_esp32s3.h",
+      "sha256": "391242ca7bf3813ab07af067382f09e96b77b7577ef0974379b5edeb977ebc2e"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_led_disabled.c",
+      "sha256": "57a61ab86da9804392fee3f9efbfcd36763ee304ee4ad941e529447fcb587ebb"
+    },
+    {
+      "path": "main/adapters/nn2_adapter_log_esp.c",
+      "sha256": "a6d946948060311523d7969de84e355f18e4eb8e979c85a1b3067b91b27633a1"
+    },
+    {
+      "path": "main/adapters/nn2_ads131_build_guard.h",
+      "sha256": "806acc8338ed302c0ef6d1da7159d4bd061a97c6d711f78f7710f8826eebfd67"
+    },
+    {
+      "path": "main/adapters/nn2_ads131_esp.c",
+      "sha256": "8a66aa037978367cb7ad3c86e8ce2ceb52cb905ccc91f26c2a5493a5f54fcbc4"
+    },
+    {
+      "path": "main/adapters/nn2_ads131_logic.c",
+      "sha256": "82a953b7e33736ea48c870a0565022723b0b8ed54180c842b73058eb2696eef6"
+    },
+    {
+      "path": "main/adapters/nn2_ads131_logic.h",
+      "sha256": "3ebf2f1e0d3e754521371e6be3d572da6e7e5959f32a5302bc7cd06241a37b98"
+    },
+    {
+      "path": "main/adapters/nn2_rtos_config.h",
+      "sha256": "f36fb23ce38ae42c44379bef09afef897347adb4afa6f58825fbb92c458a8431"
+    },
+    {
+      "path": "main/app_main.c",
+      "sha256": "a636c103a1ef4b3f5bd1157dced6f430efdd201939f23c5c75439209d18c9cf6"
+    },
+    {
+      "path": "main/nn2_board_v1.c",
+      "sha256": "27d161eb61a755103436a77551e3c137f0868e00e72385da6e547dc6aa22b614"
+    },
+    {
+      "path": "main/nn2_board_v1.h",
+      "sha256": "e80c1f32ca783cb33d6b7a7bcc4789e78af174e116396a9cef99b6d2fa029c6b"
+    },
+    {
+      "path": "main/nn2_legacy_profiles.c",
+      "sha256": "e8efa4d0e370fe1d2d29a75660e586791dd7d0b3df9833c8a903c0a59b4095f6"
+    },
+    {
+      "path": "sdkconfig.communication",
+      "sha256": "8cbe42110bd8c7579d5697f15810450be437a99ab64132deac5c12e94405dcf1"
+    },
+    {
+      "path": "sdkconfig.defaults",
+      "sha256": "bf063ee7b3897ffb4e6d018e666f605e68f48a32cecdedcdd211b274d508e0f1"
+    },
+    {
+      "path": "test/board_power/CMakeLists.txt",
+      "sha256": "6ed61a209bae4287f1267ce42a2859a4c9cd64bd002b9c75f772de36ea3e5f6c"
+    },
+    {
+      "path": "test/board_power/stubs/driver/gpio.h",
+      "sha256": "b53c0ff5b0ab4b85e63e2525c1b974b17dcd59586f5dd3d70fe9acd7a51b1aa7"
+    },
+    {
+      "path": "test/board_power/stubs/driver/i2c_master.h",
+      "sha256": "3b26bd321531597065eed899bace944cd3ef90c35c127910a3b05eb629e9a276"
+    },
+    {
+      "path": "test/board_power/stubs/esp_err.h",
+      "sha256": "2cbded7700cfd5679e189698dfe21577f8c1fc82f1ecd0841cd5ecd244a322e0"
+    },
+    {
+      "path": "test/board_power/stubs/freertos/FreeRTOS.h",
+      "sha256": "933ee2ae24ee8c7004ee03386236d873e8b44461cd6ba5bd1339cc5a5300d106"
+    },
+    {
+      "path": "test/board_power/stubs/freertos/task.h",
+      "sha256": "3a7825b71642cdacb1dc626ca091f8bd7b61f34598ed688e255635aac146c455"
+    },
+    {
+      "path": "test/board_power/test_power.c",
+      "sha256": "d749a4f1b49384cbf32e634b95f5cc7405589ce5dfa435707901f065e75bdbf0"
+    },
+    {
+      "path": "test/communication/CMakeLists.txt",
+      "sha256": "555e46cf4ed58704191035bf1923b4e02a39505f0c9debc7b32379f1b1ae4dca"
+    },
+    {
+      "path": "test/communication/golden_vectors.json",
+      "sha256": "1febb7b9f19284563cdf6181c6300368a77ce1073b54e7b6cd4207ba501bbeec"
+    },
+    {
+      "path": "test/communication/loopback.c",
+      "sha256": "f79147e7ac092666ea5d9bd90b455aa35101b6a1b5850055c3485a68ca953bfe"
+    },
+    {
+      "path": "test/communication/test_communication.c",
+      "sha256": "3f838372c9baea5450a5a5f7939aad9f7bd61dd425be1b18ed0cfa2a8435a910"
+    },
+    {
+      "path": "test/communication/test_host.py",
+      "sha256": "6dbe6ba48f68d0d186cbe90c1f30032989497c7b48b27c5dce497aece0f627fc"
+    },
+    {
+      "path": "test/communication/test_windows_wifi.py",
+      "sha256": "475e238b1d57b88468396c107f2c160a166bab2b46a60425d7102de33d051aae"
+    },
+    {
+      "path": "tools/analyze_m0_reproducibility.py",
+      "sha256": "d87759dfe1455b9788db21e8819de51465663051eea67896187d303ba684fcc9"
+    },
+    {
+      "path": "tools/check_ads131_config.py",
+      "sha256": "f51b850a2d43e47a825a17d0bc8694e52928375941c270f43de3fcd6847458ac"
+    },
+    {
+      "path": "tools/class-s-gate.py",
+      "sha256": "f28cb7d1b6f74e3541e3de8bbd9e2d122bdc75e8c893a99114615eb49fdf7c82"
+    },
+    {
+      "path": "tools/collect_adc_adapter_build.py",
+      "sha256": "219ee63b5374d83c99c90de6df13278e1eba207656ab3d76e6b3878d5b43c8a2"
+    },
+    {
+      "path": "tools/collect_inner_build.py",
+      "sha256": "a9f47f3d02fc1272cb6a60adb833edcd02a374c2b06ae86c16cb61efd5cc95f6"
+    },
+    {
+      "path": "tools/communication_source_identity.py",
+      "sha256": "ad617b464f195a7fa548d4ecebd7f6538970f3df76207a6d5fabe2d6a1cce4ac"
+    },
+    {
+      "path": "tools/layer_contract.py",
+      "sha256": "f2dd87b67ac2fa03327f9570a7867cc33fdcdf05c7065c99a49ee6006b23704e"
+    },
+    {
+      "path": "tools/layers.json",
+      "sha256": "775512d12dbae3f29b8711096ef0ef9487c4f36fe98fae24892ae36947cf965d"
+    },
+    {
+      "path": "tools/nn2_windows_wifi.py",
+      "sha256": "50d9d387fbc6fb6e8c8827671e8d181f6150bcd85dcc7777236334e57d489452"
+    },
+    {
+      "path": "tools/nn2ctl.py",
+      "sha256": "04a562e2a230ceab0f76075cb8fadc552153a1feb9f18751aac5b8c6ce396fed"
+    },
+    {
+      "path": "tools/platform_components.json",
+      "sha256": "7f78123d10ab8b6d61818c817801d05e3b204e24da975b48f7f3df0ad1839f21"
+    },
+    {
+      "path": "tools/reproducible_build.py",
+      "sha256": "0da382fe3a93b3f8aa60991010bcb7924181dc35984b097a689df2f0dc93150c"
+    },
+    {
+      "path": "tools/run_host_tests.py",
+      "sha256": "d5b4ee999451b750e0cd824a685b4e8be6f6a821c4b5ea5e061992a2d388a185"
+    },
+    {
+      "path": "tools/verify_ads131_control_regression.py",
+      "sha256": "a2f730aae0492b1ebd843a6f605745e7ce6d8133fbac962daec4d61b6757a432"
+    },
+    {
+      "path": "tools/verify_c11_idf.py",
+      "sha256": "32dd430147dc452741dba76ac25914a3d754edc036cf8eb0b0f7ef24440ad5c8"
+    },
+    {
+      "path": "tools/verify_c11_regression.py",
+      "sha256": "2413bbdc269cd02e486f69c3de84e2904fcae21c44009d46fa51e64240e38784"
+    },
+    {
+      "path": "tools/verify_idf_image.py",
+      "sha256": "b82d7cbcd821ec080125d87c7779fa9020fea211ace96b26e3a38df25fe3d7ba"
+    },
+    {
+      "path": "tools/verify_repro_regression.py",
+      "sha256": "164ee8326785a0a22f9e63cb2261792724fabd1eefd13554f084bdb00fc2b710"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "build/adr004-host/final-build.log",
+      "sha256": "f2194aa5cbd571190139726598871c4a3aa8bff122af4435ca76984292edf0c9"
+    },
+    {
+      "path": "build/adr004-host/final-c-tests.log",
+      "sha256": "5db7289fbfb1bad92a6ac7ce04285ca89d40a318844c1f0c727b825218d5ae2e"
+    },
+    {
+      "path": "build/adr004-host/python-tests.log",
+      "sha256": "b694ab5eabf6fa7500d20eb3e51830e91543f29c1d4dcede3bba667503b76315"
+    },
+    {
+      "path": "build/board-power-msvc/adr004-build.log",
+      "sha256": "d6d24a3cc0416635d52dd14b1e8db19505bbe457f6db354ac4c097408ebd4b3c"
+    },
+    {
+      "path": "build/board-power-msvc/adr004-tests.log",
+      "sha256": "bdbef9d897ab4ec87b116ef6de592baff66f4fe3633be340edb26c65309551ea"
+    },
+    {
+      "path": "build/board-power-msvc/adr004-tests.xml",
+      "sha256": "d0d81fd59c3f82165009ebd380c2e142679a942503769d36600259bb7852fc89"
+    }
+  ],
+  "results": {
+    "host_c": "PASS 418 checks",
+    "host_python_with_real_C_udp_loopback": "PASS 13 tests, no skips; 7 real native C UDP integration tests",
+    "host_power_mocks": "PASS 37 cases",
+    "strict_c11_syntax": "PASS",
+    "inner_dependency_gate": "PASS",
+    "platform_boundary": "PASS 5 tests",
+    "reference_integrity": "PASS 319 files",
+    "firmware_build": "NOT RUN",
+    "on_target": "NOT RUN",
+    "HIL": "NOT RUN",
+    "field": "NOT RUN",
+    "full_architecture_suite": "Not rerun; previous failures retained in historical record"
+  }
+}

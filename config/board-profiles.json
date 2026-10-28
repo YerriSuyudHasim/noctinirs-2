@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "main-board-short-advisory": {
+      "policy": "BENCH_WARN",
+      "target": "esp32s3",
+      "build_path": "build",
+      "sdkconfig": "sdkconfig",
+      "defaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.communication",
+        "sdkconfig.led-bringup",
+        "sdkconfig.led-short-bench"
+      ],
+      "sdkconfig_values": {
+        "NN2_PROFILE_COMMUNICATION": "y",
+        "NN2_PROFILE_FAKE": "n",
+        "NN2_PROFILE_ADS131_DIAGNOSTIC": "n",
+        "NN2_LED_BRINGUP": "y",
+        "NN2_LED_SHORT_BENCH": "y",
+        "NN2_LED_RUNTIME_I2C_HZ": "800000",
+        "I2C_ISR_IRAM_SAFE": "y"
+      },
+      "limit_s": 0,
+      "single_run": false,
+      "duration_control": "HOST",
+      "fs_min": 2,
+      "fs_max": 10,
+      "runtime_i2c_hz": 800000
+    },
+    "main-board-strict": {
+      "policy": "STRICT",
+      "target": "esp32s3",
+      "build_path": "build",
+      "sdkconfig": "sdkconfig",
+      "defaults": [
+        "sdkconfig.defaults",
+        "sdkconfig.communication",
+        "sdkconfig.led-bringup",
+        "sdkconfig.led-strict"
+      ],
+      "sdkconfig_values": {
+        "NN2_PROFILE_COMMUNICATION": "y",
+        "NN2_PROFILE_FAKE": "n",
+        "NN2_PROFILE_ADS131_DIAGNOSTIC": "n",
+        "NN2_LED_BRINGUP": "y",
+        "NN2_LED_SHORT_BENCH": "n",
+        "NN2_LED_RUNTIME_I2C_HZ": "400000",
+        "I2C_ISR_IRAM_SAFE": "y"
+      },
+      "limit_s": 0,
+      "single_run": false,
+      "duration_control": "HOST",
+      "fs_min": 2,
+      "fs_max": 10,
+      "runtime_i2c_hz": 400000
+    }
+  }
+}

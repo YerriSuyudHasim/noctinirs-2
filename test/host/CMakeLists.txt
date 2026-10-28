@@ -4,16 +4,28 @@ project(nn2_host_tests C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 get_filename_component(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 include("${ROOT}/cmake/nn2_c11.cmake")
-set(INNER_ROOTS
-    "${ROOT}/components/nn2_core/include"
-    "${ROOT}/components/nn2_ports/include"
-    "${ROOT}/components/nn2_app/include")
-add_library(nn2_behavior STATIC
-    "${ROOT}/components/nn2_core/src/nn2_core_ring.c"
-    "${ROOT}/components/nn2_core/src/nn2_core_status.c"
-    "${ROOT}/components/nn2_app/src/nn2_app_sequencer.c"
-    "${ROOT}/components/nn2_app/src/nn2_app_adc_diagnostic.c"
-    "${ROOT}/main/adapters/nn2_ads131_logic.c")
+# Canonical inventory shared with IDF and the evidence collector.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${ROOT}/tools/layers.json" "${ROOT}/tools/layer_contract.py")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${ROOT}/tools/layer_contract.py" paths
+    RESULT_VARIABLE rc OUTPUT_VARIABLE paths OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT rc EQUAL 0 OR paths STREQUAL "")
+    message(FATAL_ERROR "Invalid or empty canonical layer manifest")
+endif()
+string(REPLACE "\n" ";" paths "${paths}")
+set(INNER_ROOTS)
+set(INNER_SOURCES)
+set(headers)
+foreach(path IN LISTS paths)
+    list(APPEND INNER_ROOTS "${ROOT}/${path}/include")
+    file(GLOB_RECURSE sources_in_layer CONFIGURE_DEPENDS "${ROOT}/${path}/*.c")
+    file(GLOB_RECURSE headers_in_layer CONFIGURE_DEPENDS "${ROOT}/${path}/*.h")
+    list(APPEND INNER_SOURCES ${sources_in_layer})
+    list(APPEND headers ${headers_in_layer})
+endforeach()
+add_library(nn2_behavior STATIC ${INNER_SOURCES} "${ROOT}/main/adapters/nn2_ads131_logic.c")
+
 target_include_directories(nn2_behavior PUBLIC ${INNER_ROOTS} "${ROOT}/main/adapters")
 target_compile_options(nn2_behavior PRIVATE -Wall -Wextra -Werror -pedantic)
 nn2_require_c11(nn2_behavior)
@@ -26,7 +38,6 @@ target_compile_options(nn2_host_tests PRIVATE -Wall -Wextra -Werror -pedantic)
 nn2_require_c11(nn2_host_tests)
 
 # Each header gets fresh preprocessor state. Intentional combined probes follow.
-file(GLOB_RECURSE headers CONFIGURE_DEPENDS "${ROOT}/components/*.h")
 file(WRITE "${CMAKE_BINARY_DIR}/host_headers.tsv" "header\tprobe\n")
 foreach(header IN LISTS headers)
     file(RELATIVE_PATH relative "${ROOT}" "${header}")
