@@ -204,7 +204,7 @@ class Issue10GateFixtures(unittest.TestCase):
 
     def test_missing_root_and_non_directory_components_fail(self):
         import shutil
-        shutil.rmtree(self.root / 'components')
+        __import__('shutil').rmtree(self.root / 'components')
         (self.root / 'components').write_text('invalid hierarchy')
         self.gate(1)
         p = subprocess.run([sys.executable, str(GATE), str(self.root / 'missing')],
@@ -248,7 +248,7 @@ class Issue10GateFixtures(unittest.TestCase):
 
     def test_no_layers_not_applicable(self):
         import shutil
-        shutil.rmtree(self.root / 'components')
+        __import__('shutil').rmtree(self.root / 'components')
         self.gate(3)
 
     def test_empty_layer_fails(self):
@@ -353,6 +353,11 @@ class WorkflowDetectionFixtures(unittest.TestCase):
         self.root = pathlib.Path(self.tmp.name)
         import shutil
         shutil.copytree(GATE.parent, self.root / 'tools', ignore=shutil.ignore_patterns('__pycache__'))
+        # The copied production platform manifest requires its declared directories.
+        import json
+        for path in json.loads((self.root / 'tools/platform_components.json').read_text())['paths']:
+            (self.root / path).mkdir(parents=True, exist_ok=True)
+
         workflow = (GATE.parents[1] / '.github/workflows/firmware-build.yml').read_text()
         block = workflow.split('      - name: Detect layered components', 1)[1]
         self.script = textwrap.dedent(block.split('        run: |\n', 1)[1]
@@ -364,11 +369,25 @@ class WorkflowDetectionFixtures(unittest.TestCase):
         script = self.script
         if os.name == 'nt':
             script = 'python3() { "' + pathlib.Path(sys.executable).as_posix() + '" "$@"; };\n' + script
-        p = subprocess.run(['bash', '-c', script], cwd=self.root, env=env,
+        bash = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else 'bash'
+        p = subprocess.run([bash, '-c', script], cwd=self.root, env=env,
                            capture_output=True, text=True)
         self.assertEqual(p.returncode, expected, p.stdout + p.stderr)
         if present is not None:
             self.assertIn('present=' + present, (self.root / '.detect-output').read_text())
+
+    def test_missing_registered_platform(self):
+        (self.root / 'components/nn2_board').rmdir()
+        self.detect(1)
+
+    def test_registered_platform_symlink(self):
+        path = self.root / 'components/nn2_board'
+        path.rmdir()
+        try:
+            path.symlink_to(self.root / 'missing', target_is_directory=True)
+        except OSError:
+            self.skipTest('symlink privilege unavailable')
+        self.detect(1)
 
     def test_absent(self):
         self.detect(0, 'false')
@@ -380,21 +399,22 @@ class WorkflowDetectionFixtures(unittest.TestCase):
     def test_components_symlink(self):
         target = self.root / 'outside'
         target.mkdir()
+        __import__('shutil').rmtree(self.root / 'components')
         (self.root / 'components').symlink_to(target, target_is_directory=True)
         self.detect(1)
 
     def test_broken_normative_symlink(self):
-        (self.root / 'components').mkdir()
+        (self.root / 'components').mkdir(exist_ok=True)
         (self.root / 'components/nn2_core').symlink_to(self.root / 'missing', target_is_directory=True)
         self.detect(1)
 
     def test_normative_file(self):
-        (self.root / 'components').mkdir()
+        (self.root / 'components').mkdir(exist_ok=True)
         (self.root / 'components/nn2_core').write_text('invalid')
         self.detect(1)
 
     def test_unknown_file_and_symlink(self):
-        (self.root / 'components').mkdir()
+        (self.root / 'components').mkdir(exist_ok=True)
         p = self.root / 'components/nn2_hidden'
         for linked in (False, True):
             with self.subTest(linked=linked):

@@ -9,10 +9,17 @@ static i2c_master_callback_t fake_callback;
 static void *fake_callback_ctx;
 static bool defer_completion, drain_fails, callback_fails, suppress_completion;
 static bool cancel_on_wait, deadline_on_wait;
+static bool terminal_without_callback, synthetic_error_callback;
 static i2c_master_event_t fake_event = I2C_EVENT_DONE;
 static TickType_t fake_ticks;
 static void finish_transfer(void) {
     const i2c_master_event_data_t event = {.event = fake_event};
+    /* SDK fff9895: an error IRQ without MST_COMPLETE stops internally;
+     * on_trans_done remains gated by trans_done. It does not signal NACK. */
+    if (fake_event != I2C_EVENT_DONE && !synthetic_error_callback) {
+        terminal_without_callback = true;
+        return;
+    }
     if (fake_callback) (void)fake_callback(s_pca, &event, fake_callback_ctx);
 }
 #define CHECK(x) do { ++checks; if (!(x)) { ++failures; printf("FAIL %u: %s\n", __LINE__, #x); } } while (0)
@@ -383,7 +390,7 @@ static void boundary_tests(void) {
     nn2_led_bringup_status_t maximum;
     memset(&maximum, 0xff, sizeof(maximum));
     /* Set bools explicitly; other all-one integers exercise maximum text width. */
-    maximum.limit_hit = maximum.attempt_used = maximum.bus_released = true;
+    maximum.limit_hit = maximum.attempt_used = maximum.bus_released = maximum.reboot_required = true;
     maximum.error = INT32_MIN;
     char text[1536]; memset(text, 'x', 750); text[750] = 0;
     CHECK(nn2_led_bringup_format_status(text + 750, sizeof(text) - 750, &maximum));
@@ -465,12 +472,13 @@ static void asynchronous_boundaries(void) {
     CHECK(s_status.i2c_errors == 0 && !s_pending);
     restore(); defer_completion = false;
     for (unsigned event = 0; event < 2; ++event) {
+        synthetic_error_callback = true; /* Extra defensive path, not SDK guarantee. */
         begin(10); fake_event = event ? I2C_EVENT_TIMEOUT : I2C_EVENT_NACK;
         alarm_tick(true);
         CHECK(reset_low && state(NULL) == NN2_OPTICAL_FAULT && s_status.i2c_errors == 1);
         CHECK(s_status.i2c_event == (uint8_t)fake_event);
         CHECK(s_status.error == (event ? ESP_ERR_TIMEOUT : ESP_FAIL));
-        fake_event = I2C_EVENT_DONE; restore();
+        fake_event = I2C_EVENT_DONE; synthetic_error_callback = false; restore();
     }
     begin(10); defer_completion = true; cancel_on_wait = true;
     alarm_tick(true);
@@ -506,6 +514,38 @@ static void asynchronous_boundaries(void) {
     CHECK(reset_low && state(NULL) == NN2_OPTICAL_FAULT && s_status.bus_released);
     callback_fails = false; restore();
 }
+static void terminal_without_callback_cases(void) {
+    for (unsigned kind = 0; kind < 2; ++kind) {
+        begin(10);
+        fake_event = kind ? I2C_EVENT_TIMEOUT : I2C_EVENT_NACK;
+        deadline_on_wait = true;
+        alarm_tick(true);
+        CHECK(terminal_without_callback && s_pending && !s_done);
+        CHECK(reset_low && s_status.state == NN2_OPTICAL_FAULT);
+        CHECK(s_status.reboot_required && !s_status.bus_released);
+        CHECK(s_status.first_stop == STOP_DEADLINE && s_status.edges == 0);
+        CHECK(s_status.i2c_completed == 0 && s_status.i2c_event == 0);
+        CHECK(s_pca && s_bus && fake_callback && clear_fault(NULL) != NN2_OK);
+        nn2_port_optical_config_t c = configuration(10);
+        CHECK(start(NULL, &c) == NN2_ERR_INVALID_STATE);
+        for (unsigned retry = 0; retry < 3; ++retry) owner_step();
+        CHECK(s_pending && reset_low && s_status.reboot_required && s_pca && s_bus);
+        char text[1536];
+        CHECK(nn2_led_bringup_format_status(text, sizeof(text), &s_status));
+        CHECK(strstr(text, "led_reboot=1"));
+        /* Test-only MCU reboot model; no fabricated callback and no production
+         * recovery hook. The hardware reset of the MCU discards driver state. */
+        s_task = NULL; s_bus = NULL; s_pca = NULL; s_timer = NULL;
+        s_async = s_pending = s_done = s_i2c_callbacks = false;
+        s_timer_callbacks = s_timer_enabled = s_timer_started = false;
+        s_armed = s_busy = s_start_pending = false;
+        fake_callback = NULL; occupied = false; terminal_without_callback = false;
+        fake_event = I2C_EVENT_DONE;
+        CHECK(nn2_led_bringup_init() == ESP_OK && reset_low && s_status.bus_released);
+        CHECK(!s_status.reboot_required);
+        restore();
+    }
+}
 static void boot_faults(void) {
     for (unsigned step = 1; step <= 38; ++step) {
         s_armed = true; s_worker_generation = ++s_generation;
@@ -518,7 +558,7 @@ static void boot_faults(void) {
 }
 int main(void) {
     CHECK(nn2_led_bringup_init() == ESP_OK && reset_low && !occupied);
-    asynchronous_boundaries(); geometry_and_scan(); fault_paths(); boot_faults(); eflag_evidence(); classifier_tests(); boundary_tests(); protocol_interlocks(); host_duration_and_repeated_runs();
+    asynchronous_boundaries(); geometry_and_scan(); fault_paths(); boot_faults(); eflag_evidence(); classifier_tests(); boundary_tests(); protocol_interlocks(); host_duration_and_repeated_runs(); terminal_without_callback_cases();
     printf("%u LED checks, %u failures\n", checks, failures);
     return failures ? 1 : 0;
 }

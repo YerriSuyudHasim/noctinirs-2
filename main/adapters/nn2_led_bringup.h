@@ -13,7 +13,7 @@ typedef struct {
     uint8_t first_stop;
     /* Compatibility telemetry: cap stays false; attempt marks this run, not a lock. */
     bool limit_hit, attempt_used;
-    bool bus_released;
+    bool bus_released, reboot_required;
     nn2_board_pca_diagnostics_t pca, last_complete, first_fault;
 } nn2_led_bringup_status_t;
 esp_err_t nn2_led_bringup_init(void);

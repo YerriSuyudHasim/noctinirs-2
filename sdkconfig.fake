@@ -1,0 +1,6 @@
+# Explicit CI/baseline profile; emitter adapter is not enabled.
+CONFIG_NN2_PROFILE_FAKE=y
+# CONFIG_NN2_PROFILE_COMMUNICATION is not set
+# CONFIG_NN2_PROFILE_ADS131_DIAGNOSTIC is not set
+# CONFIG_NN2_LED_BRINGUP is not set
+# CONFIG_NN2_LED_SHORT_BENCH is not set

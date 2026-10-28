@@ -21,6 +21,11 @@ class WorkflowTests(unittest.TestCase):
             self.bash = 'C:/Program Files/Git/bin/bash.exe'
         shutil.copytree(ROOT / 'tools', self.root / 'tools',
                         ignore=shutil.ignore_patterns('__pycache__'))
+        # The copied production platform manifest requires its declared directories.
+        import json
+        for path in json.loads((self.root / 'tools/platform_components.json').read_text())['paths']:
+            (self.root / path).mkdir(parents=True, exist_ok=True)
+
 
     def block(self, name, end=None):
         source = (ROOT / '.github/workflows/firmware-build.yml').read_text()

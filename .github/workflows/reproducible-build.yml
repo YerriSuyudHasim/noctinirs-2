@@ -25,6 +25,7 @@ jobs:
       - name: Reproduce both findings on the reviewed implementation
         run: |
           set -euo pipefail
+          python3 tools/fetch_regression_sources.py reproducibility 2>&1 | tee pinned-sources.txt
           python3 tools/verify_repro_regression.py 2>&1 | tee regression-first.txt
       - name: Exercise success, mismatch, incomplete and diagnostic paths
         run: |
@@ -40,6 +41,7 @@ jobs:
           if-no-files-found: error
           path: |
             regression-first.txt
+            pinned-sources.txt
             comparison-tests.txt
 
   build-twice:
@@ -50,7 +52,10 @@ jobs:
         include:
           - profile: fake
             suffix: ''
-            defaults: sdkconfig.defaults
+            defaults: sdkconfig.defaults;sdkconfig.fake
+          - profile: communication
+            suffix: '-communication'
+            defaults: sdkconfig.defaults;sdkconfig.communication
           - profile: diagnostic
             suffix: '-ads131-diagnostic'
             defaults: sdkconfig.defaults;sdkconfig.ads131-diagnostic

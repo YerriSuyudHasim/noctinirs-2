@@ -119,13 +119,14 @@ jobs:
             cmake --version | head -n1
             ninja --version
           } | tee architecture-tests.txt
+          python3 tools/fetch_regression_sources.py c11 2>&1 | tee evidence-pinned-c11.txt
           NN2_C11_EVIDENCE_DIR=evidence/reviewed-helper python3 tools/verify_c11_regression.py 2>&1 | tee evidence-regression-first.txt
           NN2_C11_EVIDENCE_DIR=evidence/c11-host python3 -m unittest discover -s tests/architecture -v 2>&1 | tee -a architecture-tests.txt
       - name: Hash contract evidence
         if: always()
         run: |
           mkdir -p evidence
-          cp architecture-tests.txt evidence-regression-first.txt evidence/ 2>/dev/null || true
+          cp architecture-tests.txt evidence-regression-first.txt evidence-pinned-c11.txt evidence/ 2>/dev/null || true
           find evidence -type f ! -name EVIDENCE_SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > evidence/EVIDENCE_SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
@@ -146,7 +147,10 @@ jobs:
         include:
           - profile: fake
             suffix: ''
-            defaults: sdkconfig.defaults
+            defaults: sdkconfig.defaults;sdkconfig.fake
+          - profile: communication
+            suffix: '-communication'
+            defaults: sdkconfig.defaults;sdkconfig.communication
           - profile: diagnostic
             suffix: '-ads131-diagnostic'
             defaults: sdkconfig.defaults;sdkconfig.ads131-diagnostic
@@ -201,11 +205,7 @@ jobs:
           idf.py size 2>&1 | tee evidence/size.txt
           idf.py size-components 2>&1 | tee evidence/size-components.txt
           python3 tools/check_ads131_config.py --selftest --cc xtensa-esp32s3-elf-gcc --generated-header build/config/sdkconfig.h | tee evidence/config-negatives.txt
-          if [ "${{ matrix.profile }}" = diagnostic ]; then
-            python3 tools/check_ads131_config.py sdkconfig --diagnostic | tee evidence/profile-config.txt
-          else
-            python3 tools/check_ads131_config.py sdkconfig | tee evidence/profile-config.txt
-          fi
+          python3 tools/check_ads131_config.py sdkconfig --profile "${{ matrix.profile }}" | tee evidence/profile-config.txt
           python3 tools/collect_adc_adapter_build.py --build build --evidence evidence/adapter-dependencies | tee evidence/adapter-dependency-coverage.log
           cp build/flasher_args.json evidence/
           cp build/flash*args evidence/ 2>/dev/null || true
@@ -283,6 +283,7 @@ jobs:
           set -euo pipefail
           mkdir -p evidence-u
           { echo "SOURCE_SHA=$SOURCE_SHA"; date -u +%Y-%m-%dT%H:%M:%SZ; gcc --version; cmake --version; ninja --version; } > evidence-u/toolchain.txt
+          python3 tools/fetch_regression_sources.py adc 2>&1 | tee evidence-u/pinned-control.txt
           python3 tools/verify_ads131_control_regression.py --evidence evidence-u/control-regression 2>&1 | tee evidence-u/control-regression.log
           python3 tools/run_host_tests.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence "$GITHUB_WORKSPACE/evidence-u" --failure-controls 2>&1 | tee evidence-u/runner.log
           python3 tools/collect_inner_build.py --build "$RUNNER_TEMP/nn2-host-$GITHUB_RUN_ID" --evidence evidence-u/product-dependencies --mode host 2>&1 | tee evidence-u/dependency-coverage.log

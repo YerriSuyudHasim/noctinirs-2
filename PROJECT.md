@@ -126,4 +126,3 @@ Prefer small complete increments: protocol loopback → Wi-Fi transport → inte
 - [Component/build model](https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32s3/api-guides/build-system.html).
 - [Official coding style](https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32s3/contribute/style-guide.html).
 - [ESP Timer and timing limitations](https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32s3/api-reference/system/esp_timer.html).
-

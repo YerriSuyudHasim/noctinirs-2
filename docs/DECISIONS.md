@@ -101,4 +101,3 @@ Owner requested all optical channels, default 30 mA, default Fs=5 Hz, maximum
 optional real LED binding, one-hot 20-slot scan, pending reviews, exclusive I2C
 ownership and deferred battery reads. Default communication stays simulated;
 LED-profile START requires explicit operator intent and an approved bench procedure.
-

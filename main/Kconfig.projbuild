@@ -2,7 +2,7 @@ menu "NoctiNIRS 2 v0.1.0"
 
     choice NN2_PROFILE
         prompt "Firmware profile"
-        default NN2_PROFILE_COMMUNICATION
+        default NN2_PROFILE_FAKE
         config NN2_PROFILE_COMMUNICATION
             bool "Communication Foundation / emitter reset held low"
             help

@@ -130,4 +130,3 @@ esp_err_t nn2_config_next_boot_id(uint64_t *out)
     }
     return result;
 }
-

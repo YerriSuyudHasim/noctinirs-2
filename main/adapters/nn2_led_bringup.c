@@ -264,12 +264,16 @@ static bool close_bus(void)
     /* Reset has already been asserted by the caller. A failed drain keeps
      * handles, callback context and buffers alive, and denies the next START. */
     if (s_async && s_bus) {
-        if (i2c_master_bus_wait_all_done(s_bus, NN2_RTOS_LED_I2C_TIMEOUT_MS) != ESP_OK)
-            return false;
+        esp_err_t drained = i2c_master_bus_wait_all_done(s_bus, NN2_RTOS_LED_I2C_TIMEOUT_MS);
         portENTER_CRITICAL(&s_lock);
         bool pending = s_pending;
+        /* Pinned IDF6.1 NACK/TIMEOUT can finish internally without calling
+         * on_trans_done. wait_all_done does not prove the direct transaction's
+         * lifetime ended: it only drains queued records. Retain everything.
+         * No callback + no public quiescence proof => MCU reboot required. */
+        if (pending) s_status.reboot_required = true;
         portEXIT_CRITICAL(&s_lock);
-        if (pending) return false;
+        if (drained != ESP_OK || pending) return false;
     }
     if (s_i2c_callbacks) {
         const i2c_master_event_callbacks_t callbacks = {0};
@@ -285,6 +289,11 @@ static bool close_bus(void)
         s_bus = NULL;
     }
     s_async = false;
+    portENTER_CRITICAL(&s_lock);
+    /* A late real completion followed by successful drain/detach is proof.
+     * Otherwise this flag cannot clear via CLEAR_FAULT or another START. */
+    s_status.reboot_required = false;
+    portEXIT_CRITICAL(&s_lock);
     return true;
 }
 
@@ -586,7 +595,7 @@ bool nn2_led_bringup_format_status(char *out, size_t capacity,
         " led_epoch=%" PRIu32 " led_complete=%" PRIu32 " led_fault_epoch=%" PRIu32
         " led_warn=%" PRIu32 " led_dispatch_us=%" PRIu32 " led_completion_us=%" PRIu32
         " led_i2c_tx=%" PRIu32 " led_i2c_done=%" PRIu32
-        " led_i2c_err=%" PRIu32 " led_i2c_stale=%" PRIu32 " led_i2c_event=%u\n",
+        " led_i2c_err=%" PRIu32 " led_i2c_stale=%" PRIu32 " led_i2c_event=%u led_reboot=%u\n",
         (unsigned)led->state, led->frames, led->edges, led->deadline_misses,
         led->transfer_max_us, led->error, led->stack_free, (unsigned)led->bus_released,
         (unsigned)led->pca_mode2,
@@ -599,6 +608,6 @@ bool nn2_led_bringup_format_status(char *out, size_t capacity,
         (unsigned)led->attempt_used, (unsigned)led->limit_hit, (unsigned)led->first_stop,
         led->pca.epoch, led->last_complete.epoch, led->first_fault.epoch,
         led->pca.warning_frames, led->dispatch_max_us, led->completion_max_us,
-        led->i2c_submitted, led->i2c_completed, led->i2c_errors, led->i2c_stale, (unsigned)led->i2c_event);
+        led->i2c_submitted, led->i2c_completed, led->i2c_errors, led->i2c_stale, (unsigned)led->i2c_event, (unsigned)led->reboot_required);
     return count >= 0 && (size_t)count < capacity;
 }
