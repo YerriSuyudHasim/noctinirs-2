@@ -73,7 +73,7 @@ serializes the ADC port; priorities ADC5 and LED22 remain unchanged. A64-value
 window queue connects LED to pairing, nonblocking. A4-frame queue connects pairing
 to the existing main/network owner, also nonblocking. No producer uses sockets.
 All policy/queues/stacks use internal memory; PSRAM/octal guard remains mandatory.
-The expanded raw record is bounded56bytes; adapter static-state bound14KiB.
+The expanded raw record is bounded56bytes; adapter static-state bound stays12KiB (target map:11968bytes).
 The128-record ADC queue covers16ms nominally, still requiring the original10ms
 consumer budget. RPC draining/LED preemption coexistence is **unqualified**.
 

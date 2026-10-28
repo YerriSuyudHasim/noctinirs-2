@@ -36,7 +36,7 @@ typedef struct {
     uint8_t command_storage[sizeof(request_t)], reply_storage[sizeof(reply_t)];
     uint32_t next_id;
 } device_t;
-_Static_assert(sizeof(device_t) <= 14336u, "Review internal static memory budget");
+_Static_assert(sizeof(device_t) <= 12288u, "Review internal static memory budget");
 static device_t device;
 static portMUX_TYPE sync_lock = portMUX_INITIALIZER_UNLOCKED;
 static portMUX_TYPE edge_lock = portMUX_INITIALIZER_UNLOCKED;
