@@ -3,12 +3,15 @@
     "idf.openOcdConfigs": [
         "board/esp32s3-builtin.cfg"
     ],
-    "idf.customExtraVars": {},
+    "idf.customExtraVars": {
+        "IDF_PY_BUILD_JOBS": "3"
+    },
+    "idf.ninjaArgs": ["-j", "3"],
     "clangd.path": "C:\\Espressif\\tools\\esp-clangd\\esp-21.1.3_20260408\\esp-clangd\\bin\\clangd.exe",
     "clangd.arguments": [
         "--background-index",
         "--query-driver=**",
-        "--compile-commands-dir=c:\\Users\\doeki\\Documents\\GitHub\\noctinirs-2/build"
+        "--compile-commands-dir=${workspaceFolder}/build/led-bringup"
     ],
     "idf.flashType": "UART",
     "idf.port": "COM11",
@@ -16,11 +19,15 @@
         "-G",
         "Ninja",
         "-DPYTHON_DEPS_CHECKED=1",
-        "-DESP_PLATFORM=1"
+        "-DESP_PLATFORM=1",
+        "-DNN2_USE_BRANCH_PROFILE=ON"
     ],
-    "idf.buildPath": "${workspaceFolder}/build",
-    "idf.sdkconfigFilePath": "${workspaceFolder}/sdkconfig",
+    "idf.buildPath": "${workspaceFolder}/build/led-bringup",
+    "idf.sdkconfigFilePath": "${workspaceFolder}/build/profile-configs/led-bringup/sdkconfig",
     "idf.sdkconfigDefaults": [
-        "sdkconfig.defaults"
+        "sdkconfig.defaults",
+        "sdkconfig.communication",
+        "sdkconfig.led-bringup",
+        "sdkconfig.led-short-bench"
     ]
 }
