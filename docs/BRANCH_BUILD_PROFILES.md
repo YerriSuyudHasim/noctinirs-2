@@ -9,7 +9,10 @@ The checkpoint's firmware and history are not modified by this change.
 
 1. Check out the desired branch with a clean tracked working tree.
 2. Let VS Code reload the workspace settings from that branch, then click its
-   ESP-IDF **Build** button. No manual menuconfig selection is needed.
+   ESP-IDF **Build Project** status-bar icon (or run **ESP-IDF: Build your project**
+   from the Command Palette). No manual menuconfig selection is needed. Generic
+   CMake Tools status buttons and configure-on-open are disabled for this workspace
+   to avoid selecting a desktop compiler instead of ESP-IDF.
 3. On feat35 the configure output must say
    `NN2 branch profile validated: ads131-acquisition`.
 

@@ -95,6 +95,9 @@ class BranchBuildProfileTests(unittest.TestCase):
         self.assertEqual(settings["idf.sdkconfigFilePath"],
                          "${workspaceFolder}/build/profile-configs/ads131-acquisition/sdkconfig")
         self.assertEqual(settings["idf.sdkconfigDefaults"][-1], "sdkconfig.acquisition")
+        self.assertFalse(settings["cmake.configureOnOpen"])
+        self.assertEqual(settings["cmake.options.statusBarVisibility"], "hidden")
+        self.assertEqual(settings["cmake.options.advanced"]["build"]["statusBarVisibility"], "hidden")
 
     def test_manual_led_selector_explicitly_disables_branch_default(self):
         existing = {"idf.cmakeCompilerArgs": ["-DKEEP=1", "-DNN2_USE_BRANCH_PROFILE=ON"]}
