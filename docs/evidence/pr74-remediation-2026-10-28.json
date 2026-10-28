@@ -1,0 +1,139 @@
+{
+  "date_kst": "2026-10-28",
+  "role": "Agent03 implementing author, not verifier or independent reviewer",
+  "session": "agent03-ir74-remediation-20261028",
+  "reviewed_head": "5c0fae99ee87c0abfac886af7e3aa7505817b08a",
+  "base": "5958a0eafec6b03c2b158c4026f3f10b8a3366d1",
+  "implementation_commit": "9fc3ac7630420ed621245da306e4a15b0eeaf023",
+  "subsequent_changes": "documentation/evidence only; final submitted head to be reported separately",
+  "ir_attachment_sha256": "ef360c9cbf1a03b3481258fa3fc41cc8b775bbf8a8e93a80c53f954bd0a27e2b",
+  "pinned_sdk_commit": "fff9895c82d744c7237be8847347bdd1b07c6643",
+  "pinned_driver_sha256": "3ebaeee176e2ff731d15c69a7629c32c0339817afcd31e93da167f4f6b9d9ca0",
+  "driver_tracked_diff": "PASS: unchanged from pinned SDK Git object",
+  "fresh_historical_fetch": [
+    {
+      "group": "c11",
+      "commit": "789b4fa8bb2904a85116c6c6116973c348565c05",
+      "files": {
+        "cmake/nn2_c11.cmake": "b2b04a39a4f0ee0963f95798c3f757629f8cd7439a0373a5cc0cb8f92fdbec95",
+        "cmake/nn2_c11_guard.h": "512fc7625f5958c9eac37007bb90aab3fe9d6f6b29147290bdc1aca7f0e32fa6"
+      },
+      "result": "PASS from empty Git object database"
+    },
+    {
+      "group": "adc",
+      "commit": "99ffe66e51f95a17bf62194d2b7216390c08aa33",
+      "files": {
+        "main/adapters/nn2_ads131_esp.c": "063dad59eb1c439d7f592a6aa431e3e27f12f1a8ea273412287d1bedd57cf7c2"
+      },
+      "result": "PASS from empty Git object database"
+    },
+    {
+      "group": "reproducibility",
+      "commit": "f97767035e0ab4f801e655ec751141314668c407",
+      "files": {
+        "tools/reproducible_build.py": "fcfd5b8da918841942dc3d69b6104b83fc270b182979a26bfea49bc3d181e74f",
+        ".github/workflows/firmware-build.yml": "f2e17f4e2cd75c58e23e5c816b7f3bc8ebdfe7f9f8634dd7724178f8f7610ac4"
+      },
+      "result": "PASS from empty Git object database"
+    }
+  ],
+  "checks": [
+    {
+      "command": "python -m unittest discover -s tests/architecture -p test_ir74_tools.py -v",
+      "result": "PASS",
+      "executed": 8
+    },
+    {
+      "command": "python -m unittest discover -s tests/gate-fixtures -v",
+      "result": "PASS",
+      "executed": 61
+    },
+    {
+      "command": "python -m unittest discover -s test/communication -p test_*.py",
+      "result": "PASS",
+      "executed": 40,
+      "skipped": 7,
+      "discovered": 47
+    },
+    {
+      "command": "python -m unittest discover -s tests/architecture -p test_platform_boundary.py",
+      "result": "PASS",
+      "executed": 5
+    },
+    {
+      "command": "python -m unittest discover -s tests/architecture -p test_manifest.py",
+      "result": "PASS",
+      "executed": 15
+    },
+    {
+      "command": "python -m unittest discover -s tests/architecture -p test_workflow.py",
+      "result": "PASS",
+      "executed": 2
+    },
+    {
+      "command": "python tools/class-s-gate.py",
+      "result": "PASS"
+    },
+    {
+      "command": "python tools/check_ads131_config.py --selftest; python tools/check_ads131_config.py sdkconfig --profile communication",
+      "result": "PASS",
+      "note": "Selftest retains7 diagnostic negatives; actual Owner root only read, not regenerated/changed"
+    },
+    {
+      "command": "python tools/verify_repro_regression.py",
+      "result": "PASS",
+      "note": "Expected old-source assertions fail; wrapper returns0 only on correct regression-first failures"
+    },
+    {
+      "command": "python -m unittest discover -s tests/reproducibility -v",
+      "result": "PASS",
+      "executed": 33,
+      "note": "Python/files/fake failing idf.py script only; no actual firmware/native build. Git Bash selected; BASH_ENV maps python3 to native Python3.13.5 on Windows."
+    },
+    {
+      "command": "cl /Zs /std:c11 /W4 /WX test/led/test_led.c components/nn2_board/nn2_board_pca.c, both policies",
+      "result": "PASS",
+      "tool": "MSVC19.50",
+      "evidence_class": "syntax-only"
+    },
+    {
+      "command": "Xtensa GCC15.2.0 -fsyntax-only, production LED owner, actual IDF6.1 headers, strict400kHz and advisory800kHz",
+      "result": "PASS",
+      "note": "Existing compilation database include paths and picolibc specs; temporary config overrides only profile/clock/IRAM; no object/linker"
+    },
+    {
+      "command": "tools/verify-reference.ps1",
+      "result": "PASS",
+      "files": 319
+    },
+    {
+      "command": "git diff --check and diff against base",
+      "result": "PASS"
+    },
+    {
+      "command": "Native C executable tests, compiler/CMake build probes",
+      "result": "NOT RUN locally",
+      "reason": "Unchanged Owner build/link restriction"
+    },
+    {
+      "command": "Firmware builds/rebuild/clean/link/size/map/reproducibility build",
+      "result": "NOT RUN by agent"
+    },
+    {
+      "command": "Flash/device/energized hardware tests",
+      "result": "NOT RUN"
+    },
+    {
+      "command": "Final-head CI",
+      "result": "PENDING at evidence creation",
+      "note": "Read actual checks for final SHA, not historical statuses"
+    }
+  ],
+  "limitations": [
+    "Syntax-only does not execute the new C error cases",
+    "Old Owner197134e bench evidence is historical, not a result for new image",
+    "Final-SHA CI/specialist/non-author/IR/human gates remain separate"
+  ],
+  "provenance_manifest_sha256": "e06057a5fc319c2a4f3f73e96c0f671270ad4bcbd5d5b397a63511a6a38161e0"
+}

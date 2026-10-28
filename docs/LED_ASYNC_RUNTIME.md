@@ -55,7 +55,14 @@ relaxed deadlines or claims of V4 qualification were imported.
 | main-board-short-advisory | BENCH_WARN |100kHz synchronous |800kHz async |
 | main-board-strict | STRICT |100kHz synchronous |400kHz async |
 
-The generic Kconfig runtime default is400kHz.800kHz is chosen only by the explicit
+After IR74 remediation, a fresh repository checkout uses FAKE with the LED
+adapter disabled. Shared VS Code settings select only sdkconfig.defaults, with
+no advisory or800kHz expectation. Existing Owner root sdkconfig is preserved.
+The selector is an explicit local bench operation: it updates root sdkconfig and
+workspace settings, with backups. Do not commit its generated bench settings
+back as shared defaults. See [IR74 remediation](PR74_REMEDIATION.md).
+
+The generic LED Kconfig runtime default is400kHz.800kHz is chosen only by the explicit
 advisory overlay/profile; selecting a profile patches only declared root keys,
 backs up existing configuration, and retains unrelated settings. The normal
 VS Code Build action uses root sdkconfig and build/. CMake asserts selected
@@ -71,6 +78,18 @@ Both profiles advertise `i2c=ASYNC@<runtime_hz>` in INFO. The text is statically
 bounded to fit the256-byte protocol reply cache, including60 bytes of overhead.
 Existing source/image identity fields remain; HEAD alone cannot identify dirty
 source. No new image hash exists until the Owner builds.
+
+On accepted I/O with no completion callback, STATUS reports `led_reboot=1`
+when cleanup cannot prove quiescence. Reset stays asserted, and handles/buffers
+remain retained. The pinned SDK can take this path on NACK/TIMEOUT. Successful
+queue drain alone does not release a pending direct transaction. If no late
+completion proves its lifetime ended, MCU reboot is required; CLEAR_FAULT and
+START remain denied. Capture cached STATUS first, do not repeatedly RUN or
+clear-fault, and let the Owner use their normal MCU reboot procedure. Do not
+flash as a recovery step. No reboot is performed automatically. A real late
+completion followed by successful drain/detach can resolve the uncertainty.
+The flag is not a diagnosis of NACK versus TIMEOUT; those errors may be hidden
+inside the SDK with no public callback. Existing first-stop evidence remains.
 
 STATUS adds cached `led_i2c_tx`, `led_i2c_done`, `led_i2c_err`, `led_i2c_stale`, `led_i2c_event`.
 The first counts attempts at async submission; done counts callback completions,
