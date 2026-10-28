@@ -83,3 +83,20 @@ Rollback: revert the build-selection commit to restore the previous workspace
 settings. Generated directories can be retained; they do not change source or the
 old LED checkpoint. Reference material: existing active overlay/profile selector
 and ESP-IDF v6.1 configuration code; no V3/V4 adaptation in this change.
+
+## Executed evidence, 2026-10-28
+
+Both ESP32-S3 images built and linked with ESP-IDF 6.1 / Xtensa GCC 15.2.0:
+acquisition at `10df540` (879776 bytes) and LED at `295c8b2` (838816 bytes).
+The actual VS Code ESP-IDF Build Project action then passed on the acquisition
+directory. Generated configuration checks confirm ADC enabled only in feat35.
+Host profile tests: 7 new +10 existing on feat35, and10 existing on feat33;
+all passed with no skips. Reference integrity:319 files before/after on both.
+No compiler warning diagnostics in the recorded build logs; SDK configure notices
+remain. Root LED sdkconfig hash stayed unchanged. Firmware runtime suites were not
+repeated because this change only selects/configures builds.
+
+Exact source/settings SHAs, image/log hashes and limits:
+[`evidence/branch-build-profiles-2026-10-28.json`](evidence/branch-build-profiles-2026-10-28.json).
+The editor-controls follow-up commits only change workspace UI, docs and host
+assertions; the evidence distinguishes those commits from embedded firmware SHAs.

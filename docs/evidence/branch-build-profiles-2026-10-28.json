@@ -1,0 +1,63 @@
+{
+  "recorded_at_utc": "2026-10-28T09:21:04.899319+00:00",
+  "classification": "local compilation and host tests only",
+  "sdk_commit": "fff9895c82d744c7237be8847347bdd1b07c6643",
+  "toolchain": "Xtensa GCC 15.2.0 esp-15.2.0_20251204 / ESP-IDF 6.1",
+  "builds": [
+    {
+      "profile": "acquisition",
+      "firmware_source_sha": "10df540409a3a630bc9d5e3c623b140662421ddb",
+      "settings_commit": "cf2ca5a21c802efc78619c41b4b7daa4eb06d3d3",
+      "result": "PASS",
+      "image_bytes": 879776,
+      "image_sha256": "e78992d7fba57e253b1829d2a9cc4a385cd3dd566591f74ce759edded529b5b7",
+      "build_dir": "C:\\Users\\doeki\\Documents\\GitHub\\noctinirs-2\\build\\ads131-acquisition",
+      "config": {
+        "IDF_TARGET": "esp32s3",
+        "NN2_PROFILE_COMMUNICATION": true,
+        "NN2_LED_BRINGUP": true,
+        "NN2_OPTICAL_ACQUISITION": true,
+        "NN2_LED_RUNTIME_I2C_HZ": 800000,
+        "ESPTOOLPY_FLASHSIZE": "16MB"
+      },
+      "log": "C:/esp/feat35-branch-profile-final.log",
+      "log_sha256": "39151bd192d07b97bbddbce494c72d511bdfc8dd39445008f1d185dcb3537f50",
+      "compiler_warning_lines": []
+    },
+    {
+      "profile": "led",
+      "firmware_source_sha": "295c8b22af128abede4a628b9a1ec866440c757c",
+      "settings_commit": "1a63812a3a3e2c0241baee80e479c1e4bbcce69f",
+      "result": "PASS",
+      "image_bytes": 838816,
+      "image_sha256": "0e44e7866d5f96a1673871d6e27b2a8c4c1afa940ebed30b718cb3621e456cef",
+      "build_dir": "C:\\esp\\nn2-led-branch-profile\\build\\led-bringup",
+      "config": {
+        "IDF_TARGET": "esp32s3",
+        "NN2_PROFILE_COMMUNICATION": true,
+        "NN2_LED_BRINGUP": true,
+        "NN2_OPTICAL_ACQUISITION": null,
+        "NN2_LED_RUNTIME_I2C_HZ": 800000,
+        "ESPTOOLPY_FLASHSIZE": "2MB"
+      },
+      "log": "C:/esp/feat33-branch-profile-build.log",
+      "log_sha256": "13a6a210a7fba6f9b6a1545292eff286d62b057e3e4caa3e36ada6515c225793",
+      "compiler_warning_lines": []
+    }
+  ],
+  "tests": {
+    "feat35_branch_profile": 7,
+    "feat35_existing_board_profile": 10,
+    "feat33_existing_board_profile": 10,
+    "failures": 0,
+    "skips": 0
+  },
+  "historical_files_verified_before_after": 319,
+  "editor_test": "Actual ESP-IDF Build Project status-bar action succeeded on feat35; generic CMake Build hidden after it prompted for a desktop kit.",
+  "source_note": "Firmware builds embed the implementation commit before the editor-controls-only follow-up commits. Later changes affect CMake Tools visibility, documentation and host assertions, not firmware sources or selected IDF build arguments.",
+  "limits": [
+    "No flash or hardware operation",
+    "No ADC/LED physical coexistence claim",
+    "No runtime regression repeated for build-selection-only changes"
+  ]
+}
