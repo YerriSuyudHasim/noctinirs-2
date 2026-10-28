@@ -1,4 +1,9 @@
 {
+    "cmake.configureOnOpen": false,
+    "cmake.options.statusBarVisibility": "hidden",
+    "cmake.options.advanced": {
+        "build": { "statusBarVisibility": "hidden" }
+    },
     "idf.currentSetup": "C:\\esp\\v6.1\\esp-idf",
     "idf.openOcdConfigs": [
         "board/esp32s3-builtin.cfg"

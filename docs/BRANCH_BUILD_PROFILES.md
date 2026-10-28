@@ -6,7 +6,9 @@ versioned in `config/active-build-profile.cmake`; no Git branch-name inference.
 On feat35, its own versioned settings instead select LED + ADS131 acquisition.
 
 Check out the desired branch with clean tracked settings, allow VS Code to reload
-its workspace settings, then click Build. First compilation per profile can be
+its workspace settings, then click ESP-IDF **Build Project**. Generic CMake Tools
+status buttons/configure-on-open are disabled to avoid desktop compiler selection.
+First compilation per profile can be
 slow. Later builds reuse the profile's cache. Full Clean does not change which
 profile the branch selects. No manual menuconfig step is required.
 
