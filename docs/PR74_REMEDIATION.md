@@ -12,6 +12,8 @@ Original IR head and local starting head:5c0fae99ee87c0abfac886af7e3aa7505817b08
 Verified PR base:5958a0eafec6b03c2b158c4026f3f10b8a3366d1. Working tree initially clean.
 Implementation remediation commit:9fc3ac7630420ed621245da306e4a15b0eeaf023.
 This document and its evidence record are subsequent documentation-only changes.
+A CI follow-up isolates a tooling unit fixture from the caller's historical Git
+cache; it changes only the Python test, not firmware or production provenance pins.
 The final submitted PR head is the containing branch tip, recorded in the author
 handoff response and GitHub checks; verify with `git rev-parse HEAD` before testing.
 
@@ -116,6 +118,18 @@ reported separately; old CI and old bench results are not new candidate evidence
 Push may start the repository's existing automated CI, but the agent does not
 manually execute or dispatch a firmware/native build. No hardware/flash/energized
 operation occurred. PR remains draft; no external comments/messages are sent.
+
+## CI follow-up on first remediation head
+
+On0f4376c1b045817e3eb78487dbae7a1cb7a46b81, the architecture job122602037419
+exposed an author test-fixture error: its mocked fetch test read the real ADC
+blob before mocking, although that job only needs the C11 historical source.
+The corrected unit test now owns a temporary manifest and fixture bytes and
+checks exact fetch arguments, digest verification and unavailable-object failure.
+Production pins remain unchanged; their actual original bytes were separately
+verified by the empty-object-database probe. The8 tooling tests were rerun and
+passed after this correction. This does not substitute fixture bytes for any
+production regression baseline. Final-head CI must confirm the corrected suite.
 
 ## Behavior delta and remaining gates
 

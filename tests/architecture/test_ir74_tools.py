@@ -115,15 +115,23 @@ class HistoricalProvenance(unittest.TestCase):
             self.assertEqual(run.call_count,1)
 
     def test_missing_commit_requires_exact_sha_fetch_then_checks_bytes(self):
+        # Unit fixture is deliberately independent of the caller's Git cache.
+        # Real original bytes are checked by ensure's separate provenance probe.
         pins=json.loads((ROOT / 'tools/regression_sources.json').read_text())['adc']
-        raw=__import__('subprocess').check_output(['git','show',pins['commit']+':main/adapters/nn2_ads131_esp.c'],cwd=ROOT)
-        with patch.object(historical.subprocess,'run') as run, patch.object(historical.subprocess,'check_output',return_value=raw):
-            run.return_value.returncode=1
-            historical.ensure('adc')
-            self.assertEqual(run.call_args_list[1].args[0],['git','fetch','--no-tags','origin',pins['commit']])
-            self.assertEqual(hashlib.sha256(raw).hexdigest(),pins['files']['main/adapters/nn2_ads131_esp.c'])
-        with patch.object(historical.subprocess,'run') as run:
-            run.return_value.returncode=1
-            with self.assertRaisesRegex(RuntimeError,'unavailable'):
-                historical.ensure('adc',verify_only=True)
-            self.assertEqual(run.call_count,1)
+        raw=b'fixture bytes for mock fetch and digest verification\n'
+        expected=hashlib.sha256(raw).hexdigest()
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root / 'tools').mkdir()
+            fixture=dict(pins,files={'main/adapters/nn2_ads131_esp.c':expected})
+            (root / 'tools/regression_sources.json').write_text(json.dumps({'adc':fixture}))
+            with patch.object(historical.subprocess,'run') as run, patch.object(historical.subprocess,'check_output',return_value=raw):
+                run.return_value.returncode=1
+                verified=historical.ensure('adc',root=root)
+                self.assertEqual(run.call_args_list[1].args[0],['git','fetch','--no-tags','origin',pins['commit']])
+                self.assertEqual(verified['files']['main/adapters/nn2_ads131_esp.c'],expected)
+            with patch.object(historical.subprocess,'run') as run:
+                run.return_value.returncode=1
+                with self.assertRaisesRegex(RuntimeError,'unavailable'):
+                    historical.ensure('adc',root=root,verify_only=True)
+                self.assertEqual(run.call_count,1)
