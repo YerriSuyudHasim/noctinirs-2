@@ -21,6 +21,7 @@
 #include "nocti_v4_common.h"
 #include "nocti_v4_ads_config.h"
 #include "nocti_v4_scheduler_config.h"
+#include "nocti_v4_sample_clock.h"
 
 #define NETWORK_RING_MASK (NOCTI_V4_NETWORK_FRAME_RING_CAPACITY - 1u)
 #define NETWORK_POLL_MS 20u
@@ -119,6 +120,10 @@ typedef struct __attribute__((packed)) {
     uint64_t completed_timestamp_us;
     uint32_t frame_reason;
     v4_slot_wire_t slot[NOCTI_V4_SLOT_COUNT];
+    /* Version 2 suffix. nominal_frame_timestamp_us above is the measured
+     * slot-0 DRDY latch, little-endian, not the nominal GPTimer start. */
+    uint32_t first_sample_sequence;
+    uint32_t adc_fs_hz;
 } v4_optical_frame_wire_t;
 
 typedef struct {
@@ -170,8 +175,8 @@ _Static_assert(sizeof(fnirs_frame_v2_t) == 356u,
                "legacy paired-frame payload changed");
 _Static_assert(sizeof(v4_slot_wire_t) == 57u,
                "V4 optical slot wire ABI changed");
-_Static_assert(sizeof(v4_optical_frame_wire_t) == 1176u,
-               "V4 optical-frame wire ABI changed");
+_Static_assert(sizeof(v4_optical_frame_wire_t) == 1184u,
+               "V4 optical-frame wire version 2 is 1176 plus two u32 fields");
 _Static_assert(sizeof(v4_optical_frame_wire_t) + STREAM_HEADER_BYTES +
                STREAM_CRC_BYTES <= STREAM_MAX_DATAGRAM_BYTES,
                "V4 quality record exceeds bounded UDP datagram");
@@ -298,10 +303,7 @@ static bool send_metadata(network_runtime_t *r,
                      frame->nominal_frame_timestamp_us, &session,
                      sizeof(session))) return false;
     uint8_t time64[8];
-    for (uint8_t i = 0u; i < 8u; ++i) {
-        time64[i] = (uint8_t)(frame->nominal_frame_timestamp_us >>
-                              (56u - (uint8_t)(8u * i)));
-    }
+    nocti_v4_sample_store_u64_le(time64, frame->nominal_frame_timestamp_us);
     if (!send_record(r, destination, REC_TIME64,
                      frame->nominal_frame_timestamp_us, time64,
                      sizeof(time64))) return false;
@@ -353,7 +355,7 @@ static bool build_v4_payload(network_runtime_t *r,
                              const nocti_v4_completed_optical_frame_t *frame)
 {
     memset(&r->v4_payload, 0, sizeof(r->v4_payload));
-    r->v4_payload.version = 1u;
+    r->v4_payload.version = 2u;
     r->v4_payload.frame_quality = (uint8_t)frame->quality;
     r->v4_payload.target_valid_slots = frame->target_valid_slots;
     r->v4_payload.minimum_valid_slots = frame->minimum_valid_slots;
@@ -363,6 +365,8 @@ static bool build_v4_payload(network_runtime_t *r,
     r->v4_payload.frame_sequence = frame->frame_sequence;
     r->v4_payload.nominal_frame_timestamp_us = frame->nominal_frame_timestamp_us;
     r->v4_payload.completed_timestamp_us = frame->completed_timestamp_us;
+    r->v4_payload.first_sample_sequence = frame->anchor_sequence;
+    r->v4_payload.adc_fs_hz = frame->adc_fs_hz;
     r->v4_payload.frame_reason = frame->reason;
     for (uint8_t slot = 0u; slot < NOCTI_V4_SLOT_COUNT; ++slot) {
         const nocti_v4_optical_slot_value_t *source = &frame->slot[slot];

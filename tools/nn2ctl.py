@@ -84,7 +84,10 @@ def describe_reply(packet, request_id=None, opcode=None):
     elif op == COMMANDS["info"]:
         result["info"] = extra.decode("ascii")
     elif op in (COMMANDS["health"], COMMANDS["timing"]):
-        result["diag"] = parse_diag(extra.decode("ascii"))
+        text = extra.decode("ascii")
+        result["diag"] = parse_diag(text)
+        if op == COMMANDS["timing"] and "on_d" in result["diag"]:
+            result["sync"] = parse_sync(result["diag"])
     elif op == COMMANDS["get-config"]:
         if len(extra) != 42 or extra[1] != 20: raise ValueError("config length")
         result.update(rate_hz=extra[0], slots=extra[1], current_ma=list(struct.unpack_from("<20H", extra, 2)))
@@ -222,6 +225,68 @@ def provision_line(ssid,password):
     if not 1<=len(s)<=32 or b"\0" in s or not 8<=len(p)<=63 or any(c<32 or c>126 for c in p):
         raise ValueError("credential encoding")
     return b"WIFI "+s.hex().encode()+b" "+p.hex().encode()+b"\n"
+
+def parse_v4_optical_time(payload):
+    """Version-2 V4 optical frame time words. This is not an ACQ1 frame.
+
+    Offset 16 is the measured slot-0 DRDY latch (u64 LE). Offset 1176 is
+    first_sample_sequence and adc_fs_hz. The legacy relative header is not
+    read here. frames=unsupported stays on the control socket until a NN2
+    FRAME binder exists.
+    """
+    if not isinstance(payload, (bytes, bytearray)) or len(payload) != 1184 or payload[0] != 2:
+        raise ValueError("v4 optical time")
+    anchor = struct.unpack_from("<Q", payload, 16)[0]
+    first, rate = struct.unpack_from("<II", payload, 1176)
+    if rate != 8000:
+        raise ValueError("adc rate")
+    return dict(version=2, anchor_us=anchor, first_sample_sequence=first, adc_fs_hz=rate)
+
+def parse_sync(fields):
+    """Expand a timing report into planned and actual LED-edge sample indices.
+
+    on_d/off_d are signed sample deltas from the planned edge, or x when that
+    slot's commit has not been seen. Planned ON for slot s is
+    anchor + s * slot_samples. Planned OFF adds off_samples.
+    """
+    required = ("fs", "anchor", "frame_delta", "slot_samples", "off_samples",
+                "missed", "catchup", "gap", "edge_miss", "on_d", "off_d")
+    missing = [name for name in required if name not in fields]
+    if missing:
+        raise ValueError("sync missing " + ",".join(missing))
+    numbers = {name: int(fields[name], 10) for name in required if name not in ("on_d", "off_d")}
+    if numbers["fs"] != 8000 or not 0 <= numbers["anchor"] <= 0xffffffff:
+        raise ValueError("sync sample clock")
+    if numbers["slot_samples"] < 0 or numbers["off_samples"] < 0:
+        raise ValueError("sync geometry")
+
+    def edges(text, planned_of):
+        parts = text.split(",")
+        if len(parts) != 20:
+            raise ValueError("sync slot list")
+        rows = []
+        for slot, item in enumerate(parts):
+            planned = None if numbers["slot_samples"] == 0 else (
+                (numbers["anchor"] + planned_of(slot)) & 0xffffffff)
+            if item == "x":
+                rows.append(dict(planned=planned, actual=None, known=False, delta=None))
+            else:
+                delta = int(item, 10)
+                actual = None if planned is None else (planned + delta) & 0xffffffff
+                rows.append(dict(planned=planned, actual=actual, known=True, delta=delta))
+        return rows
+
+    on = edges(fields["on_d"], lambda slot: slot * numbers["slot_samples"])
+    off = edges(fields["off_d"], lambda slot: slot * numbers["slot_samples"] + numbers["off_samples"])
+    return dict(fs=numbers["fs"], anchor=numbers["anchor"], frame_delta=numbers["frame_delta"],
+                slot_samples=numbers["slot_samples"], off_samples=numbers["off_samples"],
+                missed=numbers["missed"], catchup=numbers["catchup"], gap=numbers["gap"],
+                edge_miss=numbers["edge_miss"],
+                slots=[dict(slot=slot, on_planned=on[slot]["planned"], on_actual=on[slot]["actual"],
+                            on_known=on[slot]["known"], off_planned=off[slot]["planned"],
+                            off_actual=off[slot]["actual"], off_known=off[slot]["known"],
+                            on_delta=on[slot]["delta"], off_delta=off[slot]["delta"])
+                       for slot in range(20)])
 
 def parse_diag(text):
     """Parse a V4 health or timing report. This is not an ACQ1 frame."""

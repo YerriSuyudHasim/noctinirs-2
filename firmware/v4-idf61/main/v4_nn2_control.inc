@@ -260,6 +260,10 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             HLOAD(optical_task_stack_watermark_bytes),
             HLOAD(frame_consumer_task_stack_watermark_bytes),
             HLOAD(dark_consumer_task_stack_watermark_bytes), ctrl_hwm, net_hwm);
+        if (wrote > 0 && (size_t)wrote < cap) {
+            wrote += (int)nocti_v4_scheduler_append_sync(
+                &s_scheduler, (char *)out + wrote, cap - (size_t)wrote);
+        }
     }
     if (wrote < 0 || (size_t)wrote >= cap) return 0u;
     return (size_t)wrote;

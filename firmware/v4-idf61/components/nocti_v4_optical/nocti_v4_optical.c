@@ -1,4 +1,5 @@
 #include "nocti_v4_optical.h"
+#include "nocti_v4_sample_clock.h"
 
 #include <inttypes.h>
 #include <limits.h>
@@ -103,6 +104,7 @@ typedef enum {
     SAMPLE_CLASS_OFF_SETTLE,
     SAMPLE_CLASS_OFF_STABLE,
     SAMPLE_CLASS_END_GUARD,
+    SAMPLE_CLASS_COMMIT_LATE,
     SAMPLE_CLASS_TIMING_GAP,
     SAMPLE_CLASS_INTERNAL_ERROR,
 } sample_class_t;
@@ -165,6 +167,8 @@ typedef struct {
     uint64_t first_frame_epoch_us;
     uint64_t last_processed_raw_ts;
     uint64_t last_staged_raw_ts;
+    uint32_t last_staged_sequence;
+    bool last_staged_sequence_valid;
     nocti_v4_raw_sample_t raw_stage[RAW_STAGE_CAPACITY];
     uint32_t raw_stage_head;
     uint32_t raw_stage_tail;
@@ -366,8 +370,18 @@ static void builder_start(frame_builder_t *builder, const nocti_v4_slot_timing_t
     builder->active = true;
     builder->frame.session_epoch = timing->session_epoch;
     builder->frame.frame_sequence = timing->frame_sequence;
-    builder->frame.nominal_frame_timestamp_us = timing->nominal_slot_start_ts -
-        (uint64_t)timing->slot_index * NOCTI_V4_SLOT_PERIOD_US;
+    /* ADR-0004 §3.16.c: the frame stamp is the measured slot-0 DRDY, not the
+     * nominal GPTimer start. A missed latch stays zero and is not invented. */
+    if (timing->slot_index == 0u && timing->anchor_valid != 0u) {
+        builder->frame.nominal_frame_timestamp_us = timing->anchor_timestamp_us;
+        builder->frame.anchor_sequence = timing->slot_start_sequence;
+        builder->frame.adc_fs_hz = NOCTI_V4_SAMPLE_ADC_HZ;
+        builder->frame.anchor_valid = 1u;
+    } else {
+        builder->frame.nominal_frame_timestamp_us = 0u;
+        builder->frame.anchor_valid = 0u;
+        builder->frame.reason |= NOCTI_V4_SLOT_REASON_INTERNAL;
+    }
     for (uint8_t geometry = 0u; geometry < NOCTI_V4_SLOT_COUNT / 2u; ++geometry) {
         builder->frame.pair[geometry].geometry_id = geometry;
         builder->frame.pair[geometry].slot_735 = (uint8_t)(geometry * 2u);
@@ -651,19 +665,49 @@ static bool timing_is_complete(const nocti_v4_slot_timing_t *t)
 /* The sole definition of optical boundaries. V4-5-equivalent candidate
  * counters and V4-6 representatives are both generated from this result;
  * no mutable scheduler snapshot is accepted here. */
-static sample_class_t canonical_classify(const nocti_v4_slot_timing_t *t, uint64_t ts)
+static sample_class_t canonical_classify(const nocti_v4_slot_timing_t *t,
+                                         uint32_t sequence)
 {
-    if (!timing_is_complete(t) || ts < t->nominal_slot_start_ts ||
-        ts >= t->nominal_slot_end_ts) {
+    nocti_v4_sample_geometry_t geo;
+    nocti_v4_sample_slot_plan_t plan;
+    if (!timing_is_complete(t) || t->sample_plan_valid == 0u) {
         return SAMPLE_CLASS_TIMING_GAP;
     }
-    if (ts >= t->slot_guard_start_ts) return SAMPLE_CLASS_END_GUARD;
-    if (ts < t->led_on_commit_ts) return SAMPLE_CLASS_PRECOMMIT;
-    if (ts < t->led_on_stable_start_ts) return SAMPLE_CLASS_ON_SETTLE;
-    if (ts < t->led_off_transition_boundary_ts) return SAMPLE_CLASS_ON_STABLE;
-    if (ts < t->led_off_commit_ts) return SAMPLE_CLASS_OFF_TRANSITION;
-    if (ts < t->led_off_stable_start_ts) return SAMPLE_CLASS_OFF_SETTLE;
-    return SAMPLE_CLASS_OFF_STABLE;
+    memset(&geo, 0, sizeof(geo));
+    memset(&plan, 0, sizeof(plan));
+    geo.valid = 1u;
+    geo.settle_samples = t->settle_samples;
+    plan.on_edge = t->slot_start_sequence;
+    plan.off_edge = t->off_edge_sequence;
+    plan.slot_end = t->slot_end_sequence;
+    plan.guard_start = t->guard_sequence;
+    plan.on_commit_known = t->on_commit_known;
+    plan.off_commit_known = t->off_commit_known;
+    plan.on_first_affected = t->on_first_affected;
+    plan.off_first_affected = t->off_first_affected;
+    plan.on_commit_late = t->on_commit_late;
+    plan.off_commit_late = t->off_commit_late;
+    switch (nocti_v4_sample_classify(&geo, &plan, sequence)) {
+    case NOCTI_V4_SAMPLE_CLASS_PRECOMMIT:
+        return SAMPLE_CLASS_PRECOMMIT;
+    case NOCTI_V4_SAMPLE_CLASS_COMMIT_LATE:
+        return SAMPLE_CLASS_COMMIT_LATE;
+    case NOCTI_V4_SAMPLE_CLASS_ON_SETTLE:
+        return SAMPLE_CLASS_ON_SETTLE;
+    case NOCTI_V4_SAMPLE_CLASS_ON_STABLE:
+        return SAMPLE_CLASS_ON_STABLE;
+    case NOCTI_V4_SAMPLE_CLASS_OFF_TRANSITION:
+        return SAMPLE_CLASS_OFF_TRANSITION;
+    case NOCTI_V4_SAMPLE_CLASS_OFF_SETTLE:
+        return SAMPLE_CLASS_OFF_SETTLE;
+    case NOCTI_V4_SAMPLE_CLASS_OFF_STABLE:
+        return SAMPLE_CLASS_OFF_STABLE;
+    case NOCTI_V4_SAMPLE_CLASS_END_GUARD:
+        return SAMPLE_CLASS_END_GUARD;
+    case NOCTI_V4_SAMPLE_CLASS_OUTSIDE:
+    default:
+        return SAMPLE_CLASS_TIMING_GAP;
+    }
 }
 
 static uint64_t shifted_timestamp(uint64_t timestamp_us, int32_t delta_us)
@@ -729,6 +773,8 @@ static bool raw_stage_push(optical_runtime_t *r, const nocti_v4_raw_sample_t *sa
     r->raw_stage[r->raw_stage_head & RAW_STAGE_MASK] = *sample;
     ++r->raw_stage_head;
     r->last_staged_raw_ts = sample->drdy_timestamp_us;
+    r->last_staged_sequence = sample->drdy_sequence;
+    r->last_staged_sequence_valid = true;
     if (depth + 1u > r->raw_stage_depth_max) r->raw_stage_depth_max = depth + 1u;
     return true;
 }
@@ -764,7 +810,7 @@ static void classify_complete_sample(optical_runtime_t *r, slot_work_t *work,
      * Only the measured OFF transition/commit boundaries are translated; the
      * active session GPTimer deadline is never changed by the model. */
     record_phase_sample(r, work, timing, ts);
-    switch (canonical_classify(timing, ts)) {
+    switch (canonical_classify(timing, sample->drdy_sequence)) {
     case SAMPLE_CLASS_PRECOMMIT:
         count_category(r, &r->health->optical_raw_precommit);
         add(&r->health->raw_rejected_precommit, 1u);
@@ -807,6 +853,10 @@ static void classify_complete_sample(optical_runtime_t *r, slot_work_t *work,
     case SAMPLE_CLASS_END_GUARD:
         count_category(r, &r->health->optical_raw_end_guard);
         add(&r->health->raw_rejected_guard, 1u);
+        break;
+    case SAMPLE_CLASS_COMMIT_LATE:
+        count_category(r, &r->health->optical_raw_commit_late);
+        add(&r->health->raw_rejected_precommit, 1u);
         break;
     case SAMPLE_CLASS_TIMING_GAP:
         count_category(r, &r->health->optical_raw_timing_gap);
@@ -852,7 +902,11 @@ static void classify_ready_timings(optical_runtime_t *r, bool force)
         const nocti_v4_slot_timing_t *timing =
             &r->finalized_timing[r->finalized_timing_tail & FINALIZED_TIMING_MASK];
         if (!force && (r->raw_stage_head == r->raw_stage_tail ||
-                       r->last_staged_raw_ts < timing->nominal_slot_end_ts)) {
+                       (timing->sample_plan_valid ?
+                            !r->last_staged_sequence_valid ||
+                            !nocti_v4_sample_reached(r->last_staged_sequence,
+                                                     timing->slot_end_sequence) :
+                            r->last_staged_raw_ts < timing->nominal_slot_end_ts))) {
             return;
         }
         slot_work_t *work = work_for(r, timing);
@@ -862,7 +916,12 @@ static void classify_ready_timings(optical_runtime_t *r, bool force)
             while (r->raw_stage_tail != r->raw_stage_head) {
                 const nocti_v4_raw_sample_t *sample =
                     &r->raw_stage[r->raw_stage_tail & RAW_STAGE_MASK];
-                if (sample->drdy_timestamp_us >= timing->nominal_slot_end_ts) break;
+                if (timing->sample_plan_valid ?
+                        nocti_v4_sample_reached(sample->drdy_sequence,
+                                                timing->slot_end_sequence) :
+                        sample->drdy_timestamp_us >= timing->nominal_slot_end_ts) {
+                    break;
+                }
                 ++r->raw_stage_tail;
                 r->last_processed_raw_ts = sample->drdy_timestamp_us;
                 /* Overlay accounting only: canonical mutually-exclusive
@@ -876,7 +935,10 @@ static void classify_ready_timings(optical_runtime_t *r, bool force)
                  * epoch when it was accepted above. */
                 if (sample->session_epoch != r->ads_session_epoch) {
                     count_category(r, &r->health->optical_raw_stale_epoch);
-                } else if (sample->drdy_timestamp_us < timing->nominal_slot_start_ts) {
+                } else if (timing->sample_plan_valid ?
+                           !nocti_v4_sample_reached(sample->drdy_sequence,
+                                                    timing->slot_start_sequence) :
+                           sample->drdy_timestamp_us < timing->nominal_slot_start_ts) {
                     count_category(r, &r->health->optical_raw_timing_gap);
                 } else if (timing->aborted_by_stop || r->stopping) {
                     count_category(r, &r->health->optical_raw_stop_boundary);
@@ -936,7 +998,8 @@ static void abort_pending(optical_runtime_t *r)
     const uint32_t categorized = h->optical_raw_precommit + h->optical_raw_on_settle +
         h->optical_raw_on_stable + h->optical_raw_off_transition +
         h->optical_raw_off_settle + h->optical_raw_off_stable +
-        h->optical_raw_end_guard + h->optical_raw_startup_discard +
+        h->optical_raw_end_guard + h->optical_raw_commit_late +
+        h->optical_raw_startup_discard +
         h->optical_raw_session_boundary + h->optical_raw_stop_boundary +
         h->optical_raw_stale_epoch + h->optical_raw_recovery +
         h->optical_raw_other_explicit + h->optical_raw_timing_gap +
@@ -1073,6 +1136,7 @@ static void reset_optical_health(optical_runtime_t *r)
     RESET(numeric_overflow_errors); RESET(optical_raw_processed); RESET(optical_raw_precommit);
     RESET(optical_raw_on_settle); RESET(optical_raw_on_stable); RESET(optical_raw_off_transition);
     RESET(optical_raw_off_settle); RESET(optical_raw_off_stable); RESET(optical_raw_end_guard);
+    RESET(optical_raw_commit_late);
     RESET(optical_raw_startup_discard); RESET(optical_raw_session_boundary);
     RESET(optical_raw_stop_boundary); RESET(optical_raw_stale_epoch); RESET(optical_raw_recovery);
     RESET(optical_raw_other_explicit); RESET(optical_raw_before_final_timing);
@@ -1291,7 +1355,8 @@ void nocti_v4_optical_print_health(const nocti_v4_optical_t *optical)
            h->numeric_overflow_errors, h->optical_timing_ring_overflow);
     const uint32_t classified = h->optical_raw_precommit + h->optical_raw_on_settle +
         h->optical_raw_on_stable + h->optical_raw_off_transition + h->optical_raw_off_settle +
-        h->optical_raw_off_stable + h->optical_raw_end_guard + h->optical_raw_startup_discard +
+        h->optical_raw_off_stable + h->optical_raw_end_guard + h->optical_raw_commit_late +
+        h->optical_raw_startup_discard +
         h->optical_raw_session_boundary + h->optical_raw_stop_boundary + h->optical_raw_stale_epoch +
         h->optical_raw_recovery + h->optical_raw_other_explicit +
         h->optical_raw_timing_gap + h->optical_raw_internal_error;

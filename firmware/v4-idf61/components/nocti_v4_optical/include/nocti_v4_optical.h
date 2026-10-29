@@ -100,6 +100,9 @@ typedef struct {
     uint32_t frame_sequence;
     uint64_t nominal_frame_timestamp_us;
     uint64_t completed_timestamp_us;
+    uint32_t anchor_sequence;
+    uint32_t adc_fs_hz;
+    uint8_t anchor_valid;
     nocti_v4_frame_quality_t quality;
     uint8_t target_valid_slots;
     uint8_t minimum_valid_slots;

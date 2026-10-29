@@ -1,5 +1,6 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "nocti_v4_ads.h"
+#include "nocti_v4_sample_edge.h"
 #include "nocti_v4_backlog.h"
 #include "nocti_v4_common.h"
 
@@ -1037,6 +1038,8 @@ static void IRAM_ATTR drdy_isr(void *argument)
             counter_add(&runtime->health->drdy_events_pushed, 1u);
             update_max((uint32_t *)&runtime->event_depth_max, depth + 1u);
         }
+        /* Sample index is the LED master. This does not start I2C. */
+        nocti_v4_sample_edge_on_drdy(sequence, timestamp_us, &higher_priority_woken);
     }
     if (runtime->ads_task != NULL) {
         vTaskNotifyGiveFromISR(runtime->ads_task, &higher_priority_woken);
