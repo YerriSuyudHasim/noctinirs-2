@@ -72,10 +72,11 @@
     {
       "path": "components/nocti_v4_board/include/nocti_v4_board.h",
       "historical_sha256": "f7b327f764d249e0e5c2839dff39a85a80ee86b13a7cea0a6cf367ce80ad3e08",
-      "active_sha256": "efc31eddf80724d2d19c09b3d409a5f9ddc126c65747f6b846c39c6c93d38b3d",
+      "active_sha256": "8149785b678b8d4ca06cc61dc6bf150ef122dd88f5f5bddb1b4f914cb6289d82",
       "changes": [
         "Preserve authorized 100 kHz configuration bus; runtime remains 800 kHz",
-        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
+        "Comment matches the 100 kHz synchronous diagnostic clock"
       ]
     },
     {
@@ -158,9 +159,10 @@
     {
       "path": "components/nocti_v4_i2c/include/nocti_v4_i2c.h",
       "historical_sha256": "f2775721b52e86a8fab6d5a55920f4818b6385c4a0548f4df8aa667d16bbabe0",
-      "active_sha256": "f2775721b52e86a8fab6d5a55920f4818b6385c4a0548f4df8aa667d16bbabe0",
+      "active_sha256": "5617bbaf88194b07e7028806dedf7cf7a7757019eb617f6da02593ddf75faff0",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "Comment matches the 100 kHz synchronous diagnostic clock"
       ]
     },
     {
@@ -182,9 +184,10 @@
     {
       "path": "components/nocti_v4_led/include/nocti_v4_led.h",
       "historical_sha256": "100f6367d7bc45a776e11a40e5679883bc63980cec11d2e35ab691cc6720b741",
-      "active_sha256": "9b15f148a9112803187abd433d5d2c5e0878249a8d40939c47f2f0b698b7963f",
+      "active_sha256": "6c66aefdf8861227313e890313c63ed20accc5bab3007d05b69f01ac9ad3a753",
       "changes": [
-        "Configuration-bus status labels follow the approved 100 kHz overlay"
+        "Configuration-bus status labels follow the approved 100 kHz overlay",
+        "Comment matches the 100 kHz synchronous diagnostic clock"
       ]
     },
     {

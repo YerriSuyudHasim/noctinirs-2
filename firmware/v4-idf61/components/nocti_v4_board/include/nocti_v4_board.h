@@ -14,7 +14,7 @@
 #define NOCTI_V4_I2C_SYNC_DIAGNOSTIC_HZ   100000u
 /* ESP32-S3 datasheet limit: up to 800 kbit/s, constrained by pull-up
  * strength. Runtime qualification therefore uses 800 kbit/s rather than the
- * PCA9956B's 1 MHz ceiling. The synchronous golden path remains 400 kHz. */
+ * PCA9956B's 1 MHz ceiling. The synchronous golden path remains 100 kHz. */
 #define NOCTI_V4_I2C_SCAN_RUNTIME_HZ       800000u
 #define NOCTI_V4_I2C_CLOCK_HZ              NOCTI_V4_I2C_SYNC_DIAGNOSTIC_HZ
 #define NOCTI_V4_I2C_EXTERNAL_PULLUP_OHM   4700u

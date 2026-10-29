@@ -17,14 +17,11 @@ CONFIG_ESP_BROWNOUT_DET_LVL_SEL_7=y
 # CONFIG_ESP_BROWNOUT_DET_LVL_SEL_2 is not set
 # CONFIG_ESP_BROWNOUT_DET_LVL_SEL_1 is not set
 # ADS, LED and scheduler subscribe themselves and kick at least once a second.
-# Panic is deliberate: a missed kick means one of those tasks is stuck. A
-# log-only timeout would leave the sample stream and the emitter in whatever
-# state the stuck task last set. Panic resets through the boot path, which
-# holds PCA RESET before I2C comes up.
+# TWDT panic deferred per Owner 2026-10-30; revisit after acquisition validation
 CONFIG_ESP_TASK_WDT_EN=y
 CONFIG_ESP_TASK_WDT_INIT=y
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
-CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_TASK_WDT_PANIC=n
 CONFIG_FREERTOS_IN_IRAM=y
 CONFIG_LIBC_NEWLIB=y
 

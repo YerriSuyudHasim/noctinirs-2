@@ -27,7 +27,7 @@ esp_err_t nocti_v4_i2c_init_at_speed(nocti_v4_i2c_t *i2c,
                                       uint32_t clock_hz);
 /* Creates a fresh I2C0/PCA device pair at the specified queue depth. Callers
  * must destroy a prior pair first; this compatibility entry point uses the
- * 400-kHz synchronous diagnostic clock. */
+ * 100 kHz synchronous diagnostic clock. */
 esp_err_t nocti_v4_i2c_init(nocti_v4_i2c_t *i2c, nocti_v4_health_t *health,
                              uint32_t queue_depth);
 /* The caller must first quiesce transactions and unregister any callback.
