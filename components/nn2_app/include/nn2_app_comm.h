@@ -27,9 +27,9 @@ typedef struct {
 nn2_status_t nn2_app_comm_init(nn2_app_comm_storage_t *, uint64_t boot_id,
                                const nn2_port_safety_t *,
                                uint32_t session_seed);
-/* Optional LED-only bring-up adapter. Bind once while idle, before commands.
+/* Optional LED/ADC acquisition adapter. Bind once while idle, before commands.
  * START/STOP then acknowledge STARTING/STOPPING; tick observes completion.
- * Frames/ADC remain unsupported and replies remain explicitly SIMULATED. */
+ * LED-only replies are SIMULATED; a real_samples binding supplies ACQ1 frames. */
 nn2_status_t nn2_app_comm_bind_optical(nn2_app_comm_storage_t *,
                                      const nn2_port_optical_t *);
 nn2_status_t nn2_app_comm_tick(nn2_app_comm_storage_t *, uint64_t now_us,
@@ -40,6 +40,7 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *, uint64_t peer,
 nn2_app_comm_status_t nn2_app_comm_get_status(const nn2_app_comm_storage_t *);
 /* USB safety intake: same state/safety owner as UDP, no second state machine.
  */
+size_t nn2_app_comm_frame(nn2_app_comm_storage_t *, uint64_t *peer, uint8_t *, size_t);
 nn2_status_t nn2_app_comm_safe_off(nn2_app_comm_storage_t *);
 /* Stamp only uncached time queries immediately before send; state-changing
  * cached replies remain byte-identical. Not a hardware transmit timestamp. */

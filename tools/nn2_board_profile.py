@@ -55,7 +55,8 @@ def workspace_settings(existing, profile):
         raise ValueError("idf.cmakeCompilerArgs must be a string array")
     # Own only this expectation argument; retain all unrelated compiler arguments.
     result["idf.cmakeCompilerArgs"] = [a for a in args if not re.match(
-        r"^-DNN2_EXPECT_LED_(?:POLICY|I2C_HZ)(?::[^=]+)?=", a)] + ["-DNN2_EXPECT_LED_POLICY=" + profile["policy"],
+        r"^-D(?:NN2_EXPECT_LED_(?:POLICY|I2C_HZ)|NN2_USE_BRANCH_PROFILE)(?::[^=]+)?=", a)] + [
+        "-DNN2_USE_BRANCH_PROFILE=OFF", "-DNN2_EXPECT_LED_POLICY=" + profile["policy"],
         "-DNN2_EXPECT_LED_I2C_HZ=" + str(profile["runtime_i2c_hz"])]
     result["idf.buildPath"] = "${workspaceFolder}/" + profile["build_path"]
     result["idf.sdkconfigFilePath"] = "${workspaceFolder}/" + profile["sdkconfig"]

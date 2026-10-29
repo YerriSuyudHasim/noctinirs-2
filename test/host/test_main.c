@@ -8,8 +8,10 @@ int main(void)
     test_sequencer_suite();
     test_contract_suite();
     test_storage_suite();
+    test_acquisition_suite();
     test_ads131_suite();
     test_ads131_control_suite();
+    test_ads131_transport_suite();
     int result = UNITY_END();
     return (Unity.NumberOfTests > 0u && Unity.TestIgnores == 0u && result == 0) ? 0 : 1;
 }

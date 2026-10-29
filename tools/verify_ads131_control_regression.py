@@ -87,7 +87,7 @@ def main():
             raise RuntimeError(kind + ' build failed; see retained log')
         groups = [('R1', 4), ('R2', 7), ('positive', 10), ('zero', 0)]
         if kind == 'new':
-            groups.append(('all', 22))
+            groups.append(('all', 25))
         for group, count in groups:
             env = dict(os.environ, NN2_CONTROL_GROUP=group)
             if group == 'all':

@@ -2,6 +2,7 @@
  * This does not simulate ESP scheduling or electrical behavior. */
 #include "nn2_test.h"
 #include "nn2_ads131_logic.h"
+#include "nn2_ads131_events.h"
 #include "ads131_golden.h"
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +25,8 @@ typedef struct {
     uint32_t next_id;
 } device_t;
 static device_t d;
+static nn2_ads131_events_t events;
+static bool event_mode, no_events, edge_in_sync;
 static uint64_t clock_us, send_delay, delay_us_step;
 static uint32_t pending, transfer_count, sync_count, receive_count, sends, notify_count;
 static uint64_t deadlines[8];
@@ -44,7 +47,14 @@ static void *xTaskGetCurrentTaskHandle(void) { return &caller_task; }
 static int xTaskNotify(void *task, uint32_t bits, int action)
 { (void)task; (void)action; TEST_ASSERT_EQUAL_HEX32(0x80000000u,bits); notify_count++; return 1; }
 static int xTaskNotifyWait(uint32_t entry, uint32_t exit, uint32_t *out, TickType_t wait)
-{ (void)entry; (void)exit; (void)wait; *out=pending; pending=0u; return 1; }
+{
+    (void)entry; (void)exit;
+    if (event_mode && wait && d.logic.observation.state==NN2_ADC_RUNNING && events.head==events.tail) {
+        clock_us+=no_events?10000u:125u;
+        if (!no_events) { nn2_ads131_events_push(&events,clock_us); pending|=1u; }
+    }
+    *out=pending; pending=0u; return 1;
+}
 static int esp_task_wdt_reset(void) { return watchdog_failure ? -1 : ESP_OK; }
 static void vTaskDelay(TickType_t wait) { clock_us += (uint64_t)wait * delay_us_step; }
 static int xQueueSend(void *q, const void *item, TickType_t wait)
@@ -86,14 +96,26 @@ static int receive_sized(void *q, void *out, size_t size, TickType_t wait)
 #include NN2_CONTROL_IMPLEMENTATION
 static void dispatch_during_receive(void) { bool discard=false; (void)dispatch(&d,&discard); }
 static nn2_status_t reset_fake(void *ctx,bool high)
-{ (void)ctx; (void)high; return reset_failure?NN2_ERR_IO:NN2_OK; }
+{ (void)ctx; if (!high) { events.enabled=false; nn2_ads131_events_clear(&events); } return reset_failure?NN2_ERR_IO:NN2_OK; }
 static nn2_status_t sync_fake(void *ctx)
-{ (void)ctx; sync_count++; return sync_failure?NN2_ERR_IO:NN2_OK; }
+{
+    (void)ctx; sync_count++;
+    if (event_mode && !sync_failure) {
+        nn2_ads131_events_clear(&events); events.enabled=true;
+        if (edge_in_sync) { clock_us+=125u; nn2_ads131_events_push(&events,clock_us); pending|=1u; }
+    }
+    return sync_failure?NN2_ERR_IO:NN2_OK;
+}
+static uint32_t take_fake(void *ctx,nn2_ads131_event_t *event,uint32_t *dropped)
+{ (void)ctx; return nn2_ads131_events_take(&events,event,dropped); }
+static uint64_t latch_fake(void *ctx,uint32_t *serial)
+{ (void)ctx; *serial=events.serial; return events.latest_us; }
 static nn2_status_t transfer_fake(void *ctx,const uint8_t *tx,uint8_t *rx)
 { (void)ctx; (void)tx; transfer_count++; memcpy(rx,golden[0],18u); return NN2_OK; }
 static void fresh(void)
 {
     memset(&d,0,sizeof(d)); memset(&posted,0,sizeof(posted));
+    memset(&events,0,sizeof(events)); event_mode=no_events=edge_in_sync=false;
     clock_us=send_delay=0u; delay_us_step=10000u;
     pending=transfer_count=sync_count=receive_count=sends=notify_count=0u;
     have_command=reset_failure=sync_failure=watchdog_failure=pump=false;
@@ -123,7 +145,7 @@ static void preserved(uint32_t op,bool expired)
     TEST_ASSERT_EQUAL(2u,transfer_count); TEST_ASSERT_EQUAL(2u,d.logic.count);
     TEST_ASSERT_EQUAL(0u,d.logic.observation.lost); TEST_ASSERT_EQUAL(0u,d.logic.observation.loss_unknown);
     TEST_ASSERT_EQUAL(NN2_ADC_FAULT_NONE,d.logic.observation.fault);
-    TEST_ASSERT_EQUAL(0u,d.logic.items[1].quality);
+    TEST_ASSERT_EQUAL(NN2_ADC_QUALITY_NO_EDGE,d.logic.items[1].quality);
     owner_iteration(&d,0u); TEST_ASSERT_EQUAL(2u,transfer_count);
 }
 static void r1_rejected_init(void) { preserved(CMD_INIT,false); }
@@ -146,7 +168,7 @@ static void positive_acquisition(void)
 {
     fresh(); clock_us=100u; owner_iteration(&d,1u); clock_us=225u; owner_iteration(&d,1u);
     TEST_ASSERT_EQUAL(2u,d.logic.observation.sequence); TEST_ASSERT_EQUAL(2u,d.logic.count);
-    TEST_ASSERT_EQUAL(0u,d.logic.observation.lost); TEST_ASSERT_EQUAL(0u,d.logic.items[1].quality);
+    TEST_ASSERT_EQUAL(0u,d.logic.observation.lost); TEST_ASSERT_EQUAL(NN2_ADC_QUALITY_NO_EDGE,d.logic.items[1].quality);
 }
 static void positive_start_stop_resynchronization(void)
 {
@@ -262,6 +284,35 @@ static void positive_port_outputs(void)
     fresh(); delivery(999u,0,NN2_OK); nn2_core_adc_observation_t observation={0};
     TEST_ASSERT_EQUAL(NN2_OK,observe_port(&d,&observation,1u)); TEST_ASSERT_EQUAL_HEX8(0x4d,((uint8_t *)&observation)[0]);
 }
+static void event_start(bool early)
+{
+    fresh(); event_mode=true; edge_in_sync=early;
+    d.logic.io.take_events=take_fake; d.logic.io.drdy_latch=latch_fake;
+    d.logic.observation.state=NN2_ADC_READY;
+    command(CMD_START,10000u); owner_iteration(&d,0xffffffffu);
+    TEST_ASSERT_EQUAL(NN2_OK,posted.result); TEST_ASSERT_EQUAL(2u,transfer_count);
+    TEST_ASSERT_EQUAL(0u,d.logic.settling); TEST_ASSERT_EQUAL(0u,d.logic.count);
+    TEST_ASSERT_EQUAL(NN2_ADC_RUNNING,d.logic.observation.state);
+    TEST_ASSERT_EQUAL(2u,d.logic.edge_serial); TEST_ASSERT_EQUAL(0u,d.logic.observation.lost);
+    clock_us+=125u; nn2_ads131_events_push(&events,clock_us);
+    pending=1u; owner_iteration(&d,1u); /* Two doorbells, only ONE recorded edge. */
+    TEST_ASSERT_EQUAL(3u,transfer_count); TEST_ASSERT_EQUAL(1u,d.logic.count);
+    command(CMD_STOP,10000u); owner_iteration(&d,1u);
+    TEST_ASSERT_EQUAL(NN2_OK,posted.result); TEST_ASSERT_FALSE(events.enabled);
+    TEST_ASSERT_EQUAL(NN2_ADC_STOPPED,d.logic.observation.state);
+}
+static void event_start_primes_before_ack(void) { event_start(false); }
+static void event_start_captures_early_sync_edge(void) { event_start(true); }
+static void event_start_timeout_never_acknowledges_running(void)
+{
+    fresh(); event_mode=true; no_events=true;
+    d.logic.io.take_events=take_fake; d.logic.io.drdy_latch=latch_fake;
+    d.logic.observation.state=NN2_ADC_READY;
+    command(CMD_START,50000u); owner_iteration(&d,1u);
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,posted.result); TEST_ASSERT_EQUAL(0u,transfer_count);
+    TEST_ASSERT_EQUAL(NN2_ADC_FAULT_DRDY,d.logic.runtime_failure.fault);
+    TEST_ASSERT_EQUAL(20000u,clock_us); TEST_ASSERT_FALSE(events.enabled);
+}
 void test_ads131_control_suite(void)
 {
 #ifdef NN2_CONTROL_STANDALONE
@@ -286,7 +337,11 @@ void test_ads131_control_suite(void)
         RUN_TEST(positive_empty_read_budget); RUN_TEST(positive_port_outputs);
     }
     /* This positive requires the correction; the legacy first reply is wrongly OK. */
-    if (!group) RUN_TEST(positive_consecutive_ids);
+    if (!group) {
+        RUN_TEST(positive_consecutive_ids);
+        RUN_TEST(event_start_primes_before_ack); RUN_TEST(event_start_captures_early_sync_edge);
+        RUN_TEST(event_start_timeout_never_acknowledges_running);
+    }
 }
 #ifdef NN2_CONTROL_STANDALONE
 void setUp(void) {}

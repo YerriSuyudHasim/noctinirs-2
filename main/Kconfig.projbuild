@@ -21,7 +21,7 @@ menu "NoctiNIRS 2 v0.1.0"
         default 3333
 
     config NN2_LED_BRINGUP
-        bool "Enable real LED-only bring-up commands (requires reviewed bench procedure)"
+        bool "Enable real LED scheduler (requires reviewed bench procedure)"
         depends on NN2_PROFILE_COMMUNICATION
         default n
         select GPIO_CTRL_FUNC_IN_IRAM
@@ -31,7 +31,16 @@ menu "NoctiNIRS 2 v0.1.0"
         help
             Real PCA9956B drive on explicit START, 20 optical slots, one channel
             at a time. Boot remains OFF. Default Fs=5 Hz and current=30 mA.
-            No ADC/frames. Physical energization requires Owner authorization.
+            ADC/frames require the separate acquisition option below.
+            Physical energization requires Owner authorization.
+
+    config NN2_OPTICAL_ACQUISITION
+        bool "Integrate ADS131M04 acquisition with LED scheduler"
+        depends on NN2_LED_BRINGUP
+        default n
+        help
+            Explicit START only. Raw ADC counts, paired ON/OFF means, estimated
+            DRDY timing and bounded UDP frames. Board coexistence is unqualified.
 
     config NN2_LED_SHORT_BENCH
         bool "Board-specific SHORT advisory engineering candidate (unqualified)"

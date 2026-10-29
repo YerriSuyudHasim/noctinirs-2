@@ -119,6 +119,20 @@ nn2_status_t nn2_net_poll(bool link_up, uint32_t epoch)
             ++s_status.replied;
         }
     }
+    /* Bounded, nonblocking frame TX to the current full owner endpoint. A
+     * consumed frame is never retried; sequence gaps and send_errors expose loss. */
+    for (unsigned budget=0; s_socket>=0 && budget<4; ++budget) {
+        uint8_t output[NN2_CORE_PACKET_MAX]; uint64_t peer;
+        size_t count=nn2_app_comm_frame(s_app,&peer,output,sizeof(output));
+        if (!count) break;
+        struct sockaddr_in target={.sin_family=AF_INET,
+            .sin_addr.s_addr=(uint32_t)(peer>>16),.sin_port=(uint16_t)peer};
+        int sent=sendto(s_socket,output,count,MSG_DONTWAIT,
+            (struct sockaddr *)&target,sizeof(target));
+        if (sent!=(int)count) {
+            s_status.last_errno=sent<0?errno:EIO; ++s_status.send_errors;
+        }
+    }
     return NN2_OK;
 }
 

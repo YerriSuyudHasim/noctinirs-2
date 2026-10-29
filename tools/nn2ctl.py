@@ -99,6 +99,41 @@ def describe_reply(packet, request_id=None, opcode=None):
         raise ValueError("unexpected command data")
     return result
 
+def describe_frame(packet):
+    """ACQ1 local four-detector raw-count aggregates. No analog current model."""
+    p = packet.payload
+    if packet.msg_type != FRAME or len(p) != 1156 or p[:4] != b"ACQ1":
+        raise ValueError("unsupported acquisition frame")
+    frame, adc_session, origin = struct.unpack_from("<IIQ", p, 4)
+    slots, detectors, target, minimum = p[20:24]
+    if (slots, detectors, target, minimum) != (20, 4, 10, 8) or p[30] not in (0, 1):
+        raise ValueError("acquisition geometry")
+    records = []
+    for i in range(20):
+        q = 36 + i*56
+        slot, n_on, n_off, quality, reason = struct.unpack_from("<BBBBI", p, q)
+        on_sum = list(struct.unpack_from("<4i", p, q+8))
+        off_sum = list(struct.unpack_from("<4i", p, q+24))
+        on = [x/n_on for x in on_sum] if n_on else None
+        off = [x/n_off for x in off_sum] if n_off else None
+        if slot != i or max(n_on, n_off) > target or quality > 4:
+            raise ValueError("acquisition slot")
+        valid = (quality in (0, 1) and minimum <= n_on == n_off <= target
+                 and not p[30] and not reason and -2147483648 not in on_sum+off_sum)
+        records.append(dict(slot=slot, source=slot//2+1,
+            wavelength_nm=735 if slot%2==0 else 850, quality=quality, reason=reason,
+            n_on=n_on, n_off=n_off, valid=valid, on_sum_counts=on_sum, off_sum_counts=off_sum, on_counts=on, off_counts=off,
+            corrected_counts=[x-y for x,y in zip(on,off)] if valid else None,
+            commit_offset_us=list(struct.unpack_from("<2H",p,q+40)),
+            stable_us=list(struct.unpack_from("<2H",p,q+44)),
+            first_adc_sequence=list(struct.unpack_from("<2I",p,q+48))))
+    return dict(type="FRAME", schema="ACQ1", frame_sequence=frame,
+        session_id=packet.session_id, adc_session=adc_session, origin_us=origin,
+        message_sequence=packet.sequence, units="ADC counts", channels=["CH0/PD3","CH1/PD4","CH2/PD1","CH3/PD2"],
+        timestamp_estimated=bool(packet.flags & TS_ESTIMATED), simulated=bool(packet.flags & SIMULATED),
+        producer_dropped=struct.unpack_from("<I",p,32)[0], warmup=bool(p[30]), slots=records)
+
+
 class SequenceTracker:
     """Track one sequence domain. Never mix message/frame/sample counters."""
     def __init__(self):
@@ -122,6 +157,7 @@ class Client:
         self.boot_id = None
         self.session_id = 0
         self.sequence = 0
+        self.frame_sink = None
     def close(self): self.sock.close()
     def request(self, command, payload=None):
         op = COMMANDS[command]
@@ -145,6 +181,10 @@ class Client:
                 except socket.timeout: break
                 try:
                     packet = decode(received)
+                    if packet.msg_type == FRAME:
+                        if self.session_id and packet.session_id == self.session_id and self.frame_sink:
+                            self.frame_sink(describe_frame(packet))
+                        continue
                     result = describe_reply(packet,rid,op)
                     if result["error"] == "OK" and expected_echo is not None and result.get("t_host") != expected_echo:
                         continue
@@ -238,6 +278,7 @@ def main():
     parser.add_argument("--seconds",type=float,default=10)
     parser.add_argument("--led",action="store_true",
                         help="Explicitly start real LEDs in the opt-in bring-up profile; requires an approved bench procedure")
+    parser.add_argument("--acquisition", action="store_true", help="Require ACQ1 acquisition capability")
     parser.add_argument("--ack-short-warning", action="store_true",
                         help="Acknowledge the unqualified board SHORT advisory candidate")
     args=parser.parse_args()
@@ -254,6 +295,8 @@ def main():
         if args.command in ("start", "run"):
             info = require_ok(client.request("info"))
             print(json.dumps(info), flush=True)  # One cached preflight reply, before START.
+            if args.acquisition and "frames=ACQ1" not in info["info"]:
+                raise RuntimeError("ACQ1 acquisition is not enabled")
             real_led = "led=REAL_BRINGUP" in info["info"]
             if real_led and not args.led:
                 raise RuntimeError("Real LED profile: START can energize emitters. Use --led only under the approved bench procedure")
@@ -276,6 +319,7 @@ def main():
             if args.rate is not None:
                 require_ok(client.request("set-fs", bytes([args.rate])))
         if args.command=="run":
+            client.frame_sink = lambda frame: print(json.dumps(frame), flush=True)
             print(json.dumps(require_ok(client.request("start"))),flush=True)
             try:
                 deadline=time.monotonic()+args.seconds

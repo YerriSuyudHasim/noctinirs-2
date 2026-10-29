@@ -1,0 +1,132 @@
+{
+  "recorded_at_utc": "2026-10-28T07:37:56.290527+00:00",
+  "role": "Firmware Developer, author-side verification",
+  "sdk_commit": "fff9895c82d744c7237be8847347bdd1b07c6643",
+  "host_compiler": "MSVC19.50 / Visual Studio18.1.1",
+  "target_compiler": "Xtensa GCC15.2.0",
+  "target": "esp32s3",
+  "tests": {
+    "native_adc_pairing_protocol": {
+      "tests": 47,
+      "failures": 0,
+      "ignored": 0
+    },
+    "python_communication": {
+      "discovered": 50,
+      "executed": 41,
+      "skipped": 9,
+      "failures": 0
+    },
+    "led_strict": {
+      "checks": 1245709,
+      "failures": 0
+    },
+    "led_advisory": {
+      "checks": 1246238,
+      "failures": 0
+    },
+    "acquisition_led_windows": {
+      "checks": 641,
+      "profiles": [
+        "strict",
+        "advisory"
+      ],
+      "failures": 0
+    },
+    "manifest": 15,
+    "workflow": 2,
+    "historical_integrity_files": 319
+  },
+  "logs": {
+    "ads131-native-c6fcfd6.log": {
+      "path": "C:/esp/ads131-native-c6fcfd6.log",
+      "sha256": "bec870bd9d879afcacd68251fec7ab4a1fc3619474b48ba19cb43996abb76fae"
+    },
+    "ads131-python-final.log": {
+      "path": "C:/esp/ads131-python-final.log",
+      "sha256": "b40897a5c6e46ffa441208b3fcd4a634548ebf4f2f4a63d325af57243533b880"
+    },
+    "ads131-led-native.log": {
+      "path": "C:/esp/ads131-led-native.log",
+      "sha256": "3269f1eb20d0082f61ebb881b47e3cd6c6e4721502f1df7a98841f949ac8d45d"
+    },
+    "ads131-led-window.log": {
+      "path": "C:/esp/ads131-led-window.log",
+      "sha256": "9bbb97d432236af0ba4d3eea929616a2aaeaf2274e4afd69a53be0b95f16e375"
+    },
+    "ads131-manifest.log": {
+      "path": "C:/esp/ads131-manifest.log",
+      "sha256": "954502562ba74c9ce9ea42f2c3463aa72083b0fb7a5e836fd721abc11212d5dc"
+    },
+    "ads131-workflow.log": {
+      "path": "C:/esp/ads131-workflow.log",
+      "sha256": "aa425f9950bda81afa1d1869f57876f12c66a1ae33357a738723137589eb0c20"
+    }
+  },
+  "limitations": [
+    "No native GCC/Clang full Class-U CMake execution on this machine; C11 max_align_t unsupported by MSVC; targeted production suites compiled without source substitutions.",
+    "MSVC W4 reports existing shadow/flow-analysis warnings; no claim of zero host compiler warnings.",
+    "Hardware/RTOS/specialist/independent approval not supplied; no device operations."
+  ],
+  "final_source_sha": "4a493a7e18bb6108ef28d0edd59852cb290225ec",
+  "native_test_source_sha": "c6fcfd61d8743a54da75d842e49fa2e1580df4ad",
+  "source_sha_note": "47 native tests ran at c6fcfd6; final change only restored the ESP-only static memory assertion to12KiB and documented measured size. Native-tested behavior is unchanged. LED/Python regressions ran during implementation; their exercised driver/client behavior is unchanged.",
+  "native_final_log": {
+    "path": "C:/esp/ads131-native-c6fcfd6.log",
+    "sha256": "bec870bd9d879afcacd68251fec7ab4a1fc3619474b48ba19cb43996abb76fae"
+  },
+  "builds": [
+    {
+      "profile": "acq",
+      "source_sha": "4a493a7e18bb6108ef28d0edd59852cb290225ec",
+      "result": "PASS",
+      "target": "esp32s3",
+      "build_dir": "C:\\esp\\ads131-20261028\\build-acq",
+      "config": "C:\\esp\\ads131-20261028\\sdkconfig.acq",
+      "config_sha256": "556e2ec240a82f21be5e3261f9f89bcb57b288fe15e4727665aae1b75e9d7424",
+      "image_bytes": 879776,
+      "image_sha256": "467b3a6fce2a021b2465aede087dd0749ec2521dc516b35db38a117d4336b2a3",
+      "log": "C:\\esp\\ads131-acq-final.log",
+      "log_sha256": "0a74b7778f2fedc7ef8f4fa992aab9ac04dff35a64fd316666ffaeb42cb0eb86",
+      "compiler_warning_lines": [],
+      "flash_size": "\"16MB\""
+    },
+    {
+      "profile": "led",
+      "source_sha": "4a493a7e18bb6108ef28d0edd59852cb290225ec",
+      "result": "PASS",
+      "target": "esp32s3",
+      "build_dir": "C:\\esp\\ads131-20261028\\build-led",
+      "config": "C:\\esp\\ads131-20261028\\sdkconfig.led",
+      "config_sha256": "39149241f2910f6b5883eb33fa6e297ae754af983eba86da0cdd88775c38d91a",
+      "image_bytes": 839408,
+      "image_sha256": "9dd6cad94134124cd127f2eb1c364b4c8c77afce29671f1ffb701d9338878a3c",
+      "log": "C:\\esp\\ads131-led-final.log",
+      "log_sha256": "035cd23b968d31048c02be47acbd10db92e90c03d97e47815ee7eed39f776681",
+      "compiler_warning_lines": [],
+      "flash_size": "\"2MB\""
+    },
+    {
+      "profile": "diag",
+      "source_sha": "4a493a7e18bb6108ef28d0edd59852cb290225ec",
+      "result": "PASS",
+      "target": "esp32s3",
+      "build_dir": "C:\\esp\\ads131-20261028\\build-diag-s3",
+      "config": "C:\\esp\\ads131-20261028\\sdkconfig.diag-s3",
+      "config_sha256": "74cc6143720f76650bd7fca6ff2cb61bd3946394f0f25924f004cbcbd31b89c8",
+      "image_bytes": 219376,
+      "image_sha256": "09d4642bf529d4652719b6938c889e9124effa8771a7fd72572f41ec26798053",
+      "log": "C:\\esp\\ads131-diag-final.log",
+      "log_sha256": "83839ff29590455b33091163d5e5b2725fc386d755b2ea9a8bf867ecc9373240",
+      "compiler_warning_lines": [],
+      "flash_size": "\"16MB\""
+    }
+  ],
+  "base_main": "cbec2dab8e23595ae4e374e181c0d7c70f25edec",
+  "publication": "Local only; no push, PR, CI dispatch, hardware operation, merge or release.",
+  "reference_integrity": "319 files verified before implementation and after source work; final rerun recorded in results document.",
+  "adc_static_device_bytes": 11968,
+  "adc_static_bound_bytes": 12288,
+  "pairing_policy_bytes": 4992,
+  "memory_note": "Symbol sizes from the target map/nm. These are static allocations, not runtime heap/stack watermarks."
+}

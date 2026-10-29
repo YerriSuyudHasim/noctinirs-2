@@ -1,4 +1,4 @@
-/* Real communication, optional LED-only bench drive; no optical acquisition. */
+/* Communication with optional LED-only or ADS131 optical acquisition. */
 #include "sdkconfig.h"
 
 #if CONFIG_NN2_PROFILE_COMMUNICATION
@@ -22,6 +22,9 @@
 #include "nn2_wifi.h"
 #if CONFIG_NN2_LED_BRINGUP
 #include "nn2_led_bringup.h"
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+#include "nn2_acquisition_esp.h"
+#endif
 #endif
 
 static const char *TAG = "nn2_main";
@@ -76,6 +79,18 @@ static void describe_status(char *out, size_t capacity)
     size_t used = strlen(out);
     if (used < capacity) snprintf(out + used, capacity - used, "\n");
 #endif
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    nn2_acquisition_status_t acq=nn2_acquisition_status();
+    size_t n=strlen(out);
+    if (n && out[n-1]=='\n') --n;
+    int written=snprintf(out+n,capacity-n,
+        " adc_state=%u adc_fault=%u adc_lost=%" PRIu32 " adc_overflow=%" PRIu32
+        " adc_crc=%" PRIu32 " adc_missed=%" PRIu32 " adc_unknown=%" PRIu32
+        " acq_drop=%" PRIu32 " acq_tail=%" PRIu32 " adc_stop_ack=%u\n",
+        (unsigned)acq.adc.state,(unsigned)acq.adc.fault,acq.adc.lost,acq.adc.overflow,
+        acq.adc.crc_bad,acq.adc.adc_missed,acq.adc.loss_unknown,acq.dropped,acq.discarded_tail,(unsigned)acq.stop_ack);
+    if (written<0 || (size_t)written>=capacity-n) snprintf(out,capacity,"ERR status-capacity\n");
+#endif
 }
 
 
@@ -106,6 +121,11 @@ void app_main(void)
     result = nn2_led_bringup_init();
     if (result != ESP_OK) goto fail;
 #endif
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    stage = "ADC acquisition owner";
+    result = nn2_acquisition_init();
+    if (result != ESP_OK) goto fail;
+#endif
     stage = "NVS";
     result = nn2_config_init();
     if (result != ESP_OK) {
@@ -131,6 +151,9 @@ void app_main(void)
     nn2_port_safety_t safety = nn2_board_safety_port();
 #if CONFIG_NN2_LED_BRINGUP
     safety = nn2_led_bringup_safety_port();
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    safety = nn2_acquisition_safety_port();
+#endif
 #endif
     if (nn2_app_comm_init(&s_application, boot_id, &safety, esp_random()) != NN2_OK) {
         result = ESP_FAIL;
@@ -138,19 +161,30 @@ void app_main(void)
     }
 #if CONFIG_NN2_LED_BRINGUP
     nn2_port_optical_t optical = nn2_led_bringup_port();
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    optical = nn2_acquisition_port();
+#endif
     if (nn2_app_comm_bind_optical(&s_application, &optical) != NN2_OK) {
         stage = "LED-only command binding";
         result = ESP_FAIL;
         goto fail;
     }
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    ESP_LOGW(TAG, "ADS131M04 + LED acquisition candidate; explicit START; timing/coexistence unqualified");
+#else
     ESP_LOGW(TAG, "REAL LED BRING-UP: explicit START can energize emitters; Fs default 5Hz, 30mA, no ADC/frames");
+#endif
 #endif
     stage = "UDP service";
     result = nn2_net_init(&s_application, &clock, CONFIG_NN2_UDP_PORT);
     if (result != ESP_OK) {
         goto fail;
     }
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    ESP_LOGI(TAG, "v0.1.0 ADR0004/1 boot=%" PRIu64 " real ADC/LED capability; acquisition stopped", boot_id);
+#else
     ESP_LOGI(TAG, "v0.1.0 ADR0004/1 boot=%" PRIu64 " SIMULATED; RESET_LED held low", boot_id);
+#endif
     ESP_LOGI(TAG, "SoftAP NoctiNIRS; device 192.168.4.1; UDP port %u", (unsigned)CONFIG_NN2_UDP_PORT);
     stage = "network startup";
     result = nn2_wifi_start();
@@ -191,6 +225,9 @@ void app_main(void)
 fail:;
 #if CONFIG_NN2_LED_BRINGUP
     nn2_port_safety_t led_safety = nn2_led_bringup_safety_port();
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+    led_safety = nn2_acquisition_safety_port();
+#endif
     (void)led_safety.hold_off(led_safety.ctx);
 #endif
     esp_err_t charge_off = nn2_board_power_set_charge_enabled(false);
