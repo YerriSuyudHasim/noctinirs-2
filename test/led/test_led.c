@@ -556,8 +556,30 @@ static void boot_faults(void) {
         restore();
     }
 }
+static void deferred_prepare_activation_and_cancel(void) {
+    nn2_port_optical_config_t config = configuration(5);
+    CHECK(nn2_led_bringup_prepare(&config) == NN2_OK);
+    CHECK(!nn2_led_bringup_prepared());
+    owner_step();
+    CHECK(nn2_led_bringup_prepared() && !s_timer_started);
+    CHECK(state(NULL) == NN2_OPTICAL_STARTING);
+    for (unsigned i=0u; i<6u; ++i) CHECK(regs[2u+i] == 0u);
+    unsigned prepared_io = io_count;
+    CHECK(nn2_led_bringup_activate() == NN2_OK);
+    owner_step();
+    CHECK(state(NULL) == NN2_OPTICAL_RUNNING && s_timer_started);
+    CHECK(io_count == prepared_io); /* Activation must not configure I2C again. */
+    restore();
+    CHECK(nn2_led_bringup_prepare(&config) == NN2_OK); owner_step();
+    CHECK(nn2_led_bringup_activate() == NN2_OK);
+    (void)cancel(NULL); owner_step();
+    CHECK(reset_low && !s_timer_started && !nn2_led_bringup_prepared());
+    CHECK(nn2_led_bringup_activate() == NN2_ERR_INVALID_STATE);
+    restore();
+}
 int main(void) {
     CHECK(nn2_led_bringup_init() == ESP_OK && reset_low && !occupied);
+    deferred_prepare_activation_and_cancel();
     asynchronous_boundaries(); geometry_and_scan(); fault_paths(); boot_faults(); eflag_evidence(); classifier_tests(); boundary_tests(); protocol_interlocks(); host_duration_and_repeated_runs(); terminal_without_callback_cases();
     printf("%u LED checks, %u failures\n", checks, failures);
     return failures ? 1 : 0;

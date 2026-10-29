@@ -28,7 +28,12 @@ static nn2_status_t transfer(void *ctx, const uint8_t *tx, uint8_t *rx)
     d->transaction.length = NN2_ADS131_BYTES * 8u;
     d->transaction.rxlength = NN2_ADS131_BYTES * 8u;
     d->transaction.tx_buffer = d->tx; d->transaction.rx_buffer = d->rx;
+    nn2_ads131_trace_t *timing = d->logic.observation.state == NN2_ADC_RUNNING &&
+        !d->logic.runtime_failure.valid && d->logic.trace_head
+        ? &d->logic.trace[(d->logic.trace_head - 1u) % NN2_ADS131_TRACE_CAPACITY] : NULL;
+    if (timing) timing->driver_start_us = now_us(d);
     err = spi_device_polling_start(d->spi, &d->transaction, portMAX_DELAY);
+    if (timing) timing->driver_started_us = now_us(d);
     if (capture) d->startup_spi_error = err;
     if (err != ESP_OK) return mapped(d, err);
     err = spi_device_polling_end(d->spi, ticks(NN2_RTOS_ADS131_SPI_WAIT_MS));

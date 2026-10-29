@@ -5,10 +5,15 @@
 #include "nn2_led_bringup.h"
 #include "nn2_adapter_ads131.h"
 #include "nn2_board_v1.h"
+#include "nn2_rtos_config.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include <string.h>
+#ifndef CONFIG_NN2_ADC_V4_DARK_BASELINE
+#define CONFIG_NN2_ADC_V4_DARK_BASELINE 0
+#endif
 static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t task;
 static nn2_port_adc_stream_t adc;
@@ -63,6 +68,21 @@ static bool current(uint32_t epoch)
     portEXIT_CRITICAL(&lock);
     return ok;
 }
+static nn2_status_t prepare_led(const nn2_port_optical_config_t *cfg, uint32_t epoch)
+{
+    portENTER_CRITICAL(&lock);
+    nn2_status_t result = wanted && epoch == generation && !queue_fault
+        ? nn2_led_bringup_prepare(cfg) : NN2_ERR_INVALID_STATE;
+    portEXIT_CRITICAL(&lock);
+    if (result != NN2_OK) return result;
+    uint64_t end = (uint64_t)esp_timer_get_time() + 1000000u;
+    while (current(epoch) && (uint64_t)esp_timer_get_time() < end) {
+        if (nn2_led_bringup_prepared()) return NN2_OK;
+        if (led.state(led.ctx) == NN2_OPTICAL_FAULT) return NN2_ERR_IO;
+        vTaskDelay(1u); /* ADC is stopped throughout LED hardware preparation. */
+    }
+    return NN2_ERR_TIMEOUT;
+}
 static void worker(void *ctx)
 {
     (void)ctx;
@@ -70,6 +90,7 @@ static void worker(void *ctx)
     if (created!=NN2_OK) { portENTER_CRITICAL(&lock); stopped=false; portEXIT_CRITICAL(&lock); fail(); vTaskDelete(NULL); return; }
     bool live=false;
     uint32_t epoch=0;
+    uint64_t observed_us=0u;
     for (;;) {
         portENTER_CRITICAL(&lock);
         bool run=wanted, overflow=queue_fault;
@@ -77,8 +98,9 @@ static void worker(void *ctx)
         nn2_port_optical_config_t snapshot=config;
         portEXIT_CRITICAL(&lock);
         if (overflow) { fail(); run=false; }
-        if (live && (!run || next!=epoch || led.state(led.ctx)==NN2_OPTICAL_FAULT)) {
-            if (led.state(led.ctx)==NN2_OPTICAL_FAULT) fail();
+        if (live && (!run || next!=epoch ||
+            (!CONFIG_NN2_ADC_V4_DARK_BASELINE && led.state(led.ctx)==NN2_OPTICAL_FAULT))) {
+            if (!CONFIG_NN2_ADC_V4_DARK_BASELINE && led.state(led.ctx)==NN2_OPTICAL_FAULT) fail();
             nn2_status_t result=adc.stop(adc.ctx,100u);
             live=false;
             if (result!=NN2_OK) fail();
@@ -98,14 +120,17 @@ static void worker(void *ctx)
             xQueueReset(windows); xQueueReset(frames);
             nn2_core_acquisition_reset(&policy); dropped=0;
             portENTER_CRITICAL(&lock); stopped=false; portEXIT_CRITICAL(&lock);
-            nn2_status_t result=adc.init(adc.ctx,100u);
-            if (result==NN2_OK && current(epoch)) result=adc.start(adc.ctx,100u);
-            if (result==NN2_OK && current(epoch)) {
-                /* Nonblocking start under the permission interlock. Lock order:
-                 * acquisition -> LED; LED publishes windows outside its lock. */
+            nn2_status_t result = CONFIG_NN2_ADC_V4_DARK_BASELINE
+                ? led_off.hold_off(led_off.ctx) : prepare_led(&snapshot, epoch);
+            if (result==NN2_OK && current(epoch)) result=adc.init(adc.ctx,100u);
+            else result=NN2_ERR_INVALID_STATE;
+            if (result==NN2_OK && current(epoch)) result=adc.start(adc.ctx,500u);
+            if (result==NN2_OK && current(epoch) && !CONFIG_NN2_ADC_V4_DARK_BASELINE) {
+                /* Activation queues only the preconfigured timer start.
+                 * Cancellation uses the same acquisition -> LED lock order. */
                 portENTER_CRITICAL(&lock);
                 if (wanted && epoch==generation && !queue_fault)
-                    result=led.start(led.ctx,&snapshot);
+                    result=nn2_led_bringup_activate();
                 else result=NN2_ERR_INVALID_STATE;
                 portEXIT_CRITICAL(&lock);
             }
@@ -120,6 +145,12 @@ static void worker(void *ctx)
         if (live && current(epoch)) {
             nn2_core_adc_record_t raw;
             nn2_status_t result=adc.read(adc.ctx,&raw,20u);
+            uint64_t now = (uint64_t)esp_timer_get_time();
+            if (now - observed_us >= 100000u) { observe(); observed_us=now; }
+            if (CONFIG_NN2_ADC_V4_DARK_BASELINE) {
+                if (result!=NN2_OK && result!=NN2_ERR_EMPTY && result!=NN2_ERR_TIMEOUT) fail();
+                continue; /* Drain real ADC records, publish no optical measurements. */
+            }
             nn2_core_acq_window_t w;
             while (xQueueReceive(windows,&w,0)==pdTRUE)
                 if (nn2_core_acquisition_window(&policy,&w)!=NN2_OK) fail();
@@ -129,7 +160,6 @@ static void worker(void *ctx)
                     built.timestamp=nn2_core_get_u64(built.payload+12);
                     nn2_core_put_u32(built.payload+32,dropped);
                     if (xQueueSend(frames,&built,0)!=pdTRUE) ++dropped;
-                    observe();
                 } else if (result!=NN2_ERR_EMPTY) fail();
             } else if (result!=NN2_ERR_EMPTY && result!=NN2_ERR_TIMEOUT) fail();
         } else {
@@ -168,6 +198,7 @@ static uint8_t state(void *ctx)
     (void)ctx;
     portENTER_CRITICAL(&lock); uint8_t state=lifecycle; portEXIT_CRITICAL(&lock);
     if (state==NN2_OPTICAL_RUNNING) {
+        if (CONFIG_NN2_ADC_V4_DARK_BASELINE) return state;
         uint8_t s=led.state(led.ctx);
         return s==NN2_OPTICAL_RUNNING?state:s==NN2_OPTICAL_FAULT?s:NN2_OPTICAL_STARTING;
     }
@@ -201,7 +232,7 @@ esp_err_t nn2_acquisition_init(void)
         if (frames) { vQueueDelete(frames); frames=NULL; }
         return ESP_ERR_NO_MEM;
     }
-    if (xTaskCreatePinnedToCore(worker,"nn2_pair",6144,NULL,4,&task,1)!=pdPASS) {
+    if (xTaskCreatePinnedToCore(worker,"nn2_pair",6144,NULL,NN2_RTOS_ADS131_CONSUMER_PRIORITY,&task,1)!=pdPASS) {
         vQueueDelete(windows); vQueueDelete(frames); windows=frames=NULL;
         return ESP_ERR_NO_MEM;
     }
@@ -211,7 +242,9 @@ nn2_port_optical_t nn2_acquisition_port(void)
 {
     return (nn2_port_optical_t){.start=start,.state=state,.clear_fault=clear,
         .current_limit_ma=30,.read_frame=read_frame,.real_samples=true,
-        .policy_info=CONFIG_NN2_LED_SHORT_BENCH ?
+        .policy_info=CONFIG_NN2_ADC_V4_DARK_BASELINE ?
+        "NoctiNIRS2/0.1.0;wire=ADR0004/1;led=OFF;baseline=V4_DARK;frames=unsupported;adc=ADS131M04;fs_min=2;fs_max=10;limit_s=0" :
+        CONFIG_NN2_LED_SHORT_BENCH ?
         "NoctiNIRS2/0.1.0;wire=ADR0004/1;led=REAL_BRINGUP;short_policy=BENCH_WARN;frames=ACQ1;adc=ADS131M04;fs_min=2;fs_max=10;limit_s=0;k=10/8" :
         "NoctiNIRS2/0.1.0;wire=ADR0004/1;led=REAL_BRINGUP;short_policy=STRICT;frames=ACQ1;adc=ADS131M04;fs_min=2;fs_max=10;k=10/8"};
 }

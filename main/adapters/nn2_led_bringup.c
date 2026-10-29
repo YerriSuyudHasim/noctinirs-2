@@ -41,6 +41,7 @@ static nn2_port_optical_config_t s_config;
 static uint32_t s_generation, s_worker_generation, s_half_us, s_phase;
 static uint64_t s_alarm;
 static bool s_armed, s_busy, s_start_pending;
+static bool s_defer_activation, s_prepared, s_activate_pending;
 #ifndef CONFIG_NN2_LED_SHORT_BENCH
 #define CONFIG_NN2_LED_SHORT_BENCH 0
 #endif
@@ -54,6 +55,7 @@ enum { STOP_NONE, STOP_CANCEL, STOP_CAP_RESERVED, STOP_DEADLINE, STOP_TIMER, STO
 static void IRAM_ATTR stop_locked(uint8_t cause, esp_err_t error)
 {
     s_armed = false;
+    s_prepared = s_activate_pending = false;
     s_status.state = NN2_OPTICAL_FAULT;
     if (!s_status.first_stop) {
         s_status.first_stop = cause;
@@ -409,22 +411,31 @@ static esp_err_t prepare(const nn2_port_optical_config_t *config)
     portENTER_CRITICAL(&s_lock);
     s_status.pca = s_chip.diagnostics;
     s_status.last_complete = s_chip.last_complete;
-    if (!s_status.first_stop && s_chip.fault_saved)
-        s_status.first_fault = s_chip.first_fault;
+    if (!s_status.first_stop && s_chip.fault_saved) s_status.first_fault = s_chip.first_fault;
     bool valid = s_armed && s_generation == s_worker_generation;
     if (valid) {
         s_half_us = nn2_core_optical_half_slot_us(config->fs);
-        s_phase = 0;
-        s_busy = false;
-        s_status.state = NN2_OPTICAL_RUNNING;
+        s_phase = 0u; s_busy = false; s_prepared = true;
     }
+    portEXIT_CRITICAL(&s_lock);
+    return valid ? ESP_OK : ESP_ERR_INVALID_STATE;
+}
+/* Owner-only activation: no allocation, PCA initialization or bus recreation. */
+static esp_err_t activate_prepared(void)
+{
+    portENTER_CRITICAL(&s_lock);
+    bool valid = s_armed && s_prepared && s_generation == s_worker_generation;
+    esp_err_t err = ESP_ERR_INVALID_STATE;
     if (valid) {
-        #if CONFIG_NN2_OPTICAL_ACQUISITION
+#if CONFIG_NN2_OPTICAL_ACQUISITION
         s_clock_origin = (uint64_t)esp_timer_get_time();
 #endif
         err = gptimer_start(s_timer);
-        if (err == ESP_OK) s_timer_started = true;
-    } else err = ESP_ERR_INVALID_STATE;
+        if (err == ESP_OK) {
+            s_timer_started = true; s_prepared = false;
+            s_status.state = NN2_OPTICAL_RUNNING;
+        }
+    }
     portEXIT_CRITICAL(&s_lock);
     return err;
 }
@@ -498,6 +509,9 @@ static void owner_step(void)
             s_start_pending = false;
             s_worker_generation = s_generation;
         }
+        bool activate = s_activate_pending && s_armed && s_prepared;
+        if (activate) s_activate_pending = false;
+        bool deferred = s_defer_activation;
         bool armed = s_armed;
         bool work = s_busy && s_status.state == NN2_OPTICAL_RUNNING;
         uint32_t phase = s_phase;
@@ -505,6 +519,10 @@ static void owner_step(void)
         portEXIT_CRITICAL(&s_lock);
         if (start) {
             esp_err_t err = prepare(&config);
+            if (err == ESP_OK && !deferred) err = activate_prepared();
+            if (err != ESP_OK && still_armed()) fault(err);
+        } else if (activate) {
+            esp_err_t err = activate_prepared();
             if (err != ESP_OK && still_armed()) fault(err);
         } else if (armed && work) {
             phase_work(phase, alarm);
@@ -526,9 +544,8 @@ static void owner_task(void *ctx)
         owner_step();
     }
 }
-static nn2_status_t start(void *ctx, const nn2_port_optical_config_t *config)
+static nn2_status_t request_start(const nn2_port_optical_config_t *config, bool deferred)
 {
-    (void)ctx;
     if (!config) return NN2_ERR_INVALID_ARG;
 #if CONFIG_NN2_OPTICAL_ACQUISITION
     if (!nn2_core_acquisition_fs_valid(config->fs)) return NN2_ERR_INVALID_ARG;
@@ -547,12 +564,34 @@ static nn2_status_t start(void *ctx, const nn2_port_optical_config_t *config)
         s_config = *config;
         ++s_generation;
         s_armed = s_start_pending = true;
+        s_defer_activation = deferred; s_prepared = s_activate_pending = false;
         s_status = (nn2_led_bringup_status_t){.state = NN2_OPTICAL_STARTING, .attempt_used = true};
     }
     portEXIT_CRITICAL(&s_lock);
     if (!ok) return NN2_ERR_INVALID_STATE;
     xTaskNotifyGive(s_task);
     return NN2_OK;
+}
+static nn2_status_t start(void *ctx, const nn2_port_optical_config_t *config)
+{ (void)ctx; return request_start(config, false); }
+nn2_status_t nn2_led_bringup_prepare(const nn2_port_optical_config_t *config)
+{ return request_start(config, true); }
+bool nn2_led_bringup_prepared(void)
+{
+    portENTER_CRITICAL(&s_lock);
+    bool ready = s_armed && s_prepared && s_generation == s_worker_generation;
+    portEXIT_CRITICAL(&s_lock);
+    return ready;
+}
+nn2_status_t nn2_led_bringup_activate(void)
+{
+    portENTER_CRITICAL(&s_lock);
+    bool ready = s_armed && s_prepared && !s_activate_pending && s_defer_activation &&
+        s_generation == s_worker_generation;
+    if (ready) s_activate_pending = true;
+    portEXIT_CRITICAL(&s_lock);
+    if (ready) xTaskNotifyGive(s_task);
+    return ready ? NN2_OK : NN2_ERR_INVALID_STATE;
 }
 nn2_led_bringup_status_t nn2_led_bringup_status(void)
 {

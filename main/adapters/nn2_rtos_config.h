@@ -5,6 +5,7 @@
 /* Preserve V4's deadline-first ADC service relative to this project's LED22.
  * Literal V4 priority20 would still be below LED22 here. Bench WCET pending. */
 #define NN2_RTOS_ADS131_PRIORITY 23
+#define NN2_RTOS_ADS131_CONSUMER_PRIORITY 12
 #define NN2_RTOS_ADS131_STACK_BYTES 4096u
 #define NN2_RTOS_ADS131_SPI_WAIT_MS 20u
 /* LED owner stays priority22/core1; optional pairing is priority4/core1 and

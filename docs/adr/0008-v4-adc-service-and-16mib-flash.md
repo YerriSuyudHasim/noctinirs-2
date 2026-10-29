@@ -153,3 +153,129 @@ a manually changed string to its default: the custom table path is explicitly
 selected, then verified in generated config and the compiled table. The IDE's
 generated acquisition profile is backed up and updated to the same table.
 Its generic/root sdkconfig and unrelated profiles are not overwritten.
+
+## Local follow-up: boot 49 transport boundary and CPU budget
+
+The Owner reported boot 49 failing on the first settling frame with
+`serial_after_spi`, event serial 1 / observed serial 2, edge age 169 us and
+`spi_elapsed_us=103`. The earlier timer included `exchange()` CRC work, so it
+was not a measurement of transport alone. No CRC failure was reported.
+
+The local candidate captures completion time/serial before CRC, validates each
+runtime frame once, and consumes recorded events individually. Like historical
+V4, at most two pending events are admitted; dropped events, a third pending
+event, sequence discontinuity or an oldest-event age reaching 250 us fault the
+session. A single following event is queued work, not by itself a GAP. The
+legacy count-only seam retains its single-event/125 us checks. Owner draining
+is bounded by the event-ring capacity before revisiting commands/watchdog.
+This changes the earlier conservative single-event policy; it does not establish
+physical FIFO/event association or sustained throughput without board testing.
+Reference: TI SBAS890D section 8.5.1.9.1, and V4 process_event/process_runtime_events.
+
+The acquisition overlay and explicit branch profile now select a 240 MHz CPU.
+SPI remains 8 MHz, LED runtime I2C 800 kHz, power/configuration 100 kHz, optical
+scan minimum 2 Hz, and flash 16 MiB. The existing local generated acquisition
+sdkconfig is aligned to 240 MHz as well; it is not a versioned artifact.
+
+Host regression sources cover the boot 49 timing, ordered two-event reads,
+three-event rejection and event-ring wrap/pop behavior. Per the Owner's request,
+these sources have NOT been compiled or executed, and no firmware build,
+commit, push or hardware operation is performed for this local candidate.
+The same nn2ctl run command and serial/STATUS capture are used for the next test.
+
+## Local follow-up: align the ADC configuration with historical V4
+
+Boot 51 reported serial 1 to 3 within169/176-us-scale first-read timing, with
+no CRC failure and no LED start. This does not establish the physical origin
+of the extra events. Review found V4 explicitly selects pulse DRDY, whereas
+this candidate still selected level DRDY. The Owner requested alignment of the
+active technique/settings with V4, keeping work local and without builds.
+
+Aligned settings and sequences:
+
+- MODE=0111: 24-bit words, CCITT output CRC, input CRC disabled, push-pull pulse
+  DRDY; CLOCK=0F0A, GAIN1=0000, CFG=0600 and all four CHn_CFG=0000.
+- Reset LOW300us, post-reset wait20us, explicit NULL/FF24 reset acknowledgment,
+  UNLOCK, and individual register writes/readbacks. Active command exchanges
+  keep CRC and the extra explicit WREG acknowledgment check.
+- SYNC LOW5us with the GPIO interrupt disabled and the event ring cleared;
+  capture is enabled before unmasking. STOP/reset disables the pin interrupt.
+- Three checked/discarded startup frames, one expected F_RESYNC budget during
+  settling only, and no discarded frame delivered to the acquisition consumer.
+- Pulse readiness uses temporary interrupt capture instead of GPIO level polling.
+- SPI remains mode1, 8MHz, 144 bits, CS guards1/1, duty128, default clock source,
+  zero input delay, no DMA, one queue slot and sole-owner polling/bus retention.
+
+Intentional active differences: board GPIOs/SPI2 stay unchanged (V4 uses SPI3);
+ADC priority23 remains above LED22; active event/raw capacities and finite caller
+budgets remain. V4's startup rate qualification, factory calibration readback,
+100-ms waits and raw-ring overflow behavior are not imported in this patch.
+Runtime freshness/status and250us age guards remain stricter than V4. CPU240MHz,
+flash16MiB and the LED/power/scan limits remain unchanged. The reference snapshots
+are read-only. This is scoped adoption, not a claim of full V4 equivalence.
+
+Host test sources update the 36-exchange startup sequence, reset-ACK replay,
+MODE/CFG/channel settings, three-frame settling and bounded F_RESYNC handling.
+No test compilation/execution or firmware build is performed per Owner request.
+The next board run uses the existing nn2ctl command; collect startup transport
+configuration, any fault diagnostics and STATUS. No commit/push/flash is performed.
+
+## Local follow-up: boot53 evidence, rate gate and ISR placement
+
+Boot53 faulted at the retained service-gap guard: 261us since the prior transport
+completion, although the new event was only31us old. Serial60 was consecutive,
+with no recorded ring loss or CRC failure. This does not exclude a physically
+suppressed/missed DRDY pulse, particularly if the preceding read overlapped a
+conversion. The Owner authorized local diagnostic/qualification/ISR edits only,
+with no build, commit, push or hardware operation.
+
+The logic retains the last8 read attempts in a task-owned ring: edge/period,
+transport begin/end, CRC duration, pending depth, status and phase. Failure freezes
+that ring before cleanup and prints it afterward. Existing GAP/CRC/status guards
+remain; timing evidence is gathered without granting unverified continuity.
+
+Production START now discards3 settling frames and1024 qualification samples;
+none of these samples enters the application ring. Acceptance requires mean
+rate7600..8400 SPS, no observed interval over188us, and successful per-frame
+integrity/sequence/backlog checks. The interval rule is an additional conservative
+check beyond V4 mean-rate qualification; ISR timestamps remain software evidence.
+The owner allows400ms within the caller's deadline, and acquisition START changes
+from100ms to500ms. It refreshes the task watchdog while qualifying. LED starts
+only after success and the acquisition permission/epoch check. A STOP request
+arriving during synchronous START may wait for this bounded startup work before
+the caller can submit STOP. Successful qualification is logged after STOP only.
+
+The GPIO ISR uses IRAM_ATTR, scalar ring writes and internal DRAM device/lock
+state; it calls only IDF critical-section, IRAM timer and FreeRTOS ISR-notification
+paths. Checked official IDF6.1 timer source aliases esp_timer_get_time to the
+ESP_TIMER_IRAM_ATTR implementation; SPI Kconfig requires FREERTOS_IN_IRAM for
+SPI_MASTER_IN_IRAM. Both ADC overlays select those options and ESP_TIMER_IN_IRAM;
+the ESP translation unit rejects stale configurations. The active generated
+acquisition sdkconfig is aligned locally. Unknown preinstalled GPIO ISR services
+are rejected instead of silently accepting unknown interrupt-allocation flags.
+Linked call-graph/IRAM-map confirmation is NOT RUN and remains required after
+the user's build; compiler-generated callees must be inspected there as well.
+
+The bounded history and qualification state increase static ADC storage; the
+compiler ceiling is explicitly raised from12288 to13312 bytes (+1KiB ceiling),
+without changing stacks, raw/event capacities or using heap allocation. Actual
+linked size and additional IDF IRAM/RAM cost are NOT RUN. Hardware/RTOS review
+remains pending. CPU240MHz,16MiB flash and emitter/scan limits remain unchanged.
+
+Regression sources cover qualification success/slow-rate rejection, discarded
+samples, history wrap/freeze, the1027-read START handoff and startup timeout.
+Per Owner request they have not been compiled or executed. Validation performed
+here is source review, diff whitespace checking and historical-file integrity.
+The same nn2ctl run command is used; collect ads131_rate and all ads131_trace
+lines with fault diagnostics/STATUS, or the qualification summary after STOP.
+
+## Superseding local candidate: complete ADC path and staged integration
+
+The Owner requested a coherent V4-derived ADC path and isolated ADC testing,
+then staged LED integration. See [FEAT35_V4_BASELINE](../FEAT35_V4_BASELINE.md)
+for the current comparison, intentional adaptations, local defaults and test
+commands. That document supersedes this ADR's earlier candidate statements about
+250us recorded-event guards,raw overwrite behavior,ring capacities/13KiB memory
+ceiling,priority4 consumption and unchanged LED test procedures. No build or
+hardware result is claimed for the new candidate; the historical sources remain
+unchanged. The first local build selects ADC-only dark baseline explicitly.
