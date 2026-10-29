@@ -21,6 +21,9 @@ int main(void)
     for(unsigned phase=0;phase<40;++phase) {
         CHECK(captured[phase].phase==phase && captured[phase].frame==0);
         CHECK(captured[phase].commit_us<captured[phase].end_us);
+        /* Commit comes from the write-completion ISR, before frame-end reads. */
+        unsigned writes_before_commit=(phase & 1u) ? 2u : 1u;
+        CHECK(captured[phase].commit_us==1002500u+phase*2500u+writes_before_commit*io_cost);
         CHECK(captured[phase].origin_us==1002500u);
         CHECK(captured[phase].slot_start_us==1002500u+(phase/2u)*5000u);
         CHECK(captured[phase].end_us==1002500u+(phase+1u)*2500u-100u);

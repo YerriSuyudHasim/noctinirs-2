@@ -61,6 +61,7 @@ uint32_t ulTaskNotifyTake(BaseType_t clear, uint32_t wait) {
         clock_count = next_alarm;
         const gptimer_alarm_event_data_t event = {.count_value = clock_count, .alarm_value = next_alarm};
         (void)alarm_callback(s_timer, &event, NULL);
+        scheduler_step(); /* LED is blocked: model the priority-21 task. */
     }
     if (!suppress_completion && s_pending) finish_transfer();
     fake_ticks += wait;
@@ -70,8 +71,10 @@ uint32_t uxTaskGetStackHighWaterMark(TaskHandle_t task) { (void)task; return 409
 BaseType_t xTaskCreatePinnedToCore(void (*entry)(void *), const char *name,
     uint32_t stack, void *ctx, unsigned priority, TaskHandle_t *task, int core) {
     (void)entry; (void)ctx;
-    CHECK(!strcmp(name, "nn2_led") && stack == 6144 && priority == 22 && core == 1);
-    *task = &s_task; return pdPASS;
+    CHECK(stack == 6144 && core == 1);
+    CHECK((!strcmp(name,"nn2_led") && priority==22) ||
+          (!strcmp(name,"nn2_sched") && priority==21));
+    *task=task; return pdPASS;
 }
 esp_err_t i2c_new_master_bus(const i2c_master_bus_config_t *c, i2c_master_bus_handle_t *out) {
     CHECK(c->i2c_port == 0 && c->sda_io_num == 15 && c->scl_io_num == 16 && c->trans_queue_depth <= 1);
@@ -161,7 +164,8 @@ static void alarm_tick(bool consume) {
     clock_count = next_alarm;
     gptimer_alarm_event_data_t event = {.count_value = clock_count, .alarm_value = next_alarm};
     (void)alarm_callback(s_timer, &event, NULL);
-    if (consume) owner_step();
+    scheduler_step();
+    if (consume) { owner_step(); scheduler_step(); }
 }
 static void geometry_and_scan(void) {
     static const uint8_t map[20] = {0,1,2,3,4,5,6,7,8,9,14,15,16,17,18,19,20,21,22,23};
@@ -556,8 +560,61 @@ static void boot_faults(void) {
         restore();
     }
 }
+static void deferred_prepare_activation_and_cancel(void) {
+    nn2_port_optical_config_t config = configuration(5);
+    CHECK(nn2_led_bringup_prepare(&config) == NN2_OK);
+    CHECK(!nn2_led_bringup_prepared());
+    owner_step();
+    CHECK(nn2_led_bringup_prepared() && !s_timer_started);
+    CHECK(state(NULL) == NN2_OPTICAL_STARTING);
+    for (unsigned i=0u; i<6u; ++i) CHECK(regs[2u+i] == 0u);
+    unsigned prepared_io = io_count;
+    CHECK(nn2_led_bringup_activate() == NN2_OK);
+    owner_step();
+    CHECK(state(NULL) == NN2_OPTICAL_RUNNING && s_timer_started);
+    CHECK(io_count == prepared_io); /* Activation must not configure I2C again. */
+    restore();
+    CHECK(nn2_led_bringup_prepare(&config) == NN2_OK); owner_step();
+    CHECK(nn2_led_bringup_activate() == NN2_OK);
+    (void)cancel(NULL); owner_step();
+    CHECK(reset_low && !s_timer_started && !nn2_led_bringup_prepared());
+    CHECK(nn2_led_bringup_activate() == NN2_ERR_INVALID_STATE);
+    restore();
+}
+/* Explicit scheduling boundaries: ISR, scheduler, I2C owner, scheduler.
+ * No host timing claim; exercise production identity and cancel paths. */
+static void v4_scheduler_handoff(void) {
+    begin(5);
+    unsigned before=io_count;
+    clock_count=next_alarm;
+    gptimer_alarm_event_data_t e={.count_value=clock_count,.alarm_value=next_alarm};
+    (void)alarm_callback(s_timer,&e,NULL);
+    CHECK(io_count==before && !s_busy && s_deadline_head-s_deadline_tail==1u);
+    scheduler_step();
+    CHECK(s_busy && s_edge_pending && io_count==before);
+    owner_step();
+    CHECK(io_count==before+1u && s_status.edges==0u);
+    CHECK(s_completion_head-s_completion_tail==1u && !s_edge_pending);
+    scheduler_step();
+    CHECK(s_status.edges==1u && !s_busy);
+    restore();
+    /* STOP overtakes a queued completion: consume it, never commit the edge. */
+    begin(5); alarm_tick(false); owner_step();
+    CHECK(s_completion_head!=s_completion_tail);
+    (void)cancel(NULL); scheduler_step(); owner_step();
+    CHECK(reset_low && s_status.edges==0u && s_status.bus_released);
+    restore();
+    /* A mismatched command identity may not publish a completion. */
+    begin(5); alarm_tick(false); owner_step();
+    ++s_completions[s_completion_tail % NN2_SCHED_COMPLETIONS].edge.id;
+    scheduler_step();
+    CHECK(reset_low && state(NULL)==NN2_OPTICAL_FAULT && s_status.edges==0u);
+    restore();
+}
 int main(void) {
     CHECK(nn2_led_bringup_init() == ESP_OK && reset_low && !occupied);
+    v4_scheduler_handoff();
+    deferred_prepare_activation_and_cancel();
     asynchronous_boundaries(); geometry_and_scan(); fault_paths(); boot_faults(); eflag_evidence(); classifier_tests(); boundary_tests(); protocol_interlocks(); host_duration_and_repeated_runs(); terminal_without_callback_cases();
     printf("%u LED checks, %u failures\n", checks, failures);
     return failures ? 1 : 0;

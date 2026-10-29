@@ -17,6 +17,12 @@ typedef struct {
     nn2_board_pca_diagnostics_t pca, last_complete, first_fault;
 } nn2_led_bringup_status_t;
 esp_err_t nn2_led_bringup_init(void);
+/* Adapter-internal two-phase startup; prepare verifies OFF and leaves timer stopped. */
+nn2_status_t nn2_led_bringup_prepare(const nn2_port_optical_config_t *);
+bool nn2_led_bringup_prepared(void);
+nn2_status_t nn2_led_bringup_activate(void);
+/* Composition calls only after successful ADC STOP acknowledgment. */
+void nn2_led_bringup_report_timing(void);
 nn2_port_optical_t nn2_led_bringup_port(void);
 nn2_port_safety_t nn2_led_bringup_safety_port(void);
 nn2_led_bringup_status_t nn2_led_bringup_status(void);

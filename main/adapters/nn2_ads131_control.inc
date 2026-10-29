@@ -22,18 +22,26 @@ static bool dispatch(device_t *d, bool *discard_events)
         }
         reply.result = nn2_ads131_start(&d->logic);
         if (reply.result == NN2_OK && d->logic.io.take_events) {
-            /* V4 startup handoff: service/discard the two fast-start frames
-             * in the ADC owner before acknowledging START to the LED caller. */
-            uint64_t end = now_us(d) + 20000u;
+            /* V4-derived qualification: discard three post-SYNC frames,
+             * then validate 1024 reads before acknowledging START to LED.
+             * No qualification record enters the application sample ring. */
+            nn2_ads131_rate_begin(&d->logic);
+            uint64_t end = now_us(d) + 400000u;
             if (end > req.deadline) end = req.deadline;
-            while (d->logic.settling && d->logic.observation.state == NN2_ADC_RUNNING) {
+            while ((d->logic.settling || d->logic.rate.active) &&
+                   d->logic.observation.state == NN2_ADC_RUNNING) {
                 if (now_us(d) >= end) {
                     d->logic.observation.drdy_timeouts++;
                     d->logic.observation.loss_unknown++;
                     reply.result = nn2_ads131_fail(&d->logic, NN2_ADC_FAULT_DRDY);
                     break;
                 }
+                if (d->watchdog && esp_task_wdt_reset() != ESP_OK) {
+                    reply.result = nn2_ads131_fail(&d->logic, NN2_ADC_FAULT_WATCHDOG);
+                    break;
+                }
                 (void)xTaskNotifyWait(0u, UINT32_MAX, &discarded, 1u);
+                d->logic.owner_resume_us = now_us(d);
                 if (now_us(d) >= end) continue;
                 if (nn2_ads131_service(&d->logic, 0u) != NN2_OK) {
                     reply.result = NN2_ERR_IO; break;
@@ -67,7 +75,13 @@ static void owner_iteration(device_t *d, uint32_t got)
         if (d->logic.io.take_events) {
             /* Production: the ring is the record of work. Notification bits
              * only wake the owner and must never be treated as sample counts. */
-            (void)nn2_ads131_service(&d->logic, 0u);
+            /* Drain bounded work without sleeping between queued events.
+             * Revisit commands/watchdog after at most one event-ring capacity. */
+            for (unsigned i = 0u; i < NN2_ADS131_EVENT_CAPACITY; ++i) {
+                uint32_t before = d->logic.observation.sequence;
+                if (nn2_ads131_service(&d->logic, 0u) != NN2_OK ||
+                    d->logic.observation.sequence == before) break;
+            }
         } else {
             /* Legacy count-only host seam, without hardware edge timestamps. */
             uint32_t pending = 0u;
@@ -115,6 +129,20 @@ static nn2_status_t start_port(void *ctx, uint32_t ms) { return call(ctx, CMD_ST
 static nn2_status_t stop_port(void *ctx, uint32_t ms) { return call(ctx, CMD_STOP, ms, NULL); }
 static nn2_status_t read_port(void *ctx, nn2_core_adc_record_t *out, uint32_t ms)
 {
+#ifdef ESP_PLATFORM
+    device_t *d = ctx;
+    if (!out || !d || !ms || ms > 1000u ||
+        xTaskGetCurrentTaskHandle() != d->caller) return NN2_ERR_INVALID_ARG;
+    if (atomic_load(&d->stream_faulted)) return NN2_ERR_IO;
+    uint64_t end = now_us(d) + (uint64_t)ms * 1000u;
+    nn2_core_adc_record_t item;
+    if (xQueueReceive(d->raw, &item, wait_ticks((uint64_t)ms * 1000u)) != pdTRUE)
+        return atomic_load(&d->stream_faulted) ? NN2_ERR_IO : NN2_ERR_EMPTY;
+    atomic_fetch_add(&d->consumed, 1u);
+    if (now_us(d) >= end) { atomic_fetch_add(&d->read_late, 1u); return NN2_ERR_TIMEOUT; }
+    *out = item;
+    return NN2_OK;
+#else
     reply_t reply;
     device_t *d = ctx;
     if (!out || !d || ms == 0u || ms > 1000u) return NN2_ERR_INVALID_ARG;
@@ -131,6 +159,7 @@ static nn2_status_t read_port(void *ctx, nn2_core_adc_record_t *out, uint32_t ms
         if (status != NN2_ERR_EMPTY) return status;
         vTaskDelay(1u); /* Consumer blocks; producer continues on its own core. */
     }
+#endif
 }
 static nn2_status_t observe_port(void *ctx, nn2_core_adc_observation_t *out, uint32_t ms)
 {
@@ -141,6 +170,10 @@ static nn2_status_t observe_port(void *ctx, nn2_core_adc_observation_t *out, uin
     if (s == NN2_OK) {
         if (now_us(d) >= end) return NN2_ERR_TIMEOUT;
         *out = reply.observation;
+#ifdef ESP_PLATFORM
+        out->consumed = atomic_load(&d->consumed);
+        out->occupancy = (uint32_t)uxQueueMessagesWaiting(d->raw);
+#endif
     }
     return s;
 }

@@ -22,6 +22,9 @@ static uint64_t s_clock_origin;
 #include <stdio.h>
 #include <inttypes.h>
 #include <string.h>
+#if defined(ESP_PLATFORM) && CONFIG_NN2_OPTICAL_ACQUISITION && NN2_RTOS_LED_TIMING_DIAGNOSTICS
+#include "esp_log.h"
+#endif
 #ifndef CONFIG_NN2_LED_RUNTIME_I2C_HZ
 #define CONFIG_NN2_LED_RUNTIME_I2C_HZ 400000
 #endif
@@ -41,6 +44,90 @@ static nn2_port_optical_config_t s_config;
 static uint32_t s_generation, s_worker_generation, s_half_us, s_phase;
 static uint64_t s_alarm;
 static bool s_armed, s_busy, s_start_pending;
+static bool s_defer_activation, s_prepared, s_activate_pending;
+/* Bounded correlation recorder. Critical records are written under s_lock;
+ * printing is explicitly requested by composition only after ADC STOP ACK. */
+#if defined(ESP_PLATFORM) && CONFIG_NN2_OPTICAL_ACQUISITION && NN2_RTOS_LED_TIMING_DIAGNOSTICS
+typedef struct {
+    uint64_t begin_us, end_us;
+    uint32_t frame;
+    uint16_t line;
+    uint8_t kind, phase; /* 1=interlock hold, 2=PCA phase operation. */
+} led_timing_record_t;
+static struct {
+    led_timing_record_t records[64], longest;
+    uint64_t hold_begin_us;
+    uint32_t head, generation;
+    uint16_t hold_line, depth;
+    bool frozen, reported;
+} s_timing;
+_Static_assert(sizeof(s_timing) <= 2048u, "LED timing recorder exceeds 2 KiB");
+static void IRAM_ATTR timing_append_locked(uint8_t kind, uint64_t begin, uint64_t end, uint16_t line)
+{
+    if (s_timing.frozen) return;
+    led_timing_record_t *r=&s_timing.records[s_timing.head++ % 64u];
+    /* Scalar stores: no out-of-line structure-copy helper in the ISR. */
+    r->begin_us=begin; r->end_us=end; r->line=line;
+    r->kind=kind; r->phase=(uint8_t)s_phase; r->frame=s_status.frames;
+    if (kind==1u && end-begin > s_timing.longest.end_us-s_timing.longest.begin_us) {
+        s_timing.longest.begin_us=begin; s_timing.longest.end_us=end;
+        s_timing.longest.line=line; s_timing.longest.kind=kind;
+        s_timing.longest.phase=(uint8_t)s_phase; s_timing.longest.frame=s_status.frames;
+    }
+}
+static void IRAM_ATTR timing_begin_locked(uint16_t line)
+{
+    if (s_timing.depth++ == 0u) {
+        s_timing.hold_begin_us=(uint64_t)esp_timer_get_time(); s_timing.hold_line=line;
+    }
+}
+static void IRAM_ATTR timing_end_locked(void)
+{
+    if (--s_timing.depth == 0u && !s_timing.frozen) {
+        uint64_t end=(uint64_t)esp_timer_get_time();
+        if (end-s_timing.hold_begin_us >= 8u)
+            timing_append_locked(1u,s_timing.hold_begin_us,end,s_timing.hold_line);
+    }
+}
+static void IRAM_ATTR timing_freeze_locked(void)
+{
+    /* Include the in-progress stop/fault interlock as a partial record. */
+    if (!s_timing.frozen && s_timing.depth)
+        timing_append_locked(1u,s_timing.hold_begin_us,(uint64_t)esp_timer_get_time(),s_timing.hold_line);
+    s_timing.frozen=true;
+}
+static void timing_reset_locked(void)
+{
+    s_timing.head=0u; s_timing.generation=s_generation;
+    s_timing.longest.begin_us=s_timing.longest.end_us=0u;
+    s_timing.longest.line=0u; s_timing.longest.phase=0u; s_timing.longest.frame=0u;
+    s_timing.frozen=s_timing.reported=false;
+}
+static void timing_activity(uint64_t begin, uint16_t line)
+{
+    uint64_t end=(uint64_t)esp_timer_get_time();
+    portENTER_CRITICAL(&s_lock);
+    timing_append_locked(2u,begin,end,line);
+    portEXIT_CRITICAL(&s_lock);
+}
+#define LED_ENTER() do { portENTER_CRITICAL(&s_lock); timing_begin_locked(__LINE__); } while (0)
+#define LED_EXIT() do { timing_end_locked(); portEXIT_CRITICAL(&s_lock); } while (0)
+#define LED_ENTER_ISR() do { portENTER_CRITICAL_ISR(&s_lock); timing_begin_locked(__LINE__); } while (0)
+#define LED_EXIT_ISR() do { timing_end_locked(); portEXIT_CRITICAL_ISR(&s_lock); } while (0)
+#define LED_TIMING_FREEZE() timing_freeze_locked()
+#define LED_TIMING_RESET() timing_reset_locked()
+#define LED_TIMING_NOW() ((uint64_t)esp_timer_get_time())
+#define LED_TIMING_ACTIVITY(begin) timing_activity(begin,__LINE__)
+#else
+#define LED_ENTER() portENTER_CRITICAL(&s_lock)
+#define LED_EXIT() portEXIT_CRITICAL(&s_lock)
+#define LED_ENTER_ISR() portENTER_CRITICAL_ISR(&s_lock)
+#define LED_EXIT_ISR() portEXIT_CRITICAL_ISR(&s_lock)
+#define LED_TIMING_FREEZE() ((void)0)
+#define LED_TIMING_RESET() ((void)0)
+#define LED_TIMING_NOW() 0ULL
+#define LED_TIMING_ACTIVITY(begin) ((void)(begin))
+#endif
 #ifndef CONFIG_NN2_LED_SHORT_BENCH
 #define CONFIG_NN2_LED_SHORT_BENCH 0
 #endif
@@ -53,7 +140,9 @@ enum { STOP_NONE, STOP_CANCEL, STOP_CAP_RESERVED, STOP_DEADLINE, STOP_TIMER, STO
 /* Called under the same task/ISR interlock as cancellation and reset release. */
 static void IRAM_ATTR stop_locked(uint8_t cause, esp_err_t error)
 {
+    LED_TIMING_FREEZE();
     s_armed = false;
+    s_prepared = s_activate_pending = false;
     s_status.state = NN2_OPTICAL_FAULT;
     if (!s_status.first_stop) {
         s_status.first_stop = cause;
@@ -77,13 +166,17 @@ static bool s_async, s_i2c_callbacks, s_pending, s_done;
 static uint32_t s_io_generation;
 static esp_err_t s_io_result;
 static uint8_t s_tx[32], s_rx[24];
+static uint64_t s_io_complete_us, s_edge_commit_us;
 
 static bool IRAM_ATTR transfer_done(i2c_master_dev_handle_t dev,
     const i2c_master_event_data_t *event, void *ctx)
 {
     (void)dev; (void)ctx;
-    portENTER_CRITICAL_ISR(&s_lock);
+    LED_ENTER_ISR();
     if (s_pending) {
+#if CONFIG_NN2_OPTICAL_ACQUISITION
+        s_io_complete_us = (uint64_t)esp_timer_get_time();
+#endif
         s_io_result = event->event == I2C_EVENT_DONE ? ESP_OK :
             event->event == I2C_EVENT_TIMEOUT ? ESP_ERR_TIMEOUT : ESP_FAIL;
         s_status.i2c_event = (uint8_t)event->event;
@@ -94,7 +187,7 @@ static bool IRAM_ATTR transfer_done(i2c_master_dev_handle_t dev,
         if (s_io_generation != s_generation || !s_armed) ++s_status.i2c_stale;
         else if (s_io_result != ESP_OK) stop_locked(STOP_IO, s_io_result);
     }
-    portEXIT_CRITICAL_ISR(&s_lock);
+    LED_EXIT_ISR();
     BaseType_t wake = pdFALSE;
     vTaskNotifyGiveFromISR(s_task, &wake);
     /* IDF 6.1 i2c_master.c discards the callback's returned wake flag.
@@ -107,18 +200,18 @@ static esp_err_t await_transfer(esp_err_t submitted)
 {
     if (submitted != ESP_OK) {
         /* The API did not accept the transaction; no callback is owed. */
-        portENTER_CRITICAL(&s_lock);
+        LED_ENTER();
         s_pending = false;
-        portEXIT_CRITICAL(&s_lock);
+        LED_EXIT();
         return submitted;
     }
     TickType_t began = xTaskGetTickCount();
     for (;;) {
-        portENTER_CRITICAL(&s_lock);
+        LED_ENTER();
         bool done = s_done;
         bool valid = s_armed && s_io_generation == s_generation;
         esp_err_t result = s_io_result;
-        portEXIT_CRITICAL(&s_lock);
+        LED_EXIT();
         if (!valid) return ESP_ERR_INVALID_STATE;
         if (done) return result;
         TickType_t elapsed = xTaskGetTickCount() - began;
@@ -130,7 +223,7 @@ static esp_err_t await_transfer(esp_err_t submitted)
 
 static bool begin_transfer(void)
 {
-    portENTER_CRITICAL(&s_lock);
+    LED_ENTER();
     bool valid = s_armed && s_generation == s_worker_generation && !s_pending;
     if (valid) {
         s_pending = true;
@@ -139,84 +232,84 @@ static bool begin_transfer(void)
         s_io_generation = s_generation;
         ++s_status.i2c_submitted;
     }
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
     return valid;
 }
 
 static nn2_status_t cancel(void *ctx)
 {
     (void)ctx;
-    portENTER_CRITICAL(&s_lock);
+    LED_ENTER();
     if (s_armed && !s_status.first_stop) s_status.first_stop = STOP_CANCEL;
+    LED_TIMING_FREEZE();
     s_armed = false;
     s_start_pending = false;
     ++s_generation;
     if (s_status.state != NN2_OPTICAL_IDLE && s_status.state != NN2_OPTICAL_FAULT)
         s_status.state = NN2_OPTICAL_STOPPING;
     esp_err_t err = nn2_board_hold_emitters_off();
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
     if (s_task) xTaskNotifyGive(s_task);
     return err == ESP_OK ? NN2_OK : NN2_ERR_IO;
 }
 
-/* ISR can only cancel, never release reset. All referenced data is internal RAM.
- * The GPIO function and timer control function must be linked into IRAM. */
+#include "nn2_led_scheduler.inc"
+
+/* Timer ISR records immutable absolute deadlines; scheduler task dispatches.
+ * Scalar event writes keep the ISR independent of memcpy implementation. */
 static bool IRAM_ATTR alarm_callback(gptimer_handle_t timer,
     const gptimer_alarm_event_data_t *event, void *ctx)
 {
     (void)ctx;
-    bool notify = false;
-    uint64_t now = 0;
-    esp_err_t count_result = gptimer_get_raw_count(timer, &now);
-    portENTER_CRITICAL_ISR(&s_lock);
-    if (s_armed && s_status.state == NN2_OPTICAL_RUNNING) {
-        notify = true;
-        if (count_result == ESP_OK && now >= event->alarm_value) {
-            uint64_t late = now - event->alarm_value;
-            uint32_t dispatch = late > UINT32_MAX ? UINT32_MAX : (uint32_t)late;
-            if (dispatch > s_status.dispatch_max_us) s_status.dispatch_max_us = dispatch;
-        }
-        if (count_result != ESP_OK) stop_locked(STOP_TIMER, count_result);
-        else if (s_busy || now >= event->alarm_value + s_half_us) {
+    bool notify=false;
+    uint64_t now=0;
+    esp_err_t count_result=gptimer_get_raw_count(timer,&now);
+    LED_ENTER_ISR();
+    if (s_armed && s_status.state==NN2_OPTICAL_RUNNING) {
+        notify=true;
+        if (count_result!=ESP_OK) stop_locked(STOP_TIMER,count_result);
+        else if (now>=event->alarm_value+s_half_us ||
+                 s_deadline_head-s_deadline_tail==NN2_SCHED_DEADLINES) {
             ++s_status.deadline_misses;
-            stop_locked(STOP_DEADLINE, ESP_ERR_TIMEOUT);
+            stop_locked(STOP_DEADLINE,ESP_ERR_TIMEOUT);
         } else {
-            s_busy = true;
-            s_alarm = event->alarm_value;
-            uint64_t next = event->alarm_value + s_half_us;
-            gptimer_alarm_config_t alarm = {.alarm_count = next};
-            /* Cancellation cannot interleave between permission and rearm. */
-            if (gptimer_set_alarm_action(timer, &alarm) != ESP_OK)
-                stop_locked(STOP_TIMER, ESP_FAIL);
+            led_deadline_t *edge=&s_deadlines[s_deadline_head++ % NN2_SCHED_DEADLINES];
+            edge->alarm=event->alarm_value; edge->generation=s_generation;
+            edge->id=++s_next_command; edge->phase=s_next_phase; edge->frame=s_next_frame;
+            s_next_phase=(s_next_phase+1u)%40u;
+            if (!s_next_phase) ++s_next_frame;
+            gptimer_alarm_config_t alarm={.alarm_count=event->alarm_value+s_half_us};
+            /* Permission + rearm use the STOP interlock; never rebase on now. */
+            if (gptimer_set_alarm_action(timer,&alarm)!=ESP_OK)
+                stop_locked(STOP_TIMER,ESP_FAIL);
         }
     }
-    portEXIT_CRITICAL_ISR(&s_lock);
-    BaseType_t wake = pdFALSE;
-    if (notify) vTaskNotifyGiveFromISR(s_task, &wake);
-    return wake == pdTRUE;
+    LED_EXIT_ISR();
+    BaseType_t wake=pdFALSE;
+    if (notify) vTaskNotifyGiveFromISR(s_scheduler_task,&wake);
+    return wake==pdTRUE;
 }
-
 static bool still_armed(void)
 {
-    portENTER_CRITICAL(&s_lock);
+    LED_ENTER();
     bool ok = s_armed && s_generation == s_worker_generation;
     if (ok && CONFIG_NN2_LED_SHORT_BENCH && s_timer_started) {
         uint64_t now = 0;
         if (gptimer_get_raw_count(s_timer, &now) != ESP_OK) stop_locked(STOP_TIMER, ESP_FAIL);
         ok = s_armed;
     }
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
     return ok;
 }
 static nn2_status_t chip_reset(void *ctx, bool asserted)
 {
     (void)ctx;
-    portENTER_CRITICAL(&s_lock);
+    LED_ENTER();
     esp_err_t result = ESP_ERR_INVALID_STATE;
     if (asserted) result = nn2_board_hold_emitters_off();
     else if (s_armed && s_generation == s_worker_generation)
         result = nn2_board_release_emitters_reset();
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
     return result == ESP_OK ? NN2_OK : NN2_ERR_IO;
 }
 static void chip_delay(void *ctx, uint32_t us)
@@ -235,6 +328,7 @@ static nn2_status_t chip_write(void *ctx, const uint8_t *data, size_t n)
         err = await_transfer(i2c_master_transmit(s_pca, s_tx, n, NN2_RTOS_LED_I2C_TIMEOUT_MS));
     } else err = i2c_master_transmit(s_pca, data, n, NN2_RTOS_LED_I2C_TIMEOUT_MS);
     if (err != ESP_OK) s_hw_error = err;
+    else if (s_async) s_edge_commit_us=s_io_complete_us;
     return err == ESP_OK ? NN2_OK : NN2_ERR_IO;
 }
 static nn2_status_t chip_read(void *ctx, uint8_t reg, uint8_t *data, size_t n)
@@ -252,18 +346,18 @@ static nn2_status_t chip_read(void *ctx, uint8_t reg, uint8_t *data, size_t n)
         NN2_RTOS_LED_I2C_TIMEOUT_MS);
     if (err != ESP_OK) s_hw_error = err;
     if (err == ESP_OK && ((reg == 1 && n == 1) || (reg == 0x80 && n == 2))) {
-        portENTER_CRITICAL(&s_lock);
+        LED_ENTER();
         s_status.pca_mode2 = data[n - 1];
-        portEXIT_CRITICAL(&s_lock);
+        LED_EXIT();
     }
     return err == ESP_OK ? NN2_OK : NN2_ERR_IO;
 }
 
 static void fault(esp_err_t error)
 {
-    portENTER_CRITICAL(&s_lock);
+    LED_ENTER();
     stop_locked(STOP_IO, error);
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
 }
 static bool close_bus(void)
 {
@@ -271,14 +365,14 @@ static bool close_bus(void)
      * handles, callback context and buffers alive, and denies the next START. */
     if (s_async && s_bus) {
         esp_err_t drained = i2c_master_bus_wait_all_done(s_bus, NN2_RTOS_LED_I2C_TIMEOUT_MS);
-        portENTER_CRITICAL(&s_lock);
+        LED_ENTER();
         bool pending = s_pending;
         /* Pinned IDF6.1 NACK/TIMEOUT can finish internally without calling
          * on_trans_done. wait_all_done does not prove the direct transaction's
          * lifetime ended: it only drains queued records. Retain everything.
          * No callback + no public quiescence proof => MCU reboot required. */
         if (pending) s_status.reboot_required = true;
-        portEXIT_CRITICAL(&s_lock);
+        LED_EXIT();
         if (drained != ESP_OK || pending) return false;
     }
     if (s_i2c_callbacks) {
@@ -295,11 +389,11 @@ static bool close_bus(void)
         s_bus = NULL;
     }
     s_async = false;
-    portENTER_CRITICAL(&s_lock);
+    LED_ENTER();
     /* A late real completion followed by successful drain/detach is proof.
      * Otherwise this flag cannot clear via CLEAR_FAULT or another START. */
     s_status.reboot_required = false;
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
     return true;
 }
 
@@ -319,17 +413,18 @@ static void cleanup(void)
         else ok = false;
     }
     if (!close_bus()) ok = false;
-    portENTER_CRITICAL(&s_lock);
-    s_busy = false;
-    s_status.bus_released = ok && !s_bus && !s_pca && !s_timer_enabled && !s_timer_started &&
+    LED_ENTER();
+    s_busy = s_edge_pending = false;
+    bool scheduler_quiet=!s_scheduler_processing;
+    s_status.bus_released = ok && scheduler_quiet && !s_bus && !s_pca && !s_timer_enabled && !s_timer_started &&
         (!s_timer || s_timer_callbacks);
-    if (!s_status.bus_released) {
+    if (!s_status.bus_released && (!ok || scheduler_quiet)) {
         s_status.state = NN2_OPTICAL_FAULT;
         if (!s_status.first_stop) { s_status.first_stop = STOP_CLEANUP; s_status.error = ESP_FAIL; }
-    } else if (s_status.state != NN2_OPTICAL_FAULT) {
+    } else if (s_status.bus_released && s_status.state != NN2_OPTICAL_FAULT) {
         s_status.state = NN2_OPTICAL_IDLE;
     }
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
 }
 
 static esp_err_t open_bus_mode(bool asynchronous)
@@ -406,117 +501,161 @@ static esp_err_t prepare(const nn2_port_optical_config_t *config)
     };
     err = gptimer_set_alarm_action(s_timer, &alarm);
     if (err != ESP_OK) return err;
-    portENTER_CRITICAL(&s_lock);
+    /* Before publishing prepared=true: composition has not started the ADC. */
+    uint32_t watermark=(uint32_t)uxTaskGetStackHighWaterMark(NULL);
+    LED_ENTER();
+    s_status.stack_free=watermark;
     s_status.pca = s_chip.diagnostics;
     s_status.last_complete = s_chip.last_complete;
-    if (!s_status.first_stop && s_chip.fault_saved)
-        s_status.first_fault = s_chip.first_fault;
+    if (!s_status.first_stop && s_chip.fault_saved) s_status.first_fault = s_chip.first_fault;
     bool valid = s_armed && s_generation == s_worker_generation;
     if (valid) {
         s_half_us = nn2_core_optical_half_slot_us(config->fs);
-        s_phase = 0;
-        s_busy = false;
-        s_status.state = NN2_OPTICAL_RUNNING;
+        scheduler_reset_locked();
+        s_phase = 0u; s_busy = false; s_prepared = true;
     }
+    LED_EXIT();
+    return valid ? ESP_OK : ESP_ERR_INVALID_STATE;
+}
+/* Owner-only activation: no allocation, PCA initialization or bus recreation. */
+static esp_err_t activate_prepared(void)
+{
+    LED_ENTER();
+    bool valid = s_armed && s_prepared && s_generation == s_worker_generation;
+    esp_err_t err = ESP_ERR_INVALID_STATE;
     if (valid) {
-        #if CONFIG_NN2_OPTICAL_ACQUISITION
+#if CONFIG_NN2_OPTICAL_ACQUISITION
         s_clock_origin = (uint64_t)esp_timer_get_time();
 #endif
         err = gptimer_start(s_timer);
-        if (err == ESP_OK) s_timer_started = true;
-    } else err = ESP_ERR_INVALID_STATE;
-    portEXIT_CRITICAL(&s_lock);
+        if (err == ESP_OK) {
+            s_timer_started = true; s_prepared = false;
+            s_status.state = NN2_OPTICAL_RUNNING;
+        }
+    }
+    LED_EXIT();
     return err;
 }
 
+/* Priority-22 I2C owner: persistent payloads are prepared before ADC START.
+ * Each driver call blocks on ISR completion; no frame/window work here. */
 static void phase_work(uint32_t phase, uint64_t alarm)
 {
-    uint64_t before = 0, after = 0;
-    if (!still_armed()) return;
-    if (gptimer_get_raw_count(s_timer, &before) != ESP_OK) { fault(ESP_FAIL); return; }
-    portENTER_CRITICAL(&s_lock);
-    uint32_t dispatch = before > alarm ? (uint32_t)(before - alarm) : 0;
-    if (dispatch > s_status.dispatch_max_us) s_status.dispatch_max_us = dispatch;
-    if (before >= alarm + s_half_us) {
-        ++s_status.deadline_misses;
-        stop_locked(STOP_DEADLINE, ESP_ERR_TIMEOUT);
-    }
-    bool allowed = s_armed && s_generation == s_worker_generation;
-    portEXIT_CRITICAL(&s_lock);
+    led_completion_t done={0};
+    LED_ENTER();
+    done.edge=s_edge;
+    bool allowed=s_armed && s_generation==s_worker_generation;
+    LED_EXIT();
     if (!allowed) return;
-    nn2_status_t result = (phase & 1u) ? nn2_board_pca_off(&s_chip) :
-        nn2_board_pca_on(&s_chip, (uint8_t)(phase / 2));
-    if (result == NN2_OK && phase == 39) result = nn2_board_pca_health(&s_chip);
+    if (gptimer_get_raw_count(s_timer,&done.begin)!=ESP_OK) { fault(ESP_FAIL); return; }
+    if (done.begin>=alarm+s_half_us) {
+        LED_ENTER();
+        if (s_armed) {
+            uint32_t dispatch=(uint32_t)(done.begin-alarm);
+            if (dispatch>s_status.dispatch_max_us) s_status.dispatch_max_us=dispatch;
+            ++s_status.deadline_misses;
+            stop_locked(STOP_DEADLINE,ESP_ERR_TIMEOUT);
+        }
+        LED_EXIT();
+        return;
+    }
+    uint64_t activity_begin=LED_TIMING_NOW();
+    s_edge_commit_us=0u;
+    done.result=(phase & 1u) ? nn2_board_pca_off(&s_chip) :
+        nn2_board_pca_on(&s_chip,(uint8_t)(phase/2u));
+    done.commit=s_edge_commit_us;
+    /* Preserve the approved PCA fault policy. These additional reads are
+     * absent from V4's minimal edge path, but still block rather than spin. */
+    if (done.result==NN2_OK && phase==39u) done.result=nn2_board_pca_health(&s_chip);
+    LED_TIMING_ACTIVITY(activity_begin);
+    done.count_result=gptimer_get_raw_count(s_timer,&done.end);
+    LED_ENTER();
+    s_status.pca=s_chip.diagnostics;
+    s_status.last_complete=s_chip.last_complete;
+    if (!s_status.first_stop && s_chip.fault_saved) s_status.first_fault=s_chip.first_fault;
+    LED_EXIT();
+    scheduler_complete(&done);
+}
+/* Priority-21 scheduler owns completion acceptance and optical window handoff. */
+static void scheduler_commit(const led_completion_t *done)
+{
+    uint64_t alarm=done->edge.alarm;
+    uint32_t phase=done->edge.phase;
+    LED_ENTER();
+    bool valid=s_armed && done->edge.generation==s_generation;
+    if (valid) {
+        uint32_t dispatch=done->begin>alarm ? (uint32_t)(done->begin-alarm) : 0u;
+        uint32_t elapsed=done->end>=done->begin ? (uint32_t)(done->end-done->begin) : 0u;
+        uint32_t completion=done->end>alarm ? (uint32_t)(done->end-alarm) : 0u;
+        if (dispatch>s_status.dispatch_max_us) s_status.dispatch_max_us=dispatch;
+        if (elapsed>s_status.transfer_max_us) s_status.transfer_max_us=elapsed;
+        if (completion>s_status.completion_max_us) s_status.completion_max_us=completion;
+        if (done->count_result!=ESP_OK) stop_locked(STOP_TIMER,done->count_result);
+        else if (done->end>=alarm+s_half_us) {
+            ++s_status.deadline_misses;
+            stop_locked(STOP_DEADLINE,ESP_ERR_TIMEOUT);
+        } else if (done->result!=NN2_OK)
+            stop_locked(STOP_IO,s_hw_error!=ESP_OK ? s_hw_error : ESP_ERR_INVALID_RESPONSE);
+        valid=s_armed;
+    }
+    LED_EXIT();
 #if CONFIG_NN2_OPTICAL_ACQUISITION
-    uint64_t commit = (uint64_t)esp_timer_get_time();
-    uint64_t frame_origin = s_clock_origin + alarm - (uint64_t)phase * s_half_us;
-    nn2_core_acq_window_t window = {
-        .commit_us = commit,
-        .end_us = s_clock_origin + alarm + s_half_us - NN2_ACQ_GUARD_US,
-        .origin_us = frame_origin,
-        .slot_start_us = frame_origin + (uint64_t)(phase / 2u) * 2u * s_half_us,
-        .frame = s_status.frames,
-        .phase = (uint8_t)phase,
-    };
-    if (result == NN2_OK && still_armed() && !nn2_acquisition_window(&window)) {
-        fault(ESP_ERR_NO_MEM); return;
+    if (valid) {
+        uint64_t frame_origin=s_clock_origin+alarm-(uint64_t)phase*s_half_us;
+        nn2_core_acq_window_t window={
+            .commit_us=done->commit,
+            .end_us=s_clock_origin+alarm+s_half_us-NN2_ACQ_GUARD_US,
+            .origin_us=frame_origin,
+            .slot_start_us=frame_origin+(uint64_t)(phase/2u)*2u*s_half_us,
+            .frame=done->edge.frame,.phase=(uint8_t)phase,
+        };
+        if (!still_armed()) return; /* STOP owns any overtaken completion. */
+        if (!done->commit || !nn2_acquisition_window(&window)) {
+            fault(ESP_ERR_INVALID_STATE); return;
+        }
     }
 #endif
-    esp_err_t count_result = gptimer_get_raw_count(s_timer, &after);
-    portENTER_CRITICAL(&s_lock);
-    s_status.pca = s_chip.diagnostics;
-    s_status.last_complete = s_chip.last_complete;
-    if (!s_status.first_stop && s_chip.fault_saved)
-        s_status.first_fault = s_chip.first_fault;
-    bool valid = s_armed && s_generation == s_worker_generation;
-    uint32_t elapsed = count_result == ESP_OK ? (uint32_t)(after - before) : 0;
-    uint32_t completion = count_result == ESP_OK && after > alarm ? (uint32_t)(after - alarm) : 0;
-    if (elapsed > s_status.transfer_max_us) s_status.transfer_max_us = elapsed;
-    if (completion > s_status.completion_max_us) s_status.completion_max_us = completion;
-    if (valid && count_result != ESP_OK) {
-        stop_locked(STOP_TIMER, count_result);
-    } else if (valid && result == NN2_OK && after < alarm + s_half_us) {
+    LED_ENTER();
+    if (s_armed && done->edge.generation==s_generation) {
         ++s_status.edges;
-        if (phase == 39) ++s_status.frames;
-        s_phase = (phase + 1) % 40u;
-        s_busy = false;
-    } else if (valid) {
-        if (after >= alarm + s_half_us) {
-            ++s_status.deadline_misses;
-            stop_locked(STOP_DEADLINE, ESP_ERR_TIMEOUT);
-        } else stop_locked(STOP_IO,
-            s_hw_error != ESP_OK ? s_hw_error : ESP_ERR_INVALID_RESPONSE);
+        if (phase==39u) ++s_status.frames;
+        s_busy=false;
     }
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
 }
 static void owner_step(void)
 {
-        portENTER_CRITICAL(&s_lock);
+        LED_ENTER();
         bool start = s_start_pending && s_armed;
         nn2_port_optical_config_t config = s_config;
         if (start) {
             s_start_pending = false;
             s_worker_generation = s_generation;
         }
+        bool activate = s_activate_pending && s_armed && s_prepared;
+        if (activate) s_activate_pending = false;
+        bool deferred = s_defer_activation;
         bool armed = s_armed;
-        bool work = s_busy && s_status.state == NN2_OPTICAL_RUNNING;
+        bool work = s_edge_pending && s_status.state == NN2_OPTICAL_RUNNING;
+        if (work) s_edge_pending=false;
         uint32_t phase = s_phase;
         uint64_t alarm = s_alarm;
-        portEXIT_CRITICAL(&s_lock);
+        LED_EXIT();
         if (start) {
             esp_err_t err = prepare(&config);
+            if (err == ESP_OK && !deferred) err = activate_prepared();
+            if (err != ESP_OK && still_armed()) fault(err);
+        } else if (activate) {
+            esp_err_t err = activate_prepared();
             if (err != ESP_OK && still_armed()) fault(err);
         } else if (armed && work) {
             phase_work(phase, alarm);
         }
-        portENTER_CRITICAL(&s_lock);
+        LED_ENTER();
         bool needs_cleanup = !s_armed && !s_status.bus_released;
-        portEXIT_CRITICAL(&s_lock);
+        LED_EXIT();
         if (needs_cleanup) cleanup();
-        uint32_t watermark = (uint32_t)uxTaskGetStackHighWaterMark(NULL);
-        portENTER_CRITICAL(&s_lock);
-        s_status.stack_free = watermark;
-        portEXIT_CRITICAL(&s_lock);
+        /* No stack scans, formatting or per-edge allocation in this loop. */
 }
 static void owner_task(void *ctx)
 {
@@ -526,9 +665,8 @@ static void owner_task(void *ctx)
         owner_step();
     }
 }
-static nn2_status_t start(void *ctx, const nn2_port_optical_config_t *config)
+static nn2_status_t request_start(const nn2_port_optical_config_t *config, bool deferred)
 {
-    (void)ctx;
     if (!config) return NN2_ERR_INVALID_ARG;
 #if CONFIG_NN2_OPTICAL_ACQUISITION
     if (!nn2_core_acquisition_fs_valid(config->fs)) return NN2_ERR_INVALID_ARG;
@@ -541,24 +679,72 @@ static nn2_status_t start(void *ctx, const nn2_port_optical_config_t *config)
         for (unsigned i = 0; i < 20; ++i)
             if (config->current_ma[i] != 30) return NN2_ERR_INVALID_ARG;
     }
-    portENTER_CRITICAL(&s_lock);
+    LED_ENTER();
     bool ok = s_task && s_status.state == NN2_OPTICAL_IDLE && s_status.bus_released;
     if (ok) {
         s_config = *config;
         ++s_generation;
+        LED_TIMING_RESET();
         s_armed = s_start_pending = true;
+        s_defer_activation = deferred; s_prepared = s_activate_pending = false;
         s_status = (nn2_led_bringup_status_t){.state = NN2_OPTICAL_STARTING, .attempt_used = true};
     }
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
     if (!ok) return NN2_ERR_INVALID_STATE;
     xTaskNotifyGive(s_task);
     return NN2_OK;
 }
+static nn2_status_t start(void *ctx, const nn2_port_optical_config_t *config)
+{ (void)ctx; return request_start(config, false); }
+nn2_status_t nn2_led_bringup_prepare(const nn2_port_optical_config_t *config)
+{ return request_start(config, true); }
+bool nn2_led_bringup_prepared(void)
+{
+    LED_ENTER();
+    bool ready = s_armed && s_prepared && s_generation == s_worker_generation;
+    LED_EXIT();
+    return ready;
+}
+nn2_status_t nn2_led_bringup_activate(void)
+{
+    LED_ENTER();
+    bool ready = s_armed && s_prepared && !s_activate_pending && s_defer_activation &&
+        s_generation == s_worker_generation;
+    if (ready) s_activate_pending = true;
+    LED_EXIT();
+    if (ready) xTaskNotifyGive(s_task);
+    return ready ? NN2_OK : NN2_ERR_INVALID_STATE;
+}
+void nn2_led_bringup_report_timing(void)
+{
+#if defined(ESP_PLATFORM) && CONFIG_NN2_OPTICAL_ACQUISITION && NN2_RTOS_LED_TIMING_DIAGNOSTICS
+    portENTER_CRITICAL(&s_lock);
+    bool report=s_timing.frozen && !s_timing.reported && s_timing.generation!=0u;
+    uint32_t head=s_timing.head, generation=s_timing.generation;
+    led_timing_record_t longest=s_timing.longest;
+    if (report) s_timing.reported=true;
+    portEXIT_CRITICAL(&s_lock);
+    if (!report) return;
+    uint32_t count=head<16u ? head : 16u;
+    ESP_LOGI("led_timing_summary", "generation=%lu recorded=%lu printed=%lu max_hold_us=%llu max_hold_begin_us=%llu max_hold_end_us=%llu max_hold_line=%u",
+        (unsigned long)generation,(unsigned long)head,(unsigned long)count,
+        (unsigned long long)(longest.end_us-longest.begin_us),
+        (unsigned long long)longest.begin_us,(unsigned long long)longest.end_us,(unsigned)longest.line);
+    for (uint32_t i=0u;i<count;++i) {
+        portENTER_CRITICAL(&s_lock);
+        led_timing_record_t r=s_timing.records[(head-count+i)%64u];
+        portEXIT_CRITICAL(&s_lock);
+        ESP_LOGI("led_timing", "kind=%u begin_us=%llu end_us=%llu elapsed_us=%llu line=%u phase=%u frame=%lu",
+            (unsigned)r.kind,(unsigned long long)r.begin_us,(unsigned long long)r.end_us,
+            (unsigned long long)(r.end_us-r.begin_us),(unsigned)r.line,(unsigned)r.phase,(unsigned long)r.frame);
+    }
+#endif
+}
 nn2_led_bringup_status_t nn2_led_bringup_status(void)
 {
-    portENTER_CRITICAL(&s_lock);
+    LED_ENTER();
     nn2_led_bringup_status_t status = s_status;
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
     return status;
 }
 static uint8_t state(void *ctx)
@@ -569,13 +755,13 @@ static uint8_t state(void *ctx)
 static nn2_status_t clear_fault(void *ctx)
 {
     (void)ctx;
-    portENTER_CRITICAL(&s_lock);
+    LED_ENTER();
     bool ok = s_status.bus_released && !s_armed;
     if (ok) {
         s_status.state = NN2_OPTICAL_IDLE;
         /* Retain first terminal error and evidence across clear-fault. */
     }
-    portEXIT_CRITICAL(&s_lock);
+    LED_EXIT();
     return ok ? NN2_OK : NN2_ERR_INVALID_STATE;
 }
 esp_err_t nn2_led_bringup_init(void)
@@ -596,8 +782,17 @@ esp_err_t nn2_led_bringup_init(void)
     if (err != ESP_OK) fault(err);
     cleanup();
     if (err != ESP_OK || !s_status.bus_released) return err != ESP_OK ? err : ESP_FAIL;
-    return xTaskCreatePinnedToCore(owner_task, "nn2_led", NN2_RTOS_LED_STACK_BYTES,
-        NULL, NN2_RTOS_LED_PRIORITY, &s_task, NN2_RTOS_LED_CORE) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+    if (!s_scheduler_task && xTaskCreatePinnedToCore(scheduler_task,"nn2_sched",
+        NN2_RTOS_SCHED_STACK_BYTES,NULL,NN2_RTOS_SCHED_PRIORITY,
+        &s_scheduler_task,NN2_RTOS_SCHED_CORE)!=pdPASS) return ESP_ERR_NO_MEM;
+    if (xTaskCreatePinnedToCore(owner_task,"nn2_led",NN2_RTOS_LED_STACK_BYTES,
+        NULL,NN2_RTOS_LED_PRIORITY,&s_task,NN2_RTOS_LED_CORE)!=pdPASS) return ESP_ERR_NO_MEM;
+    printf("nn2_v4_pipeline: led=%u/core%d sched=%u/core%d adc=%u/core%d consumer=%u/core%d\n",
+        (unsigned)NN2_RTOS_LED_PRIORITY,NN2_RTOS_LED_CORE,
+        (unsigned)NN2_RTOS_SCHED_PRIORITY,NN2_RTOS_SCHED_CORE,
+        (unsigned)NN2_RTOS_ADS131_PRIORITY,NN2_RTOS_ADS131_CORE,
+        (unsigned)NN2_RTOS_ADS131_CONSUMER_PRIORITY,NN2_RTOS_ADS131_CONSUMER_CORE);
+    return ESP_OK;
 }
 nn2_port_optical_t nn2_led_bringup_port(void)
 {

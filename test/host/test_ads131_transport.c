@@ -20,6 +20,8 @@ typedef struct {
     esp_err_t startup_spi_error;
 } device_t;
 static unsigned acquires, starts, ends, releases;
+static uint64_t transport_clock;
+static uint64_t now_us(void *ctx) { (void)ctx; return transport_clock++; }
 static esp_err_t acquire_error, start_error, end_error;
 static spi_transaction_t *in_flight;
 static TickType_t ticks(uint32_t ms) { return (ms + 9u) / 10u; }
@@ -46,8 +48,17 @@ static uint8_t tx[18], rx[18];
 static void fresh(void)
 {
     memset(&d,0,sizeof(d)); memset(tx,0x12,sizeof(tx)); memset(rx,0xa5,sizeof(rx));
+    transport_clock=100u;
     d.hardware_ready=true; d.logic.startup_stage=NN2_ADS131_STAGE_RREG;
     acquires=starts=ends=releases=0u; acquire_error=start_error=end_error=ESP_OK;
+}
+static void transport_records_driver_boundary_before_decode(void)
+{
+    fresh(); d.logic.observation.state=NN2_ADC_RUNNING; d.logic.trace_head=1u;
+    d.logic.startup_stage=NN2_ADS131_STAGE_NONE;
+    TEST_ASSERT_EQUAL(NN2_OK,transfer(&d,tx,rx));
+    TEST_ASSERT_EQUAL_UINT64(100u,d.logic.trace[0].driver_start_us);
+    TEST_ASSERT_EQUAL_UINT64(101u,d.logic.trace[0].driver_started_us);
 }
 static void polling_holds_bus_until_reset_cleanup(void)
 {
@@ -86,6 +97,7 @@ static void polling_start_and_lock_failure_have_no_rx(void)
 void test_ads131_transport_suite(void)
 {
     RUN_TEST(polling_holds_bus_until_reset_cleanup);
+    RUN_TEST(transport_records_driver_boundary_before_decode);
     RUN_TEST(polling_timeout_retains_driver_storage);
     RUN_TEST(polling_start_and_lock_failure_have_no_rx);
 }

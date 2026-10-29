@@ -175,12 +175,12 @@ static void positive_start_stop_resynchronization(void)
     fresh(); d.logic.observation.state=NN2_ADC_READY; pending=5u; command(CMD_START,10000u);
     owner_iteration(&d,4u); TEST_ASSERT_EQUAL(NN2_OK,posted.result);
     TEST_ASSERT_EQUAL(1u,sync_count); TEST_ASSERT_EQUAL(0u,transfer_count); TEST_ASSERT_EQUAL(0u,pending);
-    TEST_ASSERT_EQUAL(NN2_ADC_RUNNING,d.logic.observation.state); TEST_ASSERT_EQUAL(2u,d.logic.settling);
-    owner_iteration(&d,1u); owner_iteration(&d,1u); owner_iteration(&d,1u);
-    TEST_ASSERT_EQUAL(3u,d.logic.observation.sequence); TEST_ASSERT_EQUAL(1u,d.logic.count);
+    TEST_ASSERT_EQUAL(NN2_ADC_RUNNING,d.logic.observation.state); TEST_ASSERT_EQUAL(3u,d.logic.settling);
+    for (unsigned i=0u;i<4u;++i) owner_iteration(&d,1u);
+    TEST_ASSERT_EQUAL(4u,d.logic.observation.sequence); TEST_ASSERT_EQUAL(1u,d.logic.count);
     command(CMD_STOP,10000u); pending=2u; owner_iteration(&d,1u);
     TEST_ASSERT_EQUAL(NN2_OK,posted.result); TEST_ASSERT_EQUAL(NN2_ADC_STOPPED,d.logic.observation.state);
-    TEST_ASSERT_EQUAL(0u,pending); TEST_ASSERT_EQUAL(3u,transfer_count);
+    TEST_ASSERT_EQUAL(0u,pending); TEST_ASSERT_EQUAL(4u,transfer_count);
 }
 static void positive_partial_lifecycle_failure(void)
 {
@@ -289,14 +289,16 @@ static void event_start(bool early)
     fresh(); event_mode=true; edge_in_sync=early;
     d.logic.io.take_events=take_fake; d.logic.io.drdy_latch=latch_fake;
     d.logic.observation.state=NN2_ADC_READY;
-    command(CMD_START,10000u); owner_iteration(&d,0xffffffffu);
-    TEST_ASSERT_EQUAL(NN2_OK,posted.result); TEST_ASSERT_EQUAL(2u,transfer_count);
+    command(CMD_START,500000u); owner_iteration(&d,0xffffffffu);
+    TEST_ASSERT_EQUAL(NN2_OK,posted.result); TEST_ASSERT_EQUAL(1027u,transfer_count);
+    TEST_ASSERT_TRUE(d.logic.rate.valid); TEST_ASSERT_EQUAL(8000u,d.logic.rate.hz);
+    TEST_ASSERT_EQUAL(1024u,d.logic.rate.samples);
     TEST_ASSERT_EQUAL(0u,d.logic.settling); TEST_ASSERT_EQUAL(0u,d.logic.count);
     TEST_ASSERT_EQUAL(NN2_ADC_RUNNING,d.logic.observation.state);
-    TEST_ASSERT_EQUAL(2u,d.logic.edge_serial); TEST_ASSERT_EQUAL(0u,d.logic.observation.lost);
+    TEST_ASSERT_EQUAL(1027u,d.logic.edge_serial); TEST_ASSERT_EQUAL(0u,d.logic.observation.lost);
     clock_us+=125u; nn2_ads131_events_push(&events,clock_us);
     pending=1u; owner_iteration(&d,1u); /* Two doorbells, only ONE recorded edge. */
-    TEST_ASSERT_EQUAL(3u,transfer_count); TEST_ASSERT_EQUAL(1u,d.logic.count);
+    TEST_ASSERT_EQUAL(1028u,transfer_count); TEST_ASSERT_EQUAL(1u,d.logic.count);
     command(CMD_STOP,10000u); owner_iteration(&d,1u);
     TEST_ASSERT_EQUAL(NN2_OK,posted.result); TEST_ASSERT_FALSE(events.enabled);
     TEST_ASSERT_EQUAL(NN2_ADC_STOPPED,d.logic.observation.state);
@@ -311,7 +313,7 @@ static void event_start_timeout_never_acknowledges_running(void)
     command(CMD_START,50000u); owner_iteration(&d,1u);
     TEST_ASSERT_EQUAL(NN2_ERR_IO,posted.result); TEST_ASSERT_EQUAL(0u,transfer_count);
     TEST_ASSERT_EQUAL(NN2_ADC_FAULT_DRDY,d.logic.runtime_failure.fault);
-    TEST_ASSERT_EQUAL(20000u,clock_us); TEST_ASSERT_FALSE(events.enabled);
+    TEST_ASSERT_EQUAL(10000u,clock_us); TEST_ASSERT_FALSE(events.enabled);
 }
 void test_ads131_control_suite(void)
 {

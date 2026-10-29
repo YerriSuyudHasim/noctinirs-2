@@ -1,3 +1,7 @@
+> Current local candidate: see [FEAT35_V4_BASELINE](FEAT35_V4_BASELINE.md).
+> It supersedes the earlier timing-guard/queue/LED-start details below. The
+> ADC-only dark baseline has a different host test command. No build performed.
+
 # Issue 35 ADC diagnostic candidate contract
 
 Status: Proposed; author implementation, awaiting scoped Architect, RTOS,
@@ -20,19 +24,33 @@ pipeline), 47-55 (ID/STATUS/MODE/CLOCK/GAIN1).
 The diagnostic tuple is deliberately restricted: 8.192 MHz CLKIN, HR, OSR512,
 8 kSPS, all four channels gain1, 24-bit words, CCITT seed FFFF/poly1021,
 non-reflected/xorout0; input/register CRC disabled, output CRC always checked.
-MODE=0110 (reset indication cleared, timeout enabled, level DRDY);
-CLOCK=0F0A; GAIN1=0000. Writes have individual pipelined WREG acknowledgments
+MODE=0111 (reset indication cleared, timeout enabled, pulse DRDY);
+CLOCK=0F0A; GAIN1=0000; CFG=0600; CH0/1/2/3_CFG=0000. Writes have individual pipelined WREG acknowledgments
 and masked readback; ID mask FF00 expects2400. Reserved ID low bits are ignored.
 Six 24-bit words are always transferred; response/register/CRC words are MSB
 aligned with zero low-byte padding. Configuration exchanges check CRC too.
 
-Reset holds LOW for 251us (greater than2048 clocks), then waits5us before SPI.
-Init verifies first DRDY within20ms. Start strobes SYNC LOW1us (8 clocks,
-less than2048), clearing device FIFO after the configuration pause; clears stale
-notifications and discards the first two fast-start samples. No catch-up reads
-are labelled contiguous. Coalesced notifications or a service gap over250us
-fault/reset the adapter with loss lower bounds and an unknown-loss indication.
-That conservative choice needs bench feasibility measurement at8kSPS.
+Reset holds LOW for 300us, then waits20us before a CRC-checked NULL/reset
+acknowledgment (FF24). UNLOCK precedes configuration, following V4. Every
+configuration write retains explicit WREG acknowledgment and masked readback.
+Init verifies a DRDY interrupt within20ms; tick-spaced level polling is not used
+for pulse-mode readiness. Start disables the pin interrupt, clears recorded
+events, strobes SYNC LOW5us, then enables capture/interrupts. Three post-SYNC
+frames are CRC/status checked and discarded, followed by 1024 qualification reads
+before START acknowledgment. Qualification accepts7600..8400 SPS and rejects any
+observed interval over188us; all qualifying frames are discarded. The acquisition
+caller allows500ms START, while the owner caps qualification at400ms within that
+same caller deadline. START success does not establish physical sample continuity. One
+F_RESYNC is permitted only in those discarded frames, following V4; a repeated
+or runtime F_RESYNC faults acquisition. Runtime requires all four channels fresh.
+
+Recorded events are consumed individually. Two pending events are allowed;
+dropped events, a third pending event, discontinuous serials, oldest-event age
+reaching250us or non-settling service gap over250us fault/reset the adapter.
+Transport completion and serial are captured before CRC/decoding. CRC is checked
+once per runtime read. Legacy count-only seams retain single-event/125us guards.
+These additional age guards are more conservative than V4; no timing/physical
+FIFO-association guarantee is established without board validation.
 
 ## Values and port operations
 
@@ -143,3 +161,22 @@ Rollback is a reviewed revert or default fake profile; no device installation he
 All hardware, timing, jitter, stack watermark, electrical/optical/safety/clinical
 evidence is NOT RUN. Required next step is one batched changed-candidate specialist
 and independent review arranged by Orchestrator; this author supplies no approval.
+
+## Local timing-history / IRAM diagnostic candidate
+
+The last eight attempted reads retain serial, DRDY timestamp/period, transport
+begin/end, CRC duration, pending depth, status and completion phase. The first
+fault freezes history; ads131_trace and ads131_rate are emitted after reset,
+never once per successful sample. Successful qualification is logged only after
+STOP, so console I/O cannot create a gap at the START-to-LED handoff.
+
+GPIO uses an IRAM handler with scalar event-ring writes, internal DRAM state,
+IRAM timer access and FreeRTOS ISR notification. Both ADC profiles explicitly
+require timer/FreeRTOS/SPI master IRAM placement. An already-installed GPIO ISR
+service is rejected because its allocation flags cannot be verified. The user
+must regenerate/build the selected profile; source audit does not replace map
+verification. No full cache-off or scheduling guarantee is established.
+
+The retained250us service-gap/age guards are intentionally not removed in this
+candidate. Boot53 may still fault during qualification; its preceding history
+is now available to distinguish inter-DRDY gaps from slow SPI/CPU handling.
