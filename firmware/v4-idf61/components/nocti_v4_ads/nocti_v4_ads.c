@@ -1,5 +1,7 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "nocti_v4_ads.h"
+#include "nocti_v4_backlog.h"
+#include "nocti_v4_common.h"
 
 #include <limits.h>
 #include <inttypes.h>
@@ -8,6 +10,7 @@
 
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "esp_task_wdt.h"
 #include "esp_attr.h"
 #include "esp_intr_alloc.h"
 #include "esp_log.h"
@@ -18,6 +21,9 @@
 #include "freertos/task.h"
 
 static const char *TAG = "nocti_v4_ads";
+
+_Static_assert(NOCTI_V4_PRIO_ADC < configMAX_PRIORITIES,
+               "ADS priority must fit the FreeRTOS priority range");
 
 #define EVENT_RING_MASK (NOCTI_V4_DRDY_EVENT_RING_CAPACITY - 1u)
 #define RAW_RING_MASK   (NOCTI_V4_RAW_SAMPLE_RING_CAPACITY - 1u)
@@ -175,10 +181,12 @@ typedef struct {
     TaskHandle_t ads_task;
     TaskHandle_t dark_task;
     SemaphoreHandle_t init_done;
+    SemaphoreHandle_t dark_exited;
     SemaphoreHandle_t command_done;
     SemaphoreHandle_t command_lock;
     SemaphoreHandle_t drain_done;
     StaticSemaphore_t init_done_storage;
+    StaticSemaphore_t dark_exited_storage;
     StaticSemaphore_t command_done_storage;
     StaticSemaphore_t command_lock_storage;
     StaticSemaphore_t drain_done_storage;
@@ -187,6 +195,8 @@ typedef struct {
     uint8_t command_queue_buffer[4u * sizeof(ads_command_t)];
 
     volatile bool initialized;
+    volatile bool task_exit;
+    bool drdy_handler_added;
     volatile bool ready;
     volatile bool rate_valid;
     volatile bool capture_enabled;
@@ -239,7 +249,9 @@ typedef struct {
     uint64_t period_sum_us;
     uint32_t period_count;
     uint64_t spi_duration_sum_us;
+    uint64_t service_sum_us;
     uint32_t spi_duration_count;
+    uint32_t service_count;
     uint32_t runtime_period_count;
     uint32_t runtime_period_us[NOCTI_V4_ADS_RUNTIME_PERIOD_SNAPSHOT_COUNT];
     uint32_t raw_stats_work_count;
@@ -586,7 +598,10 @@ static esp_err_t transport_acquire(ads_transport_t *transport)
     if (transport->bus_acquired) {
         return ESP_OK;
     }
-    const esp_err_t err = spi_device_acquire_bus(transport->device, portMAX_DELAY);
+    /* One owner of this bus. A missed release must fault instead of waiting
+     * forever. Three seconds is inside the 8 s init wait and the 5 s TWDT. */
+    const esp_err_t err = spi_device_acquire_bus(
+        transport->device, pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS));
     if (err == ESP_OK) {
         transport->bus_acquired = true;
     }
@@ -885,6 +900,66 @@ static void record_spi_duration(ads_runtime_t *runtime, uint32_t duration_us)
     if (duration_us > 250u) {
         counter_add(&runtime->health->spi_duration_gt_250_us, 1u);
     }
+    if (duration_us < 40u) {
+        counter_add(&runtime->health->spi_service_lt_40_us, 1u);
+    } else if (duration_us < 60u) {
+        counter_add(&runtime->health->spi_service_40_to_59_us, 1u);
+    } else if (duration_us < 80u) {
+        counter_add(&runtime->health->spi_service_60_to_79_us, 1u);
+    } else if (duration_us < 100u) {
+        counter_add(&runtime->health->spi_service_80_to_99_us, 1u);
+    } else {
+        counter_add(&runtime->health->spi_service_ge_100_us, 1u);
+    }
+}
+
+/* End-to-end service is DRDY timestamp to SPI completion, so ISR entry and
+ * the context switch are inside the 80 us budget. SPI duration stays in the
+ * spi_* counters. An unordered pair of timestamps is not a fresh sample. */
+static void record_service_span(ads_runtime_t *runtime, uint64_t drdy_us,
+                                uint64_t complete_us)
+{
+    uint32_t span_us;
+    if (drdy_us == 0u || complete_us < drdy_us) {
+        counter_add(&runtime->health->adc_service_time_unknown, 1u);
+        counter_add(&runtime->health->adc_service_over_budget, 1u);
+        return;
+    }
+    span_us = (uint32_t)(complete_us - drdy_us);
+    update_min(&runtime->health->adc_service_min_us, span_us);
+    update_max(&runtime->health->adc_service_max_us, span_us);
+    runtime->service_sum_us += span_us;
+    ++runtime->service_count;
+    counter_store(&runtime->health->adc_service_avg_us,
+                  (uint32_t)(runtime->service_sum_us / runtime->service_count));
+    if (span_us < 80u) {
+        counter_add(&runtime->health->adc_service_lt_80_us, 1u);
+    } else if (span_us < 125u) {
+        counter_add(&runtime->health->adc_service_80_to_124_us, 1u);
+    } else if (span_us < 250u) {
+        counter_add(&runtime->health->adc_service_125_to_249_us, 1u);
+    } else {
+        counter_add(&runtime->health->adc_service_ge_250_us, 1u);
+    }
+    if (span_us > NOCTI_V4_RTOS_BUDGET_ADS_SERVICE_US) {
+        counter_add(&runtime->health->adc_service_over_budget, 1u);
+    }
+}
+
+static void record_queue_lag(ads_runtime_t *runtime, uint32_t age_us)
+{
+    update_max(&runtime->health->adc_queue_lag_max_us, age_us);
+    if (age_us < 40u) {
+        counter_add(&runtime->health->adc_lag_lt_40_us, 1u);
+    } else if (age_us < 80u) {
+        counter_add(&runtime->health->adc_lag_40_to_79_us, 1u);
+    } else if (age_us < 125u) {
+        counter_add(&runtime->health->adc_lag_80_to_124_us, 1u);
+    } else if (age_us < 250u) {
+        counter_add(&runtime->health->adc_lag_125_to_249_us, 1u);
+    } else {
+        counter_add(&runtime->health->adc_lag_ge_250_us, 1u);
+    }
 }
 
 static void record_period(ads_runtime_t *runtime, uint64_t previous_us,
@@ -993,11 +1068,58 @@ static esp_err_t install_drdy_interrupt(ads_runtime_t *runtime)
     if (err != ESP_OK) {
         return err;
     }
+    runtime->drdy_handler_added = true;
     return gpio_intr_disable(NOCTI_V4_ADS131_DRDY_GPIO);
+}
+
+/* Failed init must not leave a disabled DRDY handler or an acquired SPI bus.
+ * Tasks exit after this. If the dark task does not exit, the ADS task stays
+ * in its kicked idle loop with ready clear, which is the safe-idle fallback. */
+static void quiesce_failed_init(ads_runtime_t *runtime)
+{
+    if (runtime->drdy_handler_added) {
+        (void)gpio_isr_handler_remove(NOCTI_V4_ADS131_DRDY_GPIO);
+        (void)gpio_intr_disable(NOCTI_V4_ADS131_DRDY_GPIO);
+        runtime->drdy_handler_added = false;
+    }
+    transport_release(&runtime->transport);
+    if (runtime->transport.device_added && runtime->transport.device != NULL &&
+        spi_bus_remove_device(runtime->transport.device) == ESP_OK) {
+        runtime->transport.device = NULL;
+        runtime->transport.device_added = false;
+    }
+    if (runtime->transport.bus_initialized && !runtime->transport.device_added &&
+        spi_bus_free(NOCTI_V4_ADS_SPI_HOST) == ESP_OK) {
+        runtime->transport.bus_initialized = false;
+    }
+    if (runtime->board != NULL && runtime->board->gpio_ready) {
+        (void)nocti_v4_board_assert_ads131_reset(runtime->board);
+    }
+}
+
+static int request_dark_exit(ads_runtime_t *runtime)
+{
+    if (runtime->dark_task == NULL) {
+        return 1;
+    }
+    __atomic_store_n(&runtime->task_exit, true, __ATOMIC_RELEASE);
+    xTaskNotifyGive(runtime->dark_task);
+    if (xTaskGetCurrentTaskHandle() == runtime->ads_task) {
+        nocti_v4_task_wdt_kick();
+    }
+    if (runtime->dark_exited != NULL &&
+        xSemaphoreTake(runtime->dark_exited,
+                       pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS + 200u)) == pdTRUE) {
+        runtime->dark_task = NULL;
+        return 1;
+    }
+    return 0;
 }
 
 static esp_err_t wait_for_event(ads_runtime_t *runtime, drdy_event_t *out_event)
 {
+    /* One kick per wait. The following block is at most the 100 ms event timeout. */
+    nocti_v4_task_wdt_kick();
     uint64_t start_us = 0u;
     (void)nocti_v4_time_now_us(runtime->timebase, &start_us);
     const uint64_t deadline_us = start_us +
@@ -1153,6 +1275,27 @@ static void reset_acquisition_counters(ads_runtime_t *runtime)
     RESET_ACQ(adc_missed);
     RESET_ACQ(adc_missed_sequence);
     RESET_ACQ(adc_missed_backlog);
+    RESET_ACQ(adc_backlog_catchup);
+    RESET_ACQ(adc_queue_lag_max_us);
+    RESET_ACQ(adc_service_over_budget);
+    RESET_ACQ(adc_service_time_unknown);
+    RESET_ACQ(adc_service_min_us);
+    RESET_ACQ(adc_service_max_us);
+    RESET_ACQ(adc_service_avg_us);
+    RESET_ACQ(adc_service_lt_80_us);
+    RESET_ACQ(adc_service_80_to_124_us);
+    RESET_ACQ(adc_service_125_to_249_us);
+    RESET_ACQ(adc_service_ge_250_us);
+    RESET_ACQ(spi_service_lt_40_us);
+    RESET_ACQ(spi_service_40_to_59_us);
+    RESET_ACQ(spi_service_60_to_79_us);
+    RESET_ACQ(spi_service_80_to_99_us);
+    RESET_ACQ(spi_service_ge_100_us);
+    RESET_ACQ(adc_lag_lt_40_us);
+    RESET_ACQ(adc_lag_40_to_79_us);
+    RESET_ACQ(adc_lag_80_to_124_us);
+    RESET_ACQ(adc_lag_125_to_249_us);
+    RESET_ACQ(adc_lag_ge_250_us);
     RESET_ACQ(adc_missed_other);
     RESET_ACQ(adc_sequence_gap);
     RESET_ACQ(drdy_isr_count);
@@ -1190,6 +1333,8 @@ static void reset_acquisition_counters(ads_runtime_t *runtime)
     runtime->period_count = 0u;
     runtime->spi_duration_sum_us = 0u;
     runtime->spi_duration_count = 0u;
+    runtime->service_sum_us = 0u;
+    runtime->service_count = 0u;
     runtime->runtime_period_count = 0u;
     memset(runtime->runtime_period_us, 0, sizeof(runtime->runtime_period_us));
     __atomic_store_n(&runtime->event_depth_max, 0u, __ATOMIC_RELEASE);
@@ -1317,8 +1462,21 @@ static esp_err_t stop_dark_internal(ads_runtime_t *runtime)
     if (consumer != NULL) {
         xTaskNotifyGive(consumer);
     }
-    if (xSemaphoreTake(runtime->drain_done,
-                       pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS)) != pdTRUE) {
+    /* The 3 s drain budget stays. Each slice is 1 s so a kick always lands
+     * inside the 5 s task-watchdog window. */
+    TickType_t drain_left = pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS);
+    bool drained = false;
+    while (drain_left > 0u) {
+        const TickType_t slice = drain_left > pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS) ?
+            pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS) : drain_left;
+        nocti_v4_task_wdt_kick();
+        if (xSemaphoreTake(runtime->drain_done, slice) == pdTRUE) {
+            drained = true;
+            break;
+        }
+        drain_left -= slice;
+    }
+    if (!drained) {
         if (!fault_history) {
             set_fault(runtime, NOCTI_V4_ADS_FAULT_STOP_DRAIN_TIMEOUT,
                       NOCTI_V4_ADS_FAULT_ORIGIN_STOP_DARK, ESP_ERR_TIMEOUT);
@@ -1614,10 +1772,11 @@ restore:
 static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
 {
     const uint32_t backlog = event_depth(runtime);
-    if (backlog >= NOCTI_V4_ADS_MAX_EVENT_BACKLOG) {
-        /* This is not a temporary queue-depth statistic. Two events remain
-         * after the current event was popped, which exceeds the bounded FIFO
-         * integrity contract; do not manufacture aligned samples. */
+    const bool running = runtime->lifecycle == NOCTI_V4_ADS_RUNNING_DARK;
+    /* Qualification still refuses a two-deep remainder. A running scan uses
+     * nocti_v4_backlog_service(): overwritten conversions are counted and the
+     * newest coherent event is read. Depth 16 or age 1 ms still faults. */
+    if (!running && backlog >= NOCTI_V4_ADS_MAX_EVENT_BACKLOG) {
         counter_add(&runtime->health->adc_missed_backlog, backlog);
         counter_add(&runtime->health->adc_missed, backlog);
         set_fault(runtime, NOCTI_V4_ADS_FAULT_EVENT_BACKLOG,
@@ -1629,14 +1788,45 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
                   NOCTI_V4_ADS_FAULT_ORIGIN_PROCESS_EVENT, ESP_ERR_INVALID_STATE);
         return;
     }
-    if (runtime->last_sequence != 0u && event->sequence != runtime->last_sequence + 1u) {
-        const uint32_t gap = event->sequence - runtime->last_sequence - 1u;
-        counter_add(&runtime->health->adc_sequence_gap, gap);
-        counter_add(&runtime->health->adc_missed_sequence, gap);
-        counter_add(&runtime->health->adc_missed, gap);
-        set_fault(runtime, NOCTI_V4_ADS_FAULT_SEQUENCE_GAP,
-                  NOCTI_V4_ADS_FAULT_ORIGIN_PROCESS_EVENT, ESP_ERR_INVALID_STATE);
-        return;
+    {
+        const uint32_t gap = nocti_v4_sequence_gap(runtime->last_sequence,
+                                                   event->sequence);
+        if (gap != 0u) {
+            counter_add(&runtime->health->adc_sequence_gap, gap);
+            counter_add(&runtime->health->adc_missed_sequence, gap);
+            counter_add(&runtime->health->adc_missed, gap);
+            set_fault(runtime, NOCTI_V4_ADS_FAULT_SEQUENCE_GAP,
+                      NOCTI_V4_ADS_FAULT_ORIGIN_PROCESS_EVENT, ESP_ERR_INVALID_STATE);
+            return;
+        }
+    }
+    if (running) {
+        uint64_t now_us = 0u;
+        uint32_t age_us = 0u;
+        int age_known = 0;
+        nocti_v4_backlog_action_t action;
+        if (nocti_v4_time_now_us(runtime->timebase, &now_us) == ESP_OK &&
+            now_us >= event->timestamp_us) {
+            age_known = 1;
+            age_us = (uint32_t)(now_us - event->timestamp_us);
+        }
+        action = nocti_v4_backlog_decide(backlog, age_known, age_us).action;
+        if (action == NOCTI_V4_BACKLOG_DROP) {
+            counter_add(&runtime->health->adc_missed, 1u);
+            counter_add(&runtime->health->adc_missed_backlog, 1u);
+            counter_add(&runtime->health->adc_backlog_catchup, 1u);
+            runtime->last_sequence = event->sequence;
+            return;
+        }
+        if (action == NOCTI_V4_BACKLOG_FAULT) {
+            const uint32_t missed = 1u + backlog;
+            counter_add(&runtime->health->adc_missed, missed);
+            counter_add(&runtime->health->adc_missed_backlog, missed);
+            set_fault(runtime, NOCTI_V4_ADS_FAULT_EVENT_BACKLOG,
+                      NOCTI_V4_ADS_FAULT_ORIGIN_PROCESS_EVENT, ESP_ERR_INVALID_STATE);
+            return;
+        }
+        record_queue_lag(runtime, age_us);
     }
     record_period(runtime, runtime->last_timestamp_us, event->timestamp_us);
     runtime->last_sequence = event->sequence;
@@ -1648,6 +1838,7 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
     const esp_err_t spi_result = read_data_frame(runtime, &frame, &duration_us,
                                                   &complete_us, NULL);
     record_spi_duration(runtime, duration_us);
+    record_service_span(runtime, event->timestamp_us, complete_us);
     if (spi_result != ESP_OK) {
         counter_add(&runtime->health->spi_errors, 1u);
         set_fault(runtime, NOCTI_V4_ADS_FAULT_SPI_READ,
@@ -1777,7 +1968,18 @@ static void dark_consumer_task(void *argument)
     runtime->dark_task_core = xPortGetCoreID();
     __atomic_store_n(&runtime->health->dark_consumer_task_core,
                      runtime->dark_task_core, __ATOMIC_RELEASE);
+    /* Idle waits stay inside the 5 s TWDT. STOP still notifies this task. */
+    nocti_v4_task_wdt_subscribe();
     for (;;) {
+        if (__atomic_load_n(&runtime->task_exit, __ATOMIC_ACQUIRE)) {
+            (void)esp_task_wdt_delete(NULL);
+            if (runtime->dark_exited != NULL) {
+                (void)xSemaphoreGive(runtime->dark_exited);
+            }
+            runtime->dark_task = NULL;
+            vTaskDelete(NULL);
+        }
+        nocti_v4_task_wdt_kick();
         nocti_v4_raw_sample_t sample;
         if (__atomic_load_n(&runtime->raw_consumer_mode, __ATOMIC_ACQUIRE) ==
             NOCTI_V4_ADS_RAW_CONSUMER_DARK_DIAGNOSTIC) {
@@ -1794,7 +1996,7 @@ static void dark_consumer_task(void *argument)
         }
         /* The raw ring remains the source of samples; notification is only the
          * wake-up edge. STOP explicitly notifies this task for a final drain. */
-        (void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS));
     }
 }
 
@@ -1804,6 +2006,9 @@ static void ads_task(void *argument)
     runtime->ads_task_core = xPortGetCoreID();
     __atomic_store_n(&runtime->health->ads_task_core, runtime->ads_task_core,
                      __ATOMIC_RELEASE);
+    /* Before rate qualification, so that 1024-sample startup is already watched. */
+    nocti_v4_task_wdt_subscribe();
+    nocti_v4_task_wdt_kick();
     runtime->lifecycle = NOCTI_V4_ADS_STOPPED;
     __atomic_store_n(&runtime->gpio_isr_callback_core, -1, __ATOMIC_RELEASE);
 
@@ -1823,9 +2028,14 @@ static void ads_task(void *argument)
     runtime->public_ads->interface_initialized = true;
     runtime->public_ads->hardware_initialized = err == ESP_OK;
     runtime->public_ads->ready = runtime->ready;
+    int dark_gone = 0;
     if (err != ESP_OK) {
         runtime->lifecycle = NOCTI_V4_ADS_FAULTED;
         ESP_LOGE(TAG, "ADS init/rate validation failed: %s", esp_err_to_name(err));
+        if (nocti_v4_ads_failed_init_needs_teardown(1, 0)) {
+            quiesce_failed_init(runtime);
+            dark_gone = request_dark_exit(runtime);
+        }
     } else {
         ESP_LOGI(TAG,
                  "ADS ready ID=%04X MODE=%04X CLOCK=%04X GAIN=%04X CFG=%04X rate=%lu SPS period=%lu us min=%lu max=%lu",
@@ -1837,14 +2047,20 @@ static void ads_task(void *argument)
                  (unsigned long)runtime->validation_period_max_us);
     }
     (void)xSemaphoreGive(runtime->init_done);
+    if (err != ESP_OK && dark_gone) {
+        (void)esp_task_wdt_delete(NULL);
+        runtime->ads_task = NULL;
+        vTaskDelete(NULL);
+    }
 
     for (;;) {
-        /* DRDY's event ring is the record of work. The notification only wakes
-         * this priority-20 task. A timed runtime wait services the documented
-         * 5-ms DRDY-stall watchdog; STOPPED waits indefinitely for a command. */
+        /* DRDY's event ring is the record of work. The notification wakes this
+         * priority-23 task. A 1 ms wait services the 5 ms DRDY-stall watchdog.
+         * STOPPED waits at most one second so the task watchdog can be kicked. */
         const TickType_t wait_ticks = __atomic_load_n(&runtime->capture_enabled,
                                                       __ATOMIC_ACQUIRE) ?
-            pdMS_TO_TICKS(1u) : portMAX_DELAY;
+            pdMS_TO_TICKS(1u) : pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS);
+        nocti_v4_task_wdt_kick();
         (void)ulTaskNotifyTake(pdTRUE, wait_ticks);
 
         ads_command_t command;
@@ -1888,6 +2104,9 @@ static esp_err_t execute_command(nocti_v4_ads_t *ads, ads_command_type_t type,
         return ESP_ERR_INVALID_STATE;
     }
     ads_runtime_t *runtime = (ads_runtime_t *)ads->runtime;
+    if (runtime->ads_task == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
     if (xSemaphoreTake(runtime->command_lock,
                        pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS)) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
@@ -1942,13 +2161,15 @@ esp_err_t nocti_v4_ads_init(nocti_v4_ads_t *ads, nocti_v4_board_t *board,
     ads->runtime = runtime;
 
     runtime->init_done = xSemaphoreCreateBinaryStatic(&runtime->init_done_storage);
+    runtime->dark_exited = xSemaphoreCreateBinaryStatic(&runtime->dark_exited_storage);
     runtime->command_done = xSemaphoreCreateBinaryStatic(&runtime->command_done_storage);
     runtime->command_lock = xSemaphoreCreateMutexStatic(&runtime->command_lock_storage);
     runtime->drain_done = xSemaphoreCreateBinaryStatic(&runtime->drain_done_storage);
     runtime->command_queue = xQueueCreateStatic(4u, sizeof(ads_command_t),
                                                  runtime->command_queue_buffer,
                                                  &runtime->command_queue_storage);
-    if (runtime->init_done == NULL || runtime->command_done == NULL ||
+    if (runtime->init_done == NULL || runtime->dark_exited == NULL ||
+        runtime->command_done == NULL ||
         runtime->command_lock == NULL || runtime->drain_done == NULL ||
         runtime->command_queue == NULL) {
         return ESP_ERR_NO_MEM;
@@ -1965,10 +2186,15 @@ esp_err_t nocti_v4_ads_init(nocti_v4_ads_t *ads, nocti_v4_board_t *board,
                                 NOCTI_V4_STACK_ADC_BYTES, runtime,
                                 NOCTI_V4_PRIO_ADC, &runtime->ads_task,
                                 NOCTI_V4_CORE_REALTIME) != pdPASS) {
+        if (nocti_v4_ads_failed_init_needs_teardown(runtime->dark_task != NULL, 0)) {
+            (void)request_dark_exit(runtime);
+        }
         return ESP_ERR_NO_MEM;
     }
     if (xSemaphoreTake(runtime->init_done,
                        pdMS_TO_TICKS(NOCTI_V4_ADS_INIT_TIMEOUT_MS)) != pdTRUE) {
+        /* The task has not reached its own teardown. Deleting it here could
+         * cut through the SPI or GPIO driver. */
         return ESP_ERR_TIMEOUT;
     }
     return runtime->init_result;

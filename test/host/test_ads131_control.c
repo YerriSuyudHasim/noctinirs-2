@@ -299,7 +299,9 @@ static void event_start(bool early)
     clock_us+=125u; nn2_ads131_events_push(&events,clock_us);
     pending=1u; owner_iteration(&d,1u); /* Two doorbells, only ONE recorded edge. */
     TEST_ASSERT_EQUAL(1028u,transfer_count); TEST_ASSERT_EQUAL(1u,d.logic.count);
-    command(CMD_STOP,10000u); owner_iteration(&d,1u);
+    /* Qualification advances the fake clock by about 128 ms. An absolute
+     * 10000 us deadline is already expired, so STOP must be clock-relative. */
+    command(CMD_STOP,clock_us + 10000u); owner_iteration(&d,1u);
     TEST_ASSERT_EQUAL(NN2_OK,posted.result); TEST_ASSERT_FALSE(events.enabled);
     TEST_ASSERT_EQUAL(NN2_ADC_STOPPED,d.logic.observation.state);
 }

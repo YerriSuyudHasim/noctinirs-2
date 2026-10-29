@@ -979,8 +979,11 @@ static void scheduler_task(void *argument)
     runtime->task_core = xPortGetCoreID();
     __atomic_store_n(&runtime->health->scheduler_task_core, runtime->task_core,
                      __ATOMIC_RELEASE);
+    nocti_v4_task_wdt_subscribe();
     for (;;) {
-        (void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        nocti_v4_task_wdt_kick();
+        nocti_v4_task_wdt_log_pending();
+        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS));
         /* A completion may share a wake with the next absolute deadline. It
          * must advance the slot state before that deadline is validated. */
         drain_led_completions(runtime);

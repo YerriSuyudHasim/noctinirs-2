@@ -11,20 +11,41 @@ esp_err_t nocti_v4_board_early_safe_init(nocti_v4_board_t *board)
         return ESP_ERR_INVALID_ARG;
     }
     memset(board, 0, sizeof(*board));
-    const gpio_config_t config = {
-        .pin_bit_mask = (1ULL << NOCTI_V4_PCA_RESET_GPIO) |
-                        (1ULL << NOCTI_V4_ADS131_SYNC_RESET_GPIO) |
-                        (1ULL << NOCTI_V4_ADS131_CS_GPIO),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    esp_err_t err = gpio_config(&config);
+    /* Drive the active-low resets before gpio_config, then again after.
+     * That order is nn2_board_init_safe at feat35 31fb2a9
+     * (components/nn2_board/nn2_board.c). V4 still owns ADS reset and CS. */
+    esp_err_t err = gpio_set_level(NOCTI_V4_PCA_RESET_GPIO, 0);
+    if (err == ESP_OK) {
+        err = gpio_set_level(NOCTI_V4_ADS131_SYNC_RESET_GPIO, 0);
+    }
+    if (err == ESP_OK) {
+        err = gpio_set_level(NOCTI_V4_ADS131_CS_GPIO, 1);
+    }
     if (err != ESP_OK) {
         return err;
     }
-    err = gpio_set_level(NOCTI_V4_PCA_RESET_GPIO, 0);
+    const gpio_config_t resets = {
+        .pin_bit_mask = (1ULL << NOCTI_V4_PCA_RESET_GPIO) |
+                        (1ULL << NOCTI_V4_ADS131_SYNC_RESET_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    err = gpio_config(&resets);
+    if (err == ESP_OK) {
+        const gpio_config_t chip_select = {
+            .pin_bit_mask = 1ULL << NOCTI_V4_ADS131_CS_GPIO,
+            .mode = GPIO_MODE_OUTPUT,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE,
+        };
+        err = gpio_config(&chip_select);
+    }
+    if (err == ESP_OK) {
+        err = gpio_set_level(NOCTI_V4_PCA_RESET_GPIO, 0);
+    }
     if (err == ESP_OK) {
         err = gpio_set_level(NOCTI_V4_ADS131_SYNC_RESET_GPIO, 0);
     }

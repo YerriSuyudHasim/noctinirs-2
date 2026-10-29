@@ -12,3 +12,11 @@
 
 const char *nocti_v4_err_name(esp_err_t err);
 bool nocti_v4_parse_u32(const char *text, uint32_t *out_value);
+/* Subscribe and kick the calling task. Idle loops must wake inside the TWDT window.
+ * Failures are counted. Kick does not log: the ADS task calls it on the sample
+ * path. nocti_v4_task_wdt_log_pending() prints a new total from a slow task. */
+void nocti_v4_task_wdt_subscribe(void);
+void nocti_v4_task_wdt_kick(void);
+uint32_t nocti_v4_task_wdt_subscribe_errors(void);
+uint32_t nocti_v4_task_wdt_kick_errors(void);
+void nocti_v4_task_wdt_log_pending(void);

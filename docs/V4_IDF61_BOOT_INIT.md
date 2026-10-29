@@ -1,0 +1,77 @@
+# V4 IDF 6.1 board init origin
+
+Static record of where each boot stage came from, before and after the
+feat35 stage machine was brought into `firmware/v4-idf61`. This image was
+not flashed. A host test does not show that RESET stayed low on the pin.
+
+## Stable feat35 reference
+
+The stable init reference is `31fb2a9101fbb12a59e52506464d476e184bbdd9`,
+the tip of `origin/feat/35-ads131-acquisition`
+(`docs: record ADS131 acquisition build and host verification`).
+
+`main/app_main.c` and `components/nn2_board/nn2_board.c` at that tip are
+byte-identical to the same paths at:
+
+- `df796ba6a8d0c5d6d8bc4f30fde2aa2ffea3198d` (checkpoint on the V4 restart
+  branch, not an ancestor of the published feat/35 tip)
+- `edb70411d2d7cc3da529c92af375bbd21f7f6016` (ancestor of `df796ba`, on the
+  restart branch only; its subject is the ADS priority and 16 MiB layout)
+
+`edb7041` is the wrong citation for init structure. It is not on
+`origin/feat/35-ads131-acquisition`. The boot text matches, so it
+corroborates the stage list, and the published tip is the reference this
+port follows.
+
+## Before (head `ae4ddb2`)
+
+| Stage | Origin | Evidence |
+|---|---|---|
+| Boot sequence | Legacy V4 linear `app_main`. Later stages ran only while the previous `esp_err_t` stayed `ESP_OK`. | `firmware/v4-idf61/main/app_main.c:249-320` at `ae4ddb2` |
+| Emitter-safe order | V4. `gpio_config` first, then PCA RESET low, ADS reset low, CS high. No pulldown. | `nocti_v4_board.c:14-33` at `ae4ddb2` |
+| GPIO set | V4 pins: PCA RESET, ADS reset, CS, DRDY input. | same function, DRDY at lines 35-42 |
+| ADS bring-up | V4 `nocti_v4_ads_init`: reset, 8 kSPS program, 1024-sample qualification, CRC, `transfer_frame`. | `nocti_v4_ads.c` `hardware_reset`, `configure_8ksps`, `validate_rate`, `transfer_frame` |
+| Wi-Fi / NVS / netif | feat35 `nn2_config_init`, `nn2_wifi_init`, `nn2_net_init`, `nn2_wifi_start`, but only after the scheduler succeeded. | `v4_nn2_control.inc` `control_init` at `ae4ddb2` |
+| Config defaults | V4 `sdkconfig.defaults` (16 MB, 240 MHz, NN2 UDP, TWDT panic). Not feat35 `NN2_PROFILE_*`. | `firmware/v4-idf61/sdkconfig.defaults` |
+| Init fault handling | Per-stage `printf`, then skip the rest. No single fail label. PCA RESET was not re-asserted after a later owner failed. UDP did not start, so with the USB command console removed the host could not see the fault. | `app_main.c:289-313` at `ae4ddb2` |
+
+## After
+
+| Stage | Origin | What the image does |
+|---|---|---|
+| Boot sequence | feat35 stage list from `31fb2a9:main/app_main.c:101-225` | `nocti_v4_boot.h` flags. Runtime only if GPIO, core, I2C, PCA, and ADS are 1. Network if GPIO is 1. |
+| Emitter-safe order | feat35 `nn2_board_init_safe` (`31fb2a9:components/nn2_board/nn2_board.c:24-46`): level, then `gpio_config`, then level, with pulldown | V4 still drives ADS reset low and CS high in that same order. `nocti_v4_board_early_safe_init` |
+| GPIO set | V4 pin set kept | PCA RESET, ADS SYNC/RESET, CS, DRDY. Feat35 safe-init owns RESET only. |
+| ADS bring-up | V4 kept | `nocti_v4_ads_init` and `spi_device_polling_transmit` in `transfer_frame`. Feat35 `nn2_acquisition_init` (`31fb2a9:main/adapters/nn2_acquisition_esp.c:193`) and `nn2_ads131_transport.inc` polling start/end were not copied. |
+| Wi-Fi / NVS / netif | feat35 order kept, and it now runs after a later hardware failure | `control_init`: NVS, boot id, app comm, Wi-Fi init, UDP 3333, Wi-Fi start. USB provision (`nn2_provision_init` at feat35 `app_main.c` stage `USB diagnostics`) is not called. |
+| Config defaults | V4 `sdkconfig.defaults` kept. Runtime cap and Fs stay in the V4 control binding (`30` mA, Fs 2/4/5/8/10). | No feat35 profile Kconfig. |
+| Init fault handling | feat35 `fail:` label (`31fb2a9:main/app_main.c:225-248`): name the stage, hold emitters off, do not continue into acquisition | First zero flag is the stage. `health` carries `boot_stage`. A hardware failure re-asserts PCA RESET and latches `NN2_OPTICAL_FAULT` before the UDP task starts. `CLEAR` cannot clear it. |
+
+Feat35 `fail:` also disables the charger and releases the power-management
+I2C bus (`nn2_board_power_set_charge_enabled`, `nn2_board_power_release_i2c`).
+Those calls were not ported. This image has no charger owner.
+
+## Bus transactions that stay V4
+
+- PCA9956B writes and reads: `i2c_master_transmit` and
+  `i2c_master_transmit_receive` in
+  `firmware/v4-idf61/components/nocti_v4_i2c/nocti_v4_i2c.c`.
+- Async scan payloads: `i2c_master_transmit` in
+  `nocti_v4_async_led.c` (`submit_payload`).
+- ADS131 frames: `spi_device_polling_transmit` in
+  `nocti_v4_ads.c` `transfer_frame`.
+
+Feat35 LED bring-up (`31fb2a9:main/adapters/nn2_led_bringup.c`) uses the same
+IDF I2C calls with a different completion wait. That adapter was not
+substituted for the V4 driver. PCA RESET is still released only inside
+`program_sync_golden_path` after the I2C bus exists
+(`nocti_v4_led.c`, low time then recovery).
+
+## What still needs a board
+
+- RESET and ADS reset stay low across `gpio_config`, including the pulldown.
+- CS (active low, no pulldown) does not glitch low while its output is
+  enabled.
+- After a forced I2C or ADS init failure, `nn2ctl health` shows that
+  `boot_stage` and START stays rejected until reboot.
+- Charger behavior is unchanged because the charger path was not added.

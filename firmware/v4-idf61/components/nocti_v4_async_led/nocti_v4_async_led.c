@@ -11,6 +11,7 @@
 #include "freertos/task.h"
 
 #include "nocti_v4_common.h"
+#include "nocti_v4_rtos.h"
 
 #define PCA_LEDOUT0                         0x02u
 #define PCA_LEDOUT_ON                        0x01u
@@ -23,14 +24,14 @@
 #define ASYNC_COMMAND_TIMEOUT_MS             1000u
 #define ASYNC_TRANSACTION_TIMEOUT_MS         50u
 #define ASYNC_QUIESCE_TIMEOUT_MS             100u
-#define ASYNC_TASK_STACK_BYTES               4096u
-/* V4-7.2 keeps PCA I2C allocation away from Wi-Fi core 0, but fixes the
- * V4-7.1 serialized wait chain: a short LED owner handoff must not be repeatedly
- * preempted by the 8-kSPS ADS task. The priority-22 owner runs only long
- * enough to submit one prebuilt transaction, blocks for ISR completion,
- * publishes one static completion record, and blocks on its command queue. */
-#define ASYNC_TASK_PRIORITY                  22u
-#define ASYNC_TASK_CORE                      1
+#define ASYNC_TASK_STACK_BYTES               NOCTI_V4_RTOS_STACK_LED_BYTES
+/* PCA I2C stays on core 1, away from the Wi-Fi core. ADS is priority 23 and
+ * may preempt this task for one SPI frame (budget 80 us). The LED task only
+ * queues a prebuilt payload, blocks on the I2C completion notification, and
+ * publishes one static completion record. It must not poll, log, or hold a
+ * critical section across the transfer. */
+#define ASYNC_TASK_PRIORITY                  NOCTI_V4_RTOS_PRIO_LED
+#define ASYNC_TASK_CORE                      NOCTI_V4_RTOS_CORE_ACQ
 #define ASYNC_TASK_STACK_WORDS \
     (ASYNC_TASK_STACK_BYTES / sizeof(StackType_t))
 
@@ -1030,9 +1031,13 @@ static void async_led_task(void *argument)
     runtime->task_core = xPortGetCoreID();
     __atomic_store_n(&runtime->health->async_led_task_core, runtime->task_core,
                      __ATOMIC_RELEASE);
+    nocti_v4_task_wdt_subscribe();
     for (;;) {
         async_command_t command;
-        if (xQueueReceive(runtime->command_queue, &command, portMAX_DELAY) == pdTRUE) {
+        nocti_v4_task_wdt_kick();
+        nocti_v4_task_wdt_log_pending();
+        if (xQueueReceive(runtime->command_queue, &command,
+                          pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS)) == pdTRUE) {
             (void)nocti_v4_time_now_us(runtime->timebase,
                                        &command.dequeue_timestamp_us);
             const esp_err_t result = execute_async_command(runtime, &command);
@@ -1586,7 +1591,7 @@ void nocti_v4_async_led_print_timing_detail(const nocti_v4_async_led_t *async_le
            " i2c_live_queue_depth_api=UNAVAILABLE app_one_in_flight=1"
            " core0_v4_critical_sections=0 critical_section_max_us=0"
            " idf_driver_critical_duration=NOT_OBSERVABLE"
-           " consumer_blocking=xQueueReceive_portMAX_DELAY"
+           " consumer_blocking=xQueueReceive_1000ms_wdt_kick"
            " scan_producer_wait_ticks=0 scan_waits_for_completion=0"
            " completion_delivery=STATIC_SPSC_TO_SCHEDULER"
            " queue_send_call_semantics=WALL_SPAN_MAY_INCLUDE_LED_PREEMPTION"

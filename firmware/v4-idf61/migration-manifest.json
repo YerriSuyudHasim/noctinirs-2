@@ -23,9 +23,12 @@
     {
       "path": "components/nocti_v4_ads/nocti_v4_ads.c",
       "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
-      "active_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
+      "active_sha256": "12ecffcb77b5c3f98a43a6d46d853014331977355cd53ead21b38a2cde058e17",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
+        "Dark consumer subscribes to the task watchdog and waits at most one second",
+        "Failed ADS init removes the DRDY handler and SPI bus, then the tasks exit; SPI acquire waits at most 3 s"
       ]
     },
     {
@@ -48,11 +51,12 @@
     {
       "path": "components/nocti_v4_async_led/nocti_v4_async_led.c",
       "historical_sha256": "bd05bb16f584acd1b6da718820f575fc1cfa3b11eefb9fdc5eba769c7cea991b",
-      "active_sha256": "928bbbf49f9a721b0e2203b831d951b98022b9193363ea503cae1738651d1acb",
+      "active_sha256": "122abd96778e2f85f6ef354c007db4e9dd41a02c34dd0d78ca1e42d91e2df55a",
       "changes": [
         "Configuration-bus status labels follow the approved 100 kHz overlay",
         "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
-        "IDF6.1 compatibility: explicit ISR yield and direct-transaction completion proof before callback detach"
+        "IDF6.1 compatibility: explicit ISR yield and direct-transaction completion proof before callback detach",
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
       ]
     },
     {
@@ -76,16 +80,17 @@
     {
       "path": "components/nocti_v4_board/nocti_v4_board.c",
       "historical_sha256": "36e37ac65357d1d70a97614208924aff06ec4f2d670c274893c61d802391ddf8",
-      "active_sha256": "d7eb8d2126f01e71d462540e518f5b5ad566b2ea7bb75ab24446e4145d7693dc",
+      "active_sha256": "d74e54b54b761edee9b0dde71de6dfd8abd527693959756ac9839e21c4e64ae5",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
+        "Drive PCA RESET and ADS reset low before gpio_config, with pulldown, then drive them again"
       ]
     },
     {
       "path": "components/nocti_v4_common/CMakeLists.txt",
       "historical_sha256": "dd7c7842ee7df851305c1dc9ba532267bf5a1b5dba849cff26519854890a833f",
-      "active_sha256": "dd7c7842ee7df851305c1dc9ba532267bf5a1b5dba849cff26519854890a833f",
+      "active_sha256": "e7a8b4750ac6218dd3f63eb49e227285241a27c7f60ef2a982af299e622c1ef9",
       "changes": [
         "Line ending normalization only; runtime source retained"
       ]
@@ -93,15 +98,16 @@
     {
       "path": "components/nocti_v4_common/include/nocti_v4_ads_config.h",
       "historical_sha256": "1ec6e74d6aaf1ca24ac94ab10a3a91607f34e8b6e5ab5ead364a0e7fdf897c43",
-      "active_sha256": "9c9c25bfac14bcbcc317fbee4e16447ab720933aa3d661eba6ab9f887941a936",
+      "active_sha256": "de0759b84a24a5709f1e808b0fe85633ef4aea2af17929c0989142148222e2f2",
       "changes": [
-        "Use the active board approved dedicated SPI2 controller; electrical pin map unchanged"
+        "Use the active board approved dedicated SPI2 controller; electrical pin map unchanged",
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
       ]
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_common.h",
       "historical_sha256": "d1035b11d92fd7986d603ccbdef3fe0928e115f37279ff0dc8fb9adfcdc88ad8",
-      "active_sha256": "104337e7f54cc920dde71f88e8f10209f43cffb0edd0b9ddb069fdab2acf9c82",
+      "active_sha256": "2df8b42987631353e2cdd95dc0e67550f42765dfeabe768cce4abdf22a6b0cba",
       "changes": [
         "Migration identity; do not inherit historical target qualification claims"
       ]
@@ -109,7 +115,7 @@
     {
       "path": "components/nocti_v4_common/nocti_v4_common.c",
       "historical_sha256": "6a9e08453e7d0450dffa95889a287603f26f816e0aa5aea5ebcdeeaff5425df2",
-      "active_sha256": "6a9e08453e7d0450dffa95889a287603f26f816e0aa5aea5ebcdeeaff5425df2",
+      "active_sha256": "ac99bf71282bffafc1f38be57a5a586d9aec657f8bfb7c7a5d4a516d4a29faf4",
       "changes": [
         "Line ending normalization only; runtime source retained"
       ]
@@ -125,9 +131,10 @@
     {
       "path": "components/nocti_v4_health/include/nocti_v4_health.h",
       "historical_sha256": "cd4f7afa786aa90b5de8e8a8befcb2756036700375dd983df59ad6b5e53f5477",
-      "active_sha256": "cd4f7afa786aa90b5de8e8a8befcb2756036700375dd983df59ad6b5e53f5477",
+      "active_sha256": "24208bf972d6590cc3f40d3cfe4ba82c1a40da531efcb45ebf7d983978d214fc",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
       ]
     },
     {
@@ -233,9 +240,10 @@
     {
       "path": "components/nocti_v4_optical/nocti_v4_optical.c",
       "historical_sha256": "88027b1d4dcfa4fa2d45289c65145592a36a06b6ee9939131fd17f71c10dbdf9",
-      "active_sha256": "e4d06aaba58a81c04fce9f9b997dea2e15d44f5fdab92a0b18cc216e74bb3845",
+      "active_sha256": "11ce92c5901cb1a4a38ff02eb7740249a4cc98f27dcf5cb028181c1081351c22",
       "changes": [
-        "Fs2 extension: raw staging 128 to 256 records, allowing 200-sample slot plus ingest batch"
+        "Fs2 extension: raw staging 128 to 256 records, allowing 200-sample slot plus ingest batch",
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
       ]
     },
     {
@@ -258,16 +266,17 @@
     {
       "path": "components/nocti_v4_scheduler/include/nocti_v4_scheduler_config.h",
       "historical_sha256": "9e12701ba0c2ac3c05c66543b2063cd678bf2d974754c348158e4e7dc43afeab",
-      "active_sha256": "ed2a2b93d13a97a190a0b77252148b19b5354b0e17ad12f7055ee5246b0631af",
+      "active_sha256": "7ab2ac0efae12469fc071aef74a0b407f7d89d81bf628c7bbafdad9aca45092a",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "Scale slot/frame and 44%/50% OFF geometry for supported stopped-only rates"
+        "Scale slot/frame and 44%/50% OFF geometry for supported stopped-only rates",
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
       ]
     },
     {
       "path": "components/nocti_v4_scheduler/nocti_v4_scheduler.c",
       "historical_sha256": "83064d25c3e559e6a0d3c6cdb2ec8a01f0a3c27d9b942b85a5d9673e1f3ec3d1",
-      "active_sha256": "0540887498f421825b254fa2a09104bef71734a643c7de3f305de03de553d163",
+      "active_sha256": "623841a06c2e3ebca083a5d9fb8590a78728b244f8bd1eb310d9ceef2bb59ed8",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "Stopped-only Fs extension; atomic shared slot geometry, original 10 Hz defaults",
@@ -301,12 +310,14 @@
     {
       "path": "main/app_main.c",
       "historical_sha256": "e1b7168cd9769af113fcd14cc11076f3acb5be0061aa9e3cd5022366933c22b9",
-      "active_sha256": "039af21f9081073b2036ef778cb57a5c20c4229230f52a50cb2555eff72abe22",
+      "active_sha256": "5f6a5daeca4adced663bbf32ffc9f0608f820d3bcd983b2a980eb7d06eadb7e7",
       "changes": [
         "Guard SDK 6.1 and identify unqualified migration at boot/STATUS",
         "Expose SCAN_SET_FS command, 30 mA command limit and scaled OFF help",
         "Use PRIu32 for runtime uint32_t Fs/period values on Xtensa IDF6.1",
-        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
+        "Staged boot: runtime only after GPIO, I2C, PCA, and ADS; UDP still starts after a later hardware fault"
       ]
     },
     {
@@ -329,7 +340,19 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "7d19187163eab6590b05a79e09727fbab268da461c30b3e17e4434c592cdb21f"
+      "sha256": "19381d8b2d0f5d8d01f47bf5ed6a0d2c8399f98f3612facd9d449b27bded88d1"
+    },
+    {
+      "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
+      "sha256": "a7a5b46ce6a189c05293384f82e03d725b4c5d790aea691d65f2912f0d42ec1c"
+    },
+    {
+      "path": "components/nocti_v4_common/include/nocti_v4_backlog.h",
+      "sha256": "0c9f5e634ef32b179c7de0e7bb117093d0ebd6906e0e96295995baf307800a1e"
+    },
+    {
+      "path": "components/nocti_v4_common/include/nocti_v4_boot.h",
+      "sha256": "7e12e44fd8b1d8b563108244edf9f85a68b147a0047bce7e94ec39cd5b9fe3d4"
     }
   ],
   "shared_communication": [
@@ -351,7 +374,7 @@
     },
     {
       "path": "components/nn2_core/include/nn2_core_protocol.h",
-      "sha256": "6188eabba1916a2d02c8df2b66dbc00cfab98311c8def358b63867dcd43c5b89"
+      "sha256": "deaee72ada89d84e5b269bc241d9e4682c7aa675f36085226f375f69cd9f7bea"
     },
     {
       "path": "components/nn2_core/include/nn2_core_ring.h",
@@ -367,7 +390,7 @@
     },
     {
       "path": "components/nn2_core/src/nn2_core_protocol.c",
-      "sha256": "0cc092f0be8e866a4373b7a0c5cc788e7f7c57008724144f6b86f0a9609b7aef"
+      "sha256": "c49591c6b25d7b34f8d8130fe050f80127f571abadf73733a34ce69d69dc6154"
     },
     {
       "path": "components/nn2_core/src/nn2_core_ring.c",
@@ -383,7 +406,7 @@
     },
     {
       "path": "components/nn2_ports/CMakeLists.txt",
-      "sha256": "21c968b6d40f73bcd9f7bb39460dee31f167df019ff8bd949e8a922bc33eb37d"
+      "sha256": "586002a8a5296cd97afcf18d68c3344c9b15a6acb018d60e9fa5bc9e79bd0336"
     },
     {
       "path": "components/nn2_ports/include/nn2_port_adc.h",
@@ -415,7 +438,7 @@
     },
     {
       "path": "components/nn2_ports/include/nn2_port_optical.h",
-      "sha256": "9a88cf60b78dd297bdec561c531a93686c326ab7de4f3eb87a0c33f3cf050b73"
+      "sha256": "a017751fe30f56822c268dc582c754891f37249aec5bae90ec002e65f122da7f"
     },
     {
       "path": "components/nn2_ports/include/nn2_port_safety.h",
@@ -455,7 +478,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "a1575db0ecea244f836623c8b804da2350998e175d59dce5785dc44f078ebb92"
+      "sha256": "c51522360b6bb506b816b8a12db5b077680db302b6ed1446193c6eba5e6eb2a2"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",
