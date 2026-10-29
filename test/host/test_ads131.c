@@ -1,5 +1,6 @@
 #include "nn2_test.h"
 #include "nn2_ads131_logic.h"
+#include "nn2_ads131_events.h"
 #include "nn2_app_adc_diagnostic.h"
 #include <string.h>
 #include "ads131_golden.h"
@@ -21,18 +22,23 @@ typedef struct {
     unsigned calls, fail_at, mismatch, reset_calls, sync_calls;
     uint32_t reset_low_us, ready_ms;
     bool high, ready_failure, reset_failure, corrupt, bad_ack;
+    unsigned corrupt_at, padding_at, crc_padding_at;
+    bool fail_cleanup;
+    nn2_status_t transfer_failure;
 } fake_t;
 static fake_t fake;
 static uint64_t latched_edge;
 static uint32_t latched_serial;
 static bool edge_during_transfer;
 static nn2_ads131_logic_t dev;
+static nn2_ads131_events_t event_ring;
+static bool edge_during_take;
 static const nn2_ads131_config_t config = {8192000u,512u,8000u,8000000u};
 static nn2_status_t fake_transfer(void *ctx, const uint8_t *tx, uint8_t *rx)
 {
     fake_t *f=ctx; uint16_t cmd=(uint16_t)(((uint16_t)tx[0]<<8)|tx[1]);
     f->calls++;
-    if (f->fail_at == f->calls) return NN2_ERR_IO;
+    if (f->fail_at == f->calls) return f->transfer_failure ? f->transfer_failure : NN2_ERR_IO;
     memcpy(rx,golden[0],18u); rx[0]=(uint8_t)(f->pending>>8); rx[1]=(uint8_t)f->pending;
     f->pending=0x010fu;
     unsigned address=(cmd>>7)&0x3fu;
@@ -45,21 +51,25 @@ static nn2_status_t fake_transfer(void *ctx, const uint8_t *tx, uint8_t *rx)
         f->pending=(uint16_t)(0x4000u|(address<<7));
         if (f->bad_ack) f->pending^=1u;
     }
+    if (f->padding_at == f->calls) rx[2]=1u;
     uint16_t crc=oracle_crc(rx);rx[15]=(uint8_t)(crc>>8);rx[16]=(uint8_t)crc;
-    if (f->corrupt) rx[3]^=1u;
+    if (f->corrupt || f->corrupt_at == f->calls) rx[3]^=1u;
+    if (f->crc_padding_at == f->calls) rx[17]=1u;
     if (edge_during_transfer) ++latched_serial;
+    if (edge_during_transfer && dev.io.take_events) nn2_ads131_events_push(&event_ring,f->time+5u);
     f->time+=18u; return NN2_OK;
 }
 static nn2_status_t fake_reset(void *ctx,bool high)
 {
     fake_t *f=ctx; f->reset_calls++;f->high=high;
-    return f->reset_failure?NN2_ERR_IO:NN2_OK;
+    if (!high && dev.io.take_events) { event_ring.enabled=false; nn2_ads131_events_clear(&event_ring); }
+    return f->reset_failure || (f->fail_cleanup && f->calls) ? NN2_ERR_IO : NN2_OK;
 }
 static nn2_status_t fake_sync(void *ctx) { fake_t *f=ctx;f->sync_calls++;return NN2_OK; }
 static void fake_delay(void *ctx,uint32_t us)
 {
     fake_t *f=ctx;f->time+=us;
-    if (!f->high) { f->reset_low_us=us; f->regs[0]=0x24abu;f->pending=0x050fu; }
+    if (!f->high) { f->reset_low_us=us; f->regs[0]=0x24abu;f->pending=0xff24u; }
 }
 static nn2_status_t fake_ready(void *ctx,uint32_t ms)
 {
@@ -69,8 +79,49 @@ static uint64_t fake_now(void *ctx) { return ((fake_t*)ctx)->time; }
 static void bind_fake(void)
 {
     memset(&fake,0,sizeof(fake));fake.mismatch=99u;
-    nn2_ads131_io_t io={&fake,fake_transfer,fake_reset,fake_sync,fake_delay,fake_ready,fake_now,NULL};
+    nn2_ads131_io_t io={&fake,fake_transfer,fake_reset,fake_sync,fake_delay,fake_ready,fake_now,NULL,NULL};
     nn2_ads131_logic_bind(&dev,io);
+}
+/* User-supplied boot 38 / image 16699b46... capture, 2026-10-29 KST.
+ * The aligned counterpart is an ANALYTICAL hypothesis, not a second capture.
+ * No shift/correction is performed in the production path or this replay. */
+static const uint8_t boot38_rx[18] = {
+    0x7f,0x92,0,0,0,0,0,0,0,0,0,0,0,0,0,0x6e,0x7f,0
+};
+static const uint8_t boot38_aligned_hypothesis[18] = {
+    0xff,0x24,0,0,0,0,0,0,0,0,0,0,0,0,0,0xdc,0xfe,0
+};
+static const uint8_t *startup_replay;
+static nn2_status_t replay_transfer(void *ctx,const uint8_t *tx,uint8_t *rx)
+{
+    nn2_status_t result=fake_transfer(ctx,tx,rx);
+    if (result==NN2_OK && fake.calls==1u) memcpy(rx,startup_replay,18u);
+    return result;
+}
+static void captured_boot38_startup_regression(void)
+{
+    TEST_ASSERT_EQUAL_HEX16(0x8fcdu,oracle_crc(boot38_rx));
+    TEST_ASSERT_EQUAL_HEX16(0xdcfeu,oracle_crc(boot38_aligned_hypothesis));
+    bind_fake(); startup_replay=boot38_rx; dev.io.transfer=replay_transfer;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_initialize(&dev,&config));
+    TEST_ASSERT_EQUAL(1u,fake.calls); TEST_ASSERT_FALSE(fake.high);
+    TEST_ASSERT_EQUAL(NN2_ADC_FAULT_CRC,dev.observation.fault);
+    TEST_ASSERT_EQUAL(NN2_ADS131_STAGE_RREG,dev.startup_failure.stage);
+    TEST_ASSERT_EQUAL_HEX16(0xa000u,dev.startup_failure.command);
+    TEST_ASSERT_EQUAL_HEX16(0x8fcdu,dev.startup_failure.crc_calculated);
+    TEST_ASSERT_EQUAL_HEX16(0x6e7fu,dev.startup_failure.crc_received);
+    TEST_ASSERT_EQUAL_MEMORY(boot38_rx,dev.startup_failure.rx,18u);
+    TEST_ASSERT_EQUAL(0u,dev.startup_failure.response_padding);
+    TEST_ASSERT_EQUAL(0u,dev.startup_failure.crc_padding);
+    bind_fake(); startup_replay=boot38_aligned_hypothesis; dev.io.transfer=replay_transfer;
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_initialize(&dev,&config));
+    TEST_ASSERT_EQUAL(14u,fake.calls); TEST_ASSERT_FALSE(dev.startup_failure.valid);
+    /* A later corrupt frame still fails; valid first response is no waiver. */
+    bind_fake(); startup_replay=boot38_aligned_hypothesis; dev.io.transfer=replay_transfer;
+    fake.corrupt_at=2u;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_initialize(&dev,&config));
+    TEST_ASSERT_EQUAL(2u,dev.startup_failure.transaction);
+    TEST_ASSERT_EQUAL(NN2_ADC_FAULT_CRC,dev.startup_failure.fault);
 }
 static void running(void)
 {
@@ -78,6 +129,76 @@ static void running(void)
     TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_start(&dev));
     TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_service(&dev,1u));
     TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_service(&dev,1u));
+}
+static uint64_t event_latch(void *ctx,uint32_t *serial)
+{ (void)ctx; *serial=event_ring.serial; return event_ring.latest_us; }
+static uint32_t event_take(void *ctx,nn2_ads131_event_t *event,uint32_t *dropped)
+{
+    (void)ctx;
+    if (edge_during_take) { edge_during_take=false; nn2_ads131_events_push(&event_ring,++fake.time); }
+    return nn2_ads131_events_take(&event_ring,event,dropped);
+}
+static void event_running(void)
+{
+    running(); memset(&event_ring,0,sizeof(event_ring)); event_ring.enabled=true; edge_during_take=false;
+    dev.io.drdy_latch=event_latch; dev.io.take_events=event_take;
+}
+static void recorded_events_are_work_not_notification_counts(void)
+{
+    event_running(); fake.time+=125u;
+    nn2_ads131_events_push(&event_ring,fake.time);
+    /* Any wakeup count, including coalesced control/DRDY bits, cannot create
+     * extra events. The first two legacy settling frames are already drained. */
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_service(&dev,0xffffffffu));
+    TEST_ASSERT_EQUAL(1u,dev.count); TEST_ASSERT_EQUAL(0u,dev.observation.lost);
+    TEST_ASSERT_EQUAL_UINT64(event_ring.latest_us,dev.items[0].drdy_us);
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_service(&dev,77u));
+    TEST_ASSERT_EQUAL(1u,dev.count);
+    fake.time+=125u; edge_during_take=true;
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_service(&dev,0u));
+    TEST_ASSERT_EQUAL(2u,dev.count); /* ISR arriving during snapshot is timely. */
+}
+static void boot42_backlog_and_runtime_snapshot(void)
+{
+    event_running();
+    for (unsigned i=0;i<26u;++i) { fake.time+=125u; nn2_ads131_events_push(&event_ring,fake.time); }
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_service(&dev,1u));
+    TEST_ASSERT_EQUAL(NN2_ADC_FAULT_GAP,dev.observation.fault);
+    TEST_ASSERT_EQUAL(26u,dev.observation.lost); TEST_ASSERT_EQUAL(25u,dev.observation.adc_missed);
+    TEST_ASSERT_EQUAL(1u,dev.observation.loss_unknown); TEST_ASSERT_EQUAL(0u,dev.observation.crc_bad);
+    TEST_ASSERT_TRUE(dev.runtime_failure.valid); TEST_ASSERT_EQUAL(26u,dev.runtime_failure.pending);
+    TEST_ASSERT_EQUAL(26u,dev.runtime_failure.observed_serial);
+    TEST_ASSERT_EQUAL(18u,dev.runtime_failure.dropped); TEST_ASSERT_FALSE(event_ring.enabled);
+    nn2_ads131_runtime_failure_t first=dev.runtime_failure;
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_stop(&dev));
+    TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_initialize(&dev,&config));
+    TEST_ASSERT_EQUAL_MEMORY(&first,&dev.runtime_failure,sizeof(first));
+}
+static void recorded_event_stale_and_transfer_crossing(void)
+{
+    event_running(); fake.time+=125u; nn2_ads131_events_push(&event_ring,fake.time); fake.time+=125u;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_service(&dev,0u));
+    TEST_ASSERT_EQUAL(NN2_ADC_FAULT_GAP,dev.runtime_failure.fault);
+    TEST_ASSERT_EQUAL(1u,dev.runtime_failure.pending);
+    event_running(); fake.time+=125u; nn2_ads131_events_push(&event_ring,fake.time);
+    edge_during_transfer=true;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_service(&dev,0u));
+    edge_during_transfer=false;
+    TEST_ASSERT_EQUAL(2u,dev.runtime_failure.observed_serial);
+    TEST_ASSERT_EQUAL(1u,dev.observation.lost); TEST_ASSERT_EQUAL(0u,dev.count);
+}
+static void event_ring_gating_clear_and_wrap(void)
+{
+    nn2_ads131_events_t q={0}; nn2_ads131_event_t event; uint32_t dropped;
+    nn2_ads131_events_push(&q,100u); TEST_ASSERT_EQUAL(0u,q.serial);
+    q.enabled=true; q.head=q.tail=UINT32_MAX-1u; q.serial=UINT32_MAX-1u;
+    nn2_ads131_events_push(&q,100u); nn2_ads131_events_push(&q,225u); nn2_ads131_events_push(&q,350u);
+    TEST_ASSERT_EQUAL(3u,nn2_ads131_events_take(&q,&event,&dropped));
+    TEST_ASSERT_EQUAL(UINT32_MAX,event.serial); TEST_ASSERT_EQUAL_UINT64(100u,event.time_us);
+    TEST_ASSERT_EQUAL(1u,q.serial); TEST_ASSERT_EQUAL(0u,dropped);
+    TEST_ASSERT_EQUAL(0u,nn2_ads131_events_take(&q,&event,&dropped));
+    nn2_ads131_events_push(&q,475u); nn2_ads131_events_clear(&q);
+    TEST_ASSERT_EQUAL(2u,q.serial); TEST_ASSERT_EQUAL(0u,nn2_ads131_events_take(&q,&event,&dropped));
 }
 static void complete_vectors(void)
 {
@@ -126,6 +247,82 @@ static void initialize_pipeline_readback(void)
     TEST_ASSERT_EQUAL_HEX16(0u,fake.regs[4]);TEST_ASSERT_EQUAL(14u,fake.calls);
     TEST_ASSERT_TRUE(fake.reset_low_us>250u);TEST_ASSERT_EQUAL(20u,fake.ready_ms);
     TEST_ASSERT_EQUAL(NN2_ADC_READY,dev.observation.state);
+    TEST_ASSERT_FALSE(dev.startup_failure.valid);
+}
+/* Synthetic injections, not a replay of the reported board fault. Exercise
+ * both halves of RREG/WREG so the NULL response retains its register address. */
+static void startup_first_failure_snapshot(void)
+{
+    static const uint16_t commands[14] = {
+        0xa000u,0u,0x6100u,0u,0xa100u,0u,0x6180u,0u,0xa180u,0u,0x6200u,0u,0xa200u,0u
+    };
+    static const uint8_t addresses[14] = {0,0,2,2,2,2,3,3,3,3,4,4,4,4};
+    static const nn2_ads131_stage_t stages[14] = {
+        NN2_ADS131_STAGE_RREG,NN2_ADS131_STAGE_RREG_RESPONSE,
+        NN2_ADS131_STAGE_WREG,NN2_ADS131_STAGE_WREG_RESPONSE,
+        NN2_ADS131_STAGE_RREG,NN2_ADS131_STAGE_RREG_RESPONSE,
+        NN2_ADS131_STAGE_WREG,NN2_ADS131_STAGE_WREG_RESPONSE,
+        NN2_ADS131_STAGE_RREG,NN2_ADS131_STAGE_RREG_RESPONSE,
+        NN2_ADS131_STAGE_WREG,NN2_ADS131_STAGE_WREG_RESPONSE,
+        NN2_ADS131_STAGE_RREG,NN2_ADS131_STAGE_RREG_RESPONSE
+    };
+    for (unsigned at=1u;at<=14u;++at) {
+        bind_fake(); fake.corrupt_at=at;
+        TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_initialize(&dev,&config));
+        const nn2_ads131_startup_failure_t *f=&dev.startup_failure;
+        TEST_ASSERT_TRUE(f->valid); TEST_ASSERT_TRUE(f->tx_valid); TEST_ASSERT_TRUE(f->rx_valid);
+        TEST_ASSERT_EQUAL(at,f->transaction); TEST_ASSERT_EQUAL(stages[at-1u],f->stage);
+        TEST_ASSERT_EQUAL(commands[at-1u],f->command);
+        TEST_ASSERT_EQUAL(at>1u?commands[at-2u]:0u,f->previous_command);
+        TEST_ASSERT_EQUAL(addresses[at-1u],f->address);
+        uint8_t expected_tx[18]={0};
+        expected_tx[0]=(uint8_t)(commands[at-1u]>>8);
+        expected_tx[1]=(uint8_t)commands[at-1u];
+        if (at==3u) { expected_tx[3]=0x01u; expected_tx[4]=0x10u; }
+        if (at==7u) { expected_tx[3]=0x0fu; expected_tx[4]=0x0au; }
+        TEST_ASSERT_EQUAL_MEMORY(expected_tx,f->tx,sizeof(expected_tx));
+        if (at==1u) { TEST_ASSERT_EQUAL(0xffu,f->rx[0]); TEST_ASSERT_EQUAL(0x24u,f->rx[1]); }
+        TEST_ASSERT_EQUAL(NN2_ADC_FAULT_CRC,f->fault); TEST_ASSERT_FALSE(f->crc_match);
+        TEST_ASSERT_EQUAL(0u,f->response_padding); TEST_ASSERT_EQUAL(0u,f->crc_padding);
+        TEST_ASSERT_EQUAL(oracle_crc(f->rx),f->crc_calculated);
+        TEST_ASSERT_EQUAL((uint16_t)(((uint16_t)f->rx[15]<<8)|f->rx[16]),f->crc_received);
+        nn2_ads131_startup_failure_t before=*f;
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_stop(&dev));
+        fake.corrupt_at=0u;
+        TEST_ASSERT_EQUAL(NN2_OK,nn2_ads131_initialize(&dev,&config));
+        TEST_ASSERT_EQUAL_MEMORY(&before,f,sizeof(before));
+        fake.corrupt_at=fake.calls+1u;
+        TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_initialize(&dev,&config));
+        TEST_ASSERT_EQUAL_MEMORY(&before,f,sizeof(before));
+    }
+}
+static void startup_padding_and_timeout_diagnostics(void)
+{
+    for (unsigned pad=0;pad<2u;++pad) {
+        bind_fake();
+        if (pad) fake.crc_padding_at=2u; else fake.padding_at=2u;
+        TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_initialize(&dev,&config));
+        TEST_ASSERT_TRUE(dev.startup_failure.crc_match);
+        TEST_ASSERT_EQUAL(pad?0u:1u,dev.startup_failure.response_padding);
+        TEST_ASSERT_EQUAL(pad?1u:0u,dev.startup_failure.crc_padding);
+    }
+    bind_fake(); fake.fail_at=2u; fake.transfer_failure=NN2_ERR_TIMEOUT; fake.fail_cleanup=true;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_initialize(&dev,&config));
+    TEST_ASSERT_TRUE(dev.startup_failure.valid); TEST_ASSERT_FALSE(dev.startup_failure.rx_valid);
+    TEST_ASSERT_EQUAL(NN2_ERR_TIMEOUT,dev.startup_failure.result);
+    TEST_ASSERT_EQUAL(NN2_ADC_FAULT_SPI,dev.startup_failure.fault);
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,dev.startup_failure.cleanup_result);
+    TEST_ASSERT_EQUAL(NN2_ADC_FAULT_RESET,dev.observation.fault);
+    static const uint8_t unavailable[18]={0};
+    TEST_ASSERT_EQUAL_MEMORY(unavailable,dev.startup_failure.rx,18u);
+    bind_fake(); fake.ready_failure=true;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_initialize(&dev,&config));
+    TEST_ASSERT_EQUAL(NN2_ADS131_STAGE_READY,dev.startup_failure.stage);
+    TEST_ASSERT_EQUAL(NN2_ERR_TIMEOUT,dev.startup_failure.result);
+    TEST_ASSERT_FALSE(dev.startup_failure.rx_valid);
+    running(); fake.corrupt=true;
+    TEST_ASSERT_EQUAL(NN2_ERR_IO,nn2_ads131_service(&dev,1u));
+    TEST_ASSERT_FALSE(dev.startup_failure.valid); /* Runtime still fails closed. */
 }
 static void mismatch_rollback(void)
 {
@@ -280,6 +477,10 @@ static void stale_drdy_rejected(void)
 }
 void test_ads131_suite(void)
 {
+    RUN_TEST(recorded_events_are_work_not_notification_counts); RUN_TEST(boot42_backlog_and_runtime_snapshot);
+    RUN_TEST(recorded_event_stale_and_transfer_crossing); RUN_TEST(event_ring_gating_clear_and_wrap);
+    RUN_TEST(captured_boot38_startup_regression);
+    RUN_TEST(startup_first_failure_snapshot); RUN_TEST(startup_padding_and_timeout_diagnostics);
     RUN_TEST(drdy_timestamp_and_crossing); RUN_TEST(stale_drdy_rejected);
     RUN_TEST(complete_vectors);RUN_TEST(corruption_output_validity);RUN_TEST(signed_and_crc_answers);
     RUN_TEST(tuple_rejection);RUN_TEST(initialize_pipeline_readback);RUN_TEST(mismatch_rollback);

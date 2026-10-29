@@ -20,7 +20,27 @@ static bool dispatch(device_t *d, bool *discard_events)
             (void)xTaskNotifyWait(0u, UINT32_MAX, &discarded, 0u);
             *discard_events = true;
         }
-        reply.result = nn2_ads131_start(&d->logic); break;
+        reply.result = nn2_ads131_start(&d->logic);
+        if (reply.result == NN2_OK && d->logic.io.take_events) {
+            /* V4 startup handoff: service/discard the two fast-start frames
+             * in the ADC owner before acknowledging START to the LED caller. */
+            uint64_t end = now_us(d) + 20000u;
+            if (end > req.deadline) end = req.deadline;
+            while (d->logic.settling && d->logic.observation.state == NN2_ADC_RUNNING) {
+                if (now_us(d) >= end) {
+                    d->logic.observation.drdy_timeouts++;
+                    d->logic.observation.loss_unknown++;
+                    reply.result = nn2_ads131_fail(&d->logic, NN2_ADC_FAULT_DRDY);
+                    break;
+                }
+                (void)xTaskNotifyWait(0u, UINT32_MAX, &discarded, 1u);
+                if (now_us(d) >= end) continue;
+                if (nn2_ads131_service(&d->logic, 0u) != NN2_OK) {
+                    reply.result = NN2_ERR_IO; break;
+                }
+            }
+        }
+        break;
     case CMD_STOP:
         reply.result = nn2_ads131_stop(&d->logic);
         /* STOP can fail into FAULT after reset was attempted. Neither outcome
@@ -44,12 +64,16 @@ static void owner_iteration(device_t *d, uint32_t got)
         d->watchdog = false; (void)nn2_ads131_fail(&d->logic, NN2_ADC_FAULT_WATCHDOG);
     }
     if (!discard_events && d->logic.observation.state == NN2_ADC_RUNNING) {
-        uint32_t pending = 0u;
-        (void)xTaskNotifyWait(0u, UINT32_MAX, &pending, 0u);
-        /* Combine events captured before dispatch with arrivals during it.
-         * Existing service coalescence handling faults instead of stale catch-up.
-         * Later arrivals remain pending for the next iteration. */
-        (void)nn2_ads131_service(&d->logic, got + (pending & 0x7fffffffu));
+        if (d->logic.io.take_events) {
+            /* Production: the ring is the record of work. Notification bits
+             * only wake the owner and must never be treated as sample counts. */
+            (void)nn2_ads131_service(&d->logic, 0u);
+        } else {
+            /* Legacy count-only host seam, without hardware edge timestamps. */
+            uint32_t pending = 0u;
+            (void)xTaskNotifyWait(0u, UINT32_MAX, &pending, 0u);
+            (void)nn2_ads131_service(&d->logic, got + (pending & 0x7fffffffu));
+        }
     }
 }
 static TickType_t wait_ticks(uint64_t remaining_us)
