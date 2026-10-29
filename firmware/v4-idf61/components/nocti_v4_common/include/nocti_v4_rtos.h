@@ -48,6 +48,8 @@
 #define NOCTI_V4_RTOS_BUDGET_ADS_SERVICE_US 80u
 #define NOCTI_V4_RTOS_BUDGET_LED_SUBMIT_US 40u
 #define NOCTI_V4_RTOS_BUDGET_SCHED_HANDOFF_US 50u
+/* Idle wait used to kick the task watchdog. The SDK TWDT timeout is 5 s. */
+#define NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS 1000u
 
 _Static_assert(NOCTI_V4_RTOS_PRIO_ADS > NOCTI_V4_RTOS_PRIO_LED,
                "ADS must preempt the LED owner");

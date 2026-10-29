@@ -34,7 +34,7 @@ PSRAM stays off: IO35–37 belong to the ADS SPI bus.
 
 ```text
 DRDY ISR (IRAM, core of the GPIO service)
-  |  SPSC event ring, sequence++, notify
+  |  firmware SPSC event ring of 128, sequence++, notify
   v
 nocti_v4_ads prio 23
   |  one SPI + CRC, raw SPSC + sequence
@@ -98,11 +98,39 @@ the ADS bus. That does not make the backlog a memory-capacity fault.
    multi-sample FIFO, so those older events must not be read as distinct
    samples. The running rule now drops each overwritten event, counts it in
    `adc_missed`, `adc_missed_backlog`, and `adc_backlog_catchup`, and reads
-   only the newest event that has no successor and is younger than 1 ms.
-   A remainder of 16, or a newest event already 1 ms old, still faults
-   `EVENT_BACKLOG` and counts every pending event. A sequence hole still
-   faults `SEQUENCE_GAP`. Startup qualification still rejects a remainder of
-   2. CRC, status, SPI, raw-ring overflow, and STOP are unchanged.
+   only the newest event that has no successor, a known age, and is younger
+   than 1 ms. At 8 kSPS that 1 ms window is 8 samples, so a remainder of 8
+   faults as well. The two checks are the same window. A failed or backwards
+   clock is an unknown age and faults; it is not treated as a fresh sample.
+   A sequence hole still faults `SEQUENCE_GAP`. Startup qualification still
+   rejects a remainder of 2. CRC, status, SPI, raw-ring overflow, and STOP
+   are unchanged.
+
+Catch-up does not clear the loss. Every overwritten event increments
+`adc_missed`, `adc_missed_backlog`, and `adc_backlog_catchup`, and both
+`health` and `timing` print those three counters first, next to
+`boot82_bound=0`. **Boot82 is fixed only when an on-target `health` report
+after the measurement runs shows `adc_missed=0` and `adc_backlog_catchup=0`.**
+The agreed bound is zero on both counters for each 10-second run below. One
+catch-up is one DRDY the ADS task did not service inside its period, which is
+the failure this change is meant to remove. A non-zero value keeps the issue
+open. `event_depth_max` should stay at most 1 on that same run.
+
+The host SPSC in `nocti_v4_backlog.h` has capacity 8. That model only checks
+the index rule. The firmware DRDY ring remains 128
+(`NOCTI_V4_DRDY_EVENT_RING_CAPACITY`).
+
+`adc_service_over_budget` counts end-to-end service time, completion timestamp
+minus the DRDY timestamp, against the 80 µs budget. `spi_*` remains the SPI
+transaction alone. `service_*` is the end-to-end time. An unordered timestamp
+pair increments `service_unknown` and the over-budget counter.
+
+ADS, LED, and the scheduler subscribe to `esp_task_wdt` and kick at least once
+a second. Their idle waits are 1 s, inside the 5 s SDK timeout
+(`CONFIG_ESP_TASK_WDT_TIMEOUT_S`). Panic stays at the SDK default. A task
+stuck with interrupts masked for longer than that timeout can still evade the
+watchdog; that case is a bench measurement, not something this subscription
+claims to catch.
 
 `df796ba` put this project's ADS priority back to 20 under LED 22 and
 scheduler 21. That is the same starvation order boot82 hit. It was not copied.
@@ -136,18 +164,19 @@ python tools/nn2ctl.py timing
 
 Record the image hash, IDF version, and these fields together:
 
-- `event_depth_max`, `adc_missed`, `adc_missed_backlog`, `adc_backlog_catchup`
-- `adc_sequence_gap`, `crc_bad`, `spi_errors`, `drdy_event_overflow`
-- `spi_min_us`, `spi_max_us`, `spi_avg_us`, `spi_ge100`, `service_over_budget`
+- `adc_missed`, `adc_backlog_catchup`, `adc_missed_backlog`, `boot82_bound`
+- `event_depth_max`, `adc_sequence_gap`, `crc_bad`, `spi_errors`
+- `spi_min_us`, `spi_max_us`, `spi_avg_us`, `spi_ge100`
+- `service_min_us`, `service_max_us`, `service_avg_us`, `service_over_budget`
 - `lag_max_us`, `lag_ge250`, `sched_deferred_max_us`
 - `ads_hwm_words`, `led_hwm_words`, `sched_hwm_words`
 
-A useful first run keeps depth max at 1, catch-up at 0, CRC/SPI/status at 0,
-`spi_ge100` at 0, and `lag_ge250` at 0, with ADS high-water still above about
-128 words. Any other result is evidence, not a pass. Repeat at Fs 2, where a
-slot is 25 ms and the raw stage is the limiting buffer, and once with the
-host sending `health` during the run. STOP must still end in `STOPPED` or a
-sticky fault, never a fabricated stopped success.
+The bound that closes boot82 is `adc_missed=0` and `adc_backlog_catchup=0`,
+with `event_depth_max` at most 1, on the Fs 10 run and again on the Fs 2 run.
+CRC, SPI, and status stay 0, `service_over_budget` stays 0, and the ADS
+high-water stays above about 128 words. Any catch-up or miss leaves boot82
+open. Repeat once with `health` during the run. STOP must still end in
+`STOPPED` or a sticky fault.
 
 ## References used
 

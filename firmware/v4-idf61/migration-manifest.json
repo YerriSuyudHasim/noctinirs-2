@@ -23,7 +23,7 @@
     {
       "path": "components/nocti_v4_ads/nocti_v4_ads.c",
       "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
-      "active_sha256": "bb08feb286abe21bedd3d94314f059a0f9e055d14f0e601ec1d9e924abb46535",
+      "active_sha256": "d44e43696f67b2fbd27bfad7b42e9280470d951a14873e1e1fc0b10bc1dbc38d",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
@@ -49,7 +49,7 @@
     {
       "path": "components/nocti_v4_async_led/nocti_v4_async_led.c",
       "historical_sha256": "bd05bb16f584acd1b6da718820f575fc1cfa3b11eefb9fdc5eba769c7cea991b",
-      "active_sha256": "f458ac14d94eb12ce767ac1a83981117f25f1b7f465126de4aa85b357659d145",
+      "active_sha256": "7558cff6e0aa2bf082ca1176c8d66ce4cf64c025a2b5b17549e61e2241333fb2",
       "changes": [
         "Configuration-bus status labels follow the approved 100 kHz overlay",
         "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
@@ -87,7 +87,7 @@
     {
       "path": "components/nocti_v4_common/CMakeLists.txt",
       "historical_sha256": "dd7c7842ee7df851305c1dc9ba532267bf5a1b5dba849cff26519854890a833f",
-      "active_sha256": "dd7c7842ee7df851305c1dc9ba532267bf5a1b5dba849cff26519854890a833f",
+      "active_sha256": "2feaa3bc1949b5e70b841b7f81d3bb8842395f9de4e2c6a204aec25319baff09",
       "changes": [
         "Line ending normalization only; runtime source retained"
       ]
@@ -104,7 +104,7 @@
     {
       "path": "components/nocti_v4_common/include/nocti_v4_common.h",
       "historical_sha256": "d1035b11d92fd7986d603ccbdef3fe0928e115f37279ff0dc8fb9adfcdc88ad8",
-      "active_sha256": "104337e7f54cc920dde71f88e8f10209f43cffb0edd0b9ddb069fdab2acf9c82",
+      "active_sha256": "987e0cb731d67844d7e7bbb371f7f438cdfa0ecfdeeef3a772d1069d867b1ff4",
       "changes": [
         "Migration identity; do not inherit historical target qualification claims"
       ]
@@ -112,7 +112,7 @@
     {
       "path": "components/nocti_v4_common/nocti_v4_common.c",
       "historical_sha256": "6a9e08453e7d0450dffa95889a287603f26f816e0aa5aea5ebcdeeaff5425df2",
-      "active_sha256": "6a9e08453e7d0450dffa95889a287603f26f816e0aa5aea5ebcdeeaff5425df2",
+      "active_sha256": "65fa1d8ed8106fd581127d3416a14704597f66c2529b08c2861fa1dd5106cff0",
       "changes": [
         "Line ending normalization only; runtime source retained"
       ]
@@ -128,7 +128,7 @@
     {
       "path": "components/nocti_v4_health/include/nocti_v4_health.h",
       "historical_sha256": "cd4f7afa786aa90b5de8e8a8befcb2756036700375dd983df59ad6b5e53f5477",
-      "active_sha256": "8aa3b8ffc6bd58cf7436e8374ea4f7827b17f8edb925aaab2e73b2035851b1b0",
+      "active_sha256": "d7b29d4228d040a21027fce05971a633debed4648ac001ca816db5fd3ca929d3",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
@@ -273,7 +273,7 @@
     {
       "path": "components/nocti_v4_scheduler/nocti_v4_scheduler.c",
       "historical_sha256": "83064d25c3e559e6a0d3c6cdb2ec8a01f0a3c27d9b942b85a5d9673e1f3ec3d1",
-      "active_sha256": "0540887498f421825b254fa2a09104bef71734a643c7de3f305de03de553d163",
+      "active_sha256": "91275c8e42879e0b151e8e9b0e6e0ff8e4da1375f6121fe6f4d091d3c278bd13",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "Stopped-only Fs extension; atomic shared slot geometry, original 10 Hz defaults",
@@ -336,15 +336,15 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "ec752363adab15dfef4bd317f32de98fd292c4808c38d55f7d1522fc669c271f"
+      "sha256": "984a233e33707f6a2a0ce70c2e680870ae240c6c6c11c819e41479e5f3cddcd2"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
-      "sha256": "46d2afaa815c1e830571ad117d0a091c06be4bcc2cdb7333af70e3dfa36ec6b8"
+      "sha256": "a95c886d0f947423a00b2a60aeb084b2718be104c4990cce428c44b1e7fa1e51"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_backlog.h",
-      "sha256": "94a2f33811f5f039a8c679392d4669f2b45a70f3f7ae3b10f4c2fdf1fc71f3b1"
+      "sha256": "0c9f5e634ef32b179c7de0e7bb117093d0ebd6906e0e96295995baf307800a1e"
     }
   ],
   "shared_communication": [
@@ -470,7 +470,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "d08430f828fa45a393c21cf11d1468cc568746af02fc778ec008fa55de9dea62"
+      "sha256": "c51522360b6bb506b816b8a12db5b077680db302b6ed1446193c6eba5e6eb2a2"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",

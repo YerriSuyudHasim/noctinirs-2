@@ -239,16 +239,18 @@ def parse_diag(text):
     if fields.get(kind) != "1":
         raise ValueError("diagnostic version")
     if kind == "v4health":
-        required = ("adc_ok", "adc_missed", "adc_missed_backlog", "adc_backlog_catchup",
-                    "adc_sequence_gap", "crc_bad", "spi_errors", "event_depth_max",
-                    "frames")
+        required = ("boot82_bound", "adc_ok", "adc_missed", "adc_missed_backlog",
+                    "adc_backlog_catchup", "adc_sequence_gap", "crc_bad",
+                    "spi_errors", "event_depth_max", "frames")
         if fields.get("frames") == "ACQ1":
             raise ValueError("health must not claim ACQ1")
     else:
-        required = ("spi_min_us", "spi_max_us", "spi_avg_us", "spi_lt40", "spi_ge100",
-                    "lag_max_us", "lag_ge250", "event_depth_max", "ads_hwm_words",
-                    "led_hwm_words", "sched_hwm_words", "service_over_budget",
-                    "cpu")
+        required = ("adc_missed", "adc_backlog_catchup", "adc_missed_backlog",
+                    "boot82_bound", "spi_min_us", "spi_max_us", "spi_avg_us",
+                    "spi_lt40", "spi_ge100", "service_min_us", "service_max_us",
+                    "service_avg_us", "service_over_budget", "lag_max_us",
+                    "lag_ge250", "event_depth_max", "ads_hwm_words",
+                    "led_hwm_words", "sched_hwm_words", "cpu")
     missing = [name for name in required if name not in fields]
     if missing:
         raise ValueError("diagnostic missing " + ",".join(missing))

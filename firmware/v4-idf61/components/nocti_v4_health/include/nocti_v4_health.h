@@ -239,6 +239,14 @@ typedef struct {
     uint32_t adc_backlog_catchup;
     uint32_t adc_queue_lag_max_us;
     uint32_t adc_service_over_budget;
+    uint32_t adc_service_time_unknown;
+    uint32_t adc_service_min_us;
+    uint32_t adc_service_max_us;
+    uint32_t adc_service_avg_us;
+    uint32_t adc_service_lt_80_us;
+    uint32_t adc_service_80_to_124_us;
+    uint32_t adc_service_125_to_249_us;
+    uint32_t adc_service_ge_250_us;
     uint32_t spi_service_lt_40_us;
     uint32_t spi_service_40_to_59_us;
     uint32_t spi_service_60_to_79_us;

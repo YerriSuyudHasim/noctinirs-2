@@ -1031,9 +1031,12 @@ static void async_led_task(void *argument)
     runtime->task_core = xPortGetCoreID();
     __atomic_store_n(&runtime->health->async_led_task_core, runtime->task_core,
                      __ATOMIC_RELEASE);
+    nocti_v4_task_wdt_subscribe();
     for (;;) {
         async_command_t command;
-        if (xQueueReceive(runtime->command_queue, &command, portMAX_DELAY) == pdTRUE) {
+        nocti_v4_task_wdt_kick();
+        if (xQueueReceive(runtime->command_queue, &command,
+                          pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS)) == pdTRUE) {
             (void)nocti_v4_time_now_us(runtime->timebase,
                                        &command.dequeue_timestamp_us);
             const esp_err_t result = execute_async_command(runtime, &command);

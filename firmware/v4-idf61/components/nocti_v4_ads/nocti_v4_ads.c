@@ -1,6 +1,7 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "nocti_v4_ads.h"
 #include "nocti_v4_backlog.h"
+#include "nocti_v4_common.h"
 
 #include <limits.h>
 #include <inttypes.h>
@@ -243,7 +244,9 @@ typedef struct {
     uint64_t period_sum_us;
     uint32_t period_count;
     uint64_t spi_duration_sum_us;
+    uint64_t service_sum_us;
     uint32_t spi_duration_count;
+    uint32_t service_count;
     uint32_t runtime_period_count;
     uint32_t runtime_period_us[NOCTI_V4_ADS_RUNTIME_PERIOD_SNAPSHOT_COUNT];
     uint32_t raw_stats_work_count;
@@ -900,7 +903,37 @@ static void record_spi_duration(ads_runtime_t *runtime, uint32_t duration_us)
     } else {
         counter_add(&runtime->health->spi_service_ge_100_us, 1u);
     }
-    if (duration_us > NOCTI_V4_RTOS_BUDGET_ADS_SERVICE_US) {
+}
+
+/* End-to-end service is DRDY timestamp to SPI completion, so ISR entry and
+ * the context switch are inside the 80 us budget. SPI duration stays in the
+ * spi_* counters. An unordered pair of timestamps is not a fresh sample. */
+static void record_service_span(ads_runtime_t *runtime, uint64_t drdy_us,
+                                uint64_t complete_us)
+{
+    uint32_t span_us;
+    if (drdy_us == 0u || complete_us < drdy_us) {
+        counter_add(&runtime->health->adc_service_time_unknown, 1u);
+        counter_add(&runtime->health->adc_service_over_budget, 1u);
+        return;
+    }
+    span_us = (uint32_t)(complete_us - drdy_us);
+    update_min(&runtime->health->adc_service_min_us, span_us);
+    update_max(&runtime->health->adc_service_max_us, span_us);
+    runtime->service_sum_us += span_us;
+    ++runtime->service_count;
+    counter_store(&runtime->health->adc_service_avg_us,
+                  (uint32_t)(runtime->service_sum_us / runtime->service_count));
+    if (span_us < 80u) {
+        counter_add(&runtime->health->adc_service_lt_80_us, 1u);
+    } else if (span_us < 125u) {
+        counter_add(&runtime->health->adc_service_80_to_124_us, 1u);
+    } else if (span_us < 250u) {
+        counter_add(&runtime->health->adc_service_125_to_249_us, 1u);
+    } else {
+        counter_add(&runtime->health->adc_service_ge_250_us, 1u);
+    }
+    if (span_us > NOCTI_V4_RTOS_BUDGET_ADS_SERVICE_US) {
         counter_add(&runtime->health->adc_service_over_budget, 1u);
     }
 }
@@ -1190,6 +1223,14 @@ static void reset_acquisition_counters(ads_runtime_t *runtime)
     RESET_ACQ(adc_backlog_catchup);
     RESET_ACQ(adc_queue_lag_max_us);
     RESET_ACQ(adc_service_over_budget);
+    RESET_ACQ(adc_service_time_unknown);
+    RESET_ACQ(adc_service_min_us);
+    RESET_ACQ(adc_service_max_us);
+    RESET_ACQ(adc_service_avg_us);
+    RESET_ACQ(adc_service_lt_80_us);
+    RESET_ACQ(adc_service_80_to_124_us);
+    RESET_ACQ(adc_service_125_to_249_us);
+    RESET_ACQ(adc_service_ge_250_us);
     RESET_ACQ(spi_service_lt_40_us);
     RESET_ACQ(spi_service_40_to_59_us);
     RESET_ACQ(spi_service_60_to_79_us);
@@ -1237,6 +1278,8 @@ static void reset_acquisition_counters(ads_runtime_t *runtime)
     runtime->period_count = 0u;
     runtime->spi_duration_sum_us = 0u;
     runtime->spi_duration_count = 0u;
+    runtime->service_sum_us = 0u;
+    runtime->service_count = 0u;
     runtime->runtime_period_count = 0u;
     memset(runtime->runtime_period_us, 0, sizeof(runtime->runtime_period_us));
     __atomic_store_n(&runtime->event_depth_max, 0u, __ATOMIC_RELEASE);
@@ -1692,12 +1735,14 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
     if (running) {
         uint64_t now_us = 0u;
         uint32_t age_us = 0u;
+        int age_known = 0;
         nocti_v4_backlog_action_t action;
         if (nocti_v4_time_now_us(runtime->timebase, &now_us) == ESP_OK &&
-            now_us > event->timestamp_us) {
+            now_us >= event->timestamp_us) {
+            age_known = 1;
             age_us = (uint32_t)(now_us - event->timestamp_us);
         }
-        action = nocti_v4_backlog_decide(backlog, age_us).action;
+        action = nocti_v4_backlog_decide(backlog, age_known, age_us).action;
         if (action == NOCTI_V4_BACKLOG_DROP) {
             counter_add(&runtime->health->adc_missed, 1u);
             counter_add(&runtime->health->adc_missed_backlog, 1u);
@@ -1725,6 +1770,7 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
     const esp_err_t spi_result = read_data_frame(runtime, &frame, &duration_us,
                                                   &complete_us, NULL);
     record_spi_duration(runtime, duration_us);
+    record_service_span(runtime, event->timestamp_us, complete_us);
     if (spi_result != ESP_OK) {
         counter_add(&runtime->health->spi_errors, 1u);
         set_fault(runtime, NOCTI_V4_ADS_FAULT_SPI_READ,
@@ -1914,14 +1960,16 @@ static void ads_task(void *argument)
                  (unsigned long)runtime->validation_period_max_us);
     }
     (void)xSemaphoreGive(runtime->init_done);
+    nocti_v4_task_wdt_subscribe();
 
     for (;;) {
-        /* DRDY's event ring is the record of work. The notification only wakes
-         * this priority-20 task. A timed runtime wait services the documented
-         * 5-ms DRDY-stall watchdog; STOPPED waits indefinitely for a command. */
+        /* DRDY's event ring is the record of work. The notification wakes this
+         * priority-23 task. A 1 ms wait services the 5 ms DRDY-stall watchdog.
+         * STOPPED waits at most one second so the task watchdog can be kicked. */
         const TickType_t wait_ticks = __atomic_load_n(&runtime->capture_enabled,
                                                       __ATOMIC_ACQUIRE) ?
-            pdMS_TO_TICKS(1u) : portMAX_DELAY;
+            pdMS_TO_TICKS(1u) : pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS);
+        nocti_v4_task_wdt_kick();
         (void)ulTaskNotifyTake(pdTRUE, wait_ticks);
 
         ads_command_t command;

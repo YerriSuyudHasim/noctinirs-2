@@ -6,11 +6,20 @@
 /* Host-testable DRDY backlog policy. ADS131M04 keeps the latest conversion
  * only: a queued event that already has a successor was overwritten and must
  * not be read back as a distinct sample. The newest event is read when it is
- * still the only pending conversion. A deep or stale queue is a counted fault.
- * This is the RUNNING service rule. Startup qualification stays stricter. */
+ * still the only pending conversion and its age is known. A stale queue, a
+ * deep queue, or an unknown age is a counted fault. Startup qualification
+ * stays stricter and does not use this rule.
+ *
+ * At 8 kSPS the period is 125 us, so 1 ms is 8 samples. FAULT_DEPTH is that
+ * same count of events still queued after the one under consideration. The
+ * age check and the depth check are one window. An unknown age is never
+ * treated as fresh, so a failed clock cannot keep a deep queue alive until
+ * some larger depth. */
 
-#define NOCTI_V4_BACKLOG_FAULT_DEPTH 16u
+#define NOCTI_V4_BACKLOG_PERIOD_US 125u
 #define NOCTI_V4_BACKLOG_FAULT_AGE_US 1000u
+#define NOCTI_V4_BACKLOG_FAULT_DEPTH \
+    (NOCTI_V4_BACKLOG_FAULT_AGE_US / NOCTI_V4_BACKLOG_PERIOD_US)
 
 typedef enum {
     NOCTI_V4_BACKLOG_READ = 0,
@@ -25,6 +34,7 @@ typedef struct {
 typedef struct {
     uint32_t sequence;
     uint32_t age_us;
+    uint8_t age_known; /* 0 when the clock read failed or moved backwards. */
 } nocti_v4_backlog_event_t;
 
 typedef struct {
@@ -39,8 +49,9 @@ typedef struct {
     uint8_t fault_sequence;
 } nocti_v4_backlog_result_t;
 
-/* Single-producer/single-consumer index rule used by the DRDY event ring:
- * depth = head - tail, slot = index & (capacity - 1), overflow is counted. */
+/* Host illustration of the SPSC index rule (depth = head - tail, slot =
+ * index & (capacity - 1), overflow counted). Capacity 8 is not the firmware
+ * ring. The ADS DRDY ring is NOCTI_V4_DRDY_EVENT_RING_CAPACITY (128). */
 #define NOCTI_V4_SPSC_CAPACITY 8u
 
 typedef struct {
@@ -51,11 +62,15 @@ typedef struct {
     uint32_t sequence[NOCTI_V4_SPSC_CAPACITY];
 } nocti_v4_spsc_t;
 
+_Static_assert(NOCTI_V4_BACKLOG_FAULT_DEPTH == 8u,
+               "1 ms at 8 kSPS is 8 queued successors");
+
 static inline nocti_v4_backlog_decision_t nocti_v4_backlog_decide(
-    uint32_t pending_after_pop, uint32_t age_us)
+    uint32_t pending_after_pop, int age_known, uint32_t age_us)
 {
     nocti_v4_backlog_decision_t decision;
-    if (pending_after_pop >= NOCTI_V4_BACKLOG_FAULT_DEPTH ||
+    if (age_known == 0 ||
+        pending_after_pop >= NOCTI_V4_BACKLOG_FAULT_DEPTH ||
         age_us >= NOCTI_V4_BACKLOG_FAULT_AGE_US) {
         decision.action = NOCTI_V4_BACKLOG_FAULT;
     } else if (pending_after_pop > 0u) {
@@ -90,7 +105,8 @@ static inline nocti_v4_backlog_result_t nocti_v4_backlog_service(
         const uint32_t pending = count - index - 1u;
         const uint32_t gap = nocti_v4_sequence_gap(last, events[index].sequence);
         const nocti_v4_backlog_action_t action =
-            nocti_v4_backlog_decide(pending, events[index].age_us).action;
+            nocti_v4_backlog_decide(pending, events[index].age_known != 0u,
+                                   events[index].age_us).action;
         if (gap != 0u) {
             result.sequence_gap += gap;
             result.missed += gap;

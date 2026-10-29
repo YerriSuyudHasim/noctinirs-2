@@ -173,8 +173,9 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
     int wrote;
     if (kind == 0u) {
         wrote = snprintf((char *)out, cap,
-            "v4health=1 adc_ok=%" PRIu32 " adc_missed=%" PRIu32
-            " adc_missed_backlog=%" PRIu32 " adc_backlog_catchup=%" PRIu32
+            "v4health=1 boot82_bound=0 adc_missed=%" PRIu32
+            " adc_backlog_catchup=%" PRIu32 " adc_missed_backlog=%" PRIu32
+            " adc_ok=%" PRIu32
             " adc_missed_sequence=%" PRIu32 " adc_sequence_gap=%" PRIu32
             " adc_missed_other=%" PRIu32 " drdy_event_overflow=%" PRIu32
             " adc_ring_overflow=%" PRIu32 " crc_bad=%" PRIu32
@@ -182,8 +183,8 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             " event_depth_max=%" PRIu32 " raw_depth_max=%" PRIu32
             " deadline_depth_max=%" PRIu32 " led_queue_depth_max=%" PRIu32
             " frames=unsupported",
-            HLOAD(adc_ok), HLOAD(adc_missed), HLOAD(adc_missed_backlog),
-            HLOAD(adc_backlog_catchup), HLOAD(adc_missed_sequence),
+            HLOAD(adc_missed), HLOAD(adc_backlog_catchup), HLOAD(adc_missed_backlog),
+            HLOAD(adc_ok), HLOAD(adc_missed_sequence),
             HLOAD(adc_sequence_gap), HLOAD(adc_missed_other),
             HLOAD(drdy_event_overflow), HLOAD(adc_ring_overflow), HLOAD(crc_bad),
             HLOAD(spi_errors), HLOAD(ads_status_faults),
@@ -191,25 +192,40 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             sched.deadline_ring_depth_max, HLOAD(async_command_queue_depth_max));
     } else {
         wrote = snprintf((char *)out, cap,
-            "v4timing=1 spi_min_us=%" PRIu32 " spi_max_us=%" PRIu32
+            "v4timing=1 boot82_bound=0 adc_missed=%" PRIu32
+            " adc_backlog_catchup=%" PRIu32 " adc_missed_backlog=%" PRIu32
+            " adc_sequence_gap=%" PRIu32
+            " spi_min_us=%" PRIu32 " spi_max_us=%" PRIu32
             " spi_avg_us=%" PRIu32 " spi_lt40=%" PRIu32 " spi_40_59=%" PRIu32
             " spi_60_79=%" PRIu32 " spi_80_99=%" PRIu32 " spi_ge100=%" PRIu32
+            " service_min_us=%" PRIu32 " service_max_us=%" PRIu32
+            " service_avg_us=%" PRIu32 " service_lt80=%" PRIu32
+            " service_80_124=%" PRIu32 " service_125_249=%" PRIu32
+            " service_ge250=%" PRIu32 " service_unknown=%" PRIu32
+            " service_over_budget=%" PRIu32
             " lag_max_us=%" PRIu32 " lag_lt40=%" PRIu32 " lag_40_79=%" PRIu32
             " lag_80_124=%" PRIu32 " lag_125_249=%" PRIu32 " lag_ge250=%" PRIu32
-            " service_over_budget=%" PRIu32 " sched_deferred_max_us=%" PRIu32
+            " sched_deferred_max_us=%" PRIu32
             " event_depth_max=%" PRIu32 " ads_hwm_words=%" PRIu32
             " led_hwm_words=%" PRIu32 " sched_hwm_words=%" PRIu32
             " optical_hwm_words=%" PRIu32 " frame_hwm_words=%" PRIu32
             " dark_hwm_words=%" PRIu32 " ctrl_hwm_words=%" PRIu32
             " net_hwm_words=%" PRIu32 " cpu=not_measured",
+            HLOAD(adc_missed), HLOAD(adc_backlog_catchup), HLOAD(adc_missed_backlog),
+            HLOAD(adc_sequence_gap),
             HLOAD(spi_duration_min_us), HLOAD(spi_duration_max_us),
             HLOAD(spi_duration_avg_us), HLOAD(spi_service_lt_40_us),
             HLOAD(spi_service_40_to_59_us), HLOAD(spi_service_60_to_79_us),
             HLOAD(spi_service_80_to_99_us), HLOAD(spi_service_ge_100_us),
+            HLOAD(adc_service_min_us), HLOAD(adc_service_max_us),
+            HLOAD(adc_service_avg_us), HLOAD(adc_service_lt_80_us),
+            HLOAD(adc_service_80_to_124_us), HLOAD(adc_service_125_to_249_us),
+            HLOAD(adc_service_ge_250_us), HLOAD(adc_service_time_unknown),
+            HLOAD(adc_service_over_budget),
             HLOAD(adc_queue_lag_max_us), HLOAD(adc_lag_lt_40_us),
             HLOAD(adc_lag_40_to_79_us), HLOAD(adc_lag_80_to_124_us),
             HLOAD(adc_lag_125_to_249_us), HLOAD(adc_lag_ge_250_us),
-            HLOAD(adc_service_over_budget), HLOAD(scheduler_deferred_work_max_us),
+            HLOAD(scheduler_deferred_work_max_us),
             adc.drdy_event_ring_depth_max, HLOAD(ads_task_stack_watermark_bytes),
             HLOAD(async_led_task_stack_watermark_bytes),
             HLOAD(scheduler_task_stack_watermark_bytes),
