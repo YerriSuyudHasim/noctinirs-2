@@ -234,6 +234,21 @@ typedef struct {
     uint32_t free_heap_after_wifi;
     uint32_t minimum_free_heap;
     uint32_t largest_free_block;
+
+    /* RUNNING catch-up and service/lag histograms. Not printed on the hot path. */
+    uint32_t adc_backlog_catchup;
+    uint32_t adc_queue_lag_max_us;
+    uint32_t adc_service_over_budget;
+    uint32_t spi_service_lt_40_us;
+    uint32_t spi_service_40_to_59_us;
+    uint32_t spi_service_60_to_79_us;
+    uint32_t spi_service_80_to_99_us;
+    uint32_t spi_service_ge_100_us;
+    uint32_t adc_lag_lt_40_us;
+    uint32_t adc_lag_40_to_79_us;
+    uint32_t adc_lag_80_to_124_us;
+    uint32_t adc_lag_125_to_249_us;
+    uint32_t adc_lag_ge_250_us;
 } nocti_v4_health_t;
 
 void nocti_v4_health_reset(nocti_v4_health_t *health);

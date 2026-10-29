@@ -35,10 +35,11 @@ uint32_t nocti_v4_scheduler_slot_period_us(void);
 #define NOCTI_V4_SCHEDULER_EVENT_RING_CAPACITY 8u
 #define NOCTI_V4_SCHEDULER_FINALIZED_RING_CAPACITY 32u
 #define NOCTI_V4_SCHEDULER_HISTORY_FRAMES     3u
-/* Core-1 fixed-priority order for V4-7.2:
- * LED owner 22 (submit then block) > scheduler 21 (handoff then block) >
- * ADS 20 (DRDY-driven acquisition then block). These short higher-priority
- * paths no longer wait synchronously on one another. */
-#define NOCTI_V4_SCHEDULER_PRIORITY           21u
-#define NOCTI_V4_SCHEDULER_CORE               1
-#define NOCTI_V4_SCHEDULER_STACK_BYTES        6144u
+#include "nocti_v4_rtos.h"
+
+/* Core 1: ADS 23 preempts LED 22, which preempts this scheduler. Post-ON
+ * bookkeeping therefore cannot run ahead of a pending DRDY service. The
+ * handoff itself is still a nonblocking queue send of a prebuilt command. */
+#define NOCTI_V4_SCHEDULER_PRIORITY           NOCTI_V4_RTOS_PRIO_SCHED
+#define NOCTI_V4_SCHEDULER_CORE               NOCTI_V4_RTOS_CORE_ACQ
+#define NOCTI_V4_SCHEDULER_STACK_BYTES        NOCTI_V4_RTOS_STACK_SCHED_BYTES

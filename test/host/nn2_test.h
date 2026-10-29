@@ -10,4 +10,5 @@ void test_acquisition_suite(void);
 void test_ads131_suite(void);
 void test_ads131_control_suite(void);
 void test_ads131_transport_suite(void);
+void test_v4_rtos_suite(void);
 #endif

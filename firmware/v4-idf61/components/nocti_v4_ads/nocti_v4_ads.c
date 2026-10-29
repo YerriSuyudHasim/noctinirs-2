@@ -1,5 +1,6 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "nocti_v4_ads.h"
+#include "nocti_v4_backlog.h"
 
 #include <limits.h>
 #include <inttypes.h>
@@ -18,6 +19,9 @@
 #include "freertos/task.h"
 
 static const char *TAG = "nocti_v4_ads";
+
+_Static_assert(NOCTI_V4_PRIO_ADC < configMAX_PRIORITIES,
+               "ADS priority must fit the FreeRTOS priority range");
 
 #define EVENT_RING_MASK (NOCTI_V4_DRDY_EVENT_RING_CAPACITY - 1u)
 #define RAW_RING_MASK   (NOCTI_V4_RAW_SAMPLE_RING_CAPACITY - 1u)
@@ -885,6 +889,36 @@ static void record_spi_duration(ads_runtime_t *runtime, uint32_t duration_us)
     if (duration_us > 250u) {
         counter_add(&runtime->health->spi_duration_gt_250_us, 1u);
     }
+    if (duration_us < 40u) {
+        counter_add(&runtime->health->spi_service_lt_40_us, 1u);
+    } else if (duration_us < 60u) {
+        counter_add(&runtime->health->spi_service_40_to_59_us, 1u);
+    } else if (duration_us < 80u) {
+        counter_add(&runtime->health->spi_service_60_to_79_us, 1u);
+    } else if (duration_us < 100u) {
+        counter_add(&runtime->health->spi_service_80_to_99_us, 1u);
+    } else {
+        counter_add(&runtime->health->spi_service_ge_100_us, 1u);
+    }
+    if (duration_us > NOCTI_V4_RTOS_BUDGET_ADS_SERVICE_US) {
+        counter_add(&runtime->health->adc_service_over_budget, 1u);
+    }
+}
+
+static void record_queue_lag(ads_runtime_t *runtime, uint32_t age_us)
+{
+    update_max(&runtime->health->adc_queue_lag_max_us, age_us);
+    if (age_us < 40u) {
+        counter_add(&runtime->health->adc_lag_lt_40_us, 1u);
+    } else if (age_us < 80u) {
+        counter_add(&runtime->health->adc_lag_40_to_79_us, 1u);
+    } else if (age_us < 125u) {
+        counter_add(&runtime->health->adc_lag_80_to_124_us, 1u);
+    } else if (age_us < 250u) {
+        counter_add(&runtime->health->adc_lag_125_to_249_us, 1u);
+    } else {
+        counter_add(&runtime->health->adc_lag_ge_250_us, 1u);
+    }
 }
 
 static void record_period(ads_runtime_t *runtime, uint64_t previous_us,
@@ -1153,6 +1187,19 @@ static void reset_acquisition_counters(ads_runtime_t *runtime)
     RESET_ACQ(adc_missed);
     RESET_ACQ(adc_missed_sequence);
     RESET_ACQ(adc_missed_backlog);
+    RESET_ACQ(adc_backlog_catchup);
+    RESET_ACQ(adc_queue_lag_max_us);
+    RESET_ACQ(adc_service_over_budget);
+    RESET_ACQ(spi_service_lt_40_us);
+    RESET_ACQ(spi_service_40_to_59_us);
+    RESET_ACQ(spi_service_60_to_79_us);
+    RESET_ACQ(spi_service_80_to_99_us);
+    RESET_ACQ(spi_service_ge_100_us);
+    RESET_ACQ(adc_lag_lt_40_us);
+    RESET_ACQ(adc_lag_40_to_79_us);
+    RESET_ACQ(adc_lag_80_to_124_us);
+    RESET_ACQ(adc_lag_125_to_249_us);
+    RESET_ACQ(adc_lag_ge_250_us);
     RESET_ACQ(adc_missed_other);
     RESET_ACQ(adc_sequence_gap);
     RESET_ACQ(drdy_isr_count);
@@ -1614,10 +1661,11 @@ restore:
 static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
 {
     const uint32_t backlog = event_depth(runtime);
-    if (backlog >= NOCTI_V4_ADS_MAX_EVENT_BACKLOG) {
-        /* This is not a temporary queue-depth statistic. Two events remain
-         * after the current event was popped, which exceeds the bounded FIFO
-         * integrity contract; do not manufacture aligned samples. */
+    const bool running = runtime->lifecycle == NOCTI_V4_ADS_RUNNING_DARK;
+    /* Qualification still refuses a two-deep remainder. A running scan uses
+     * nocti_v4_backlog_service(): overwritten conversions are counted and the
+     * newest coherent event is read. Depth 16 or age 1 ms still faults. */
+    if (!running && backlog >= NOCTI_V4_ADS_MAX_EVENT_BACKLOG) {
         counter_add(&runtime->health->adc_missed_backlog, backlog);
         counter_add(&runtime->health->adc_missed, backlog);
         set_fault(runtime, NOCTI_V4_ADS_FAULT_EVENT_BACKLOG,
@@ -1629,14 +1677,43 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
                   NOCTI_V4_ADS_FAULT_ORIGIN_PROCESS_EVENT, ESP_ERR_INVALID_STATE);
         return;
     }
-    if (runtime->last_sequence != 0u && event->sequence != runtime->last_sequence + 1u) {
-        const uint32_t gap = event->sequence - runtime->last_sequence - 1u;
-        counter_add(&runtime->health->adc_sequence_gap, gap);
-        counter_add(&runtime->health->adc_missed_sequence, gap);
-        counter_add(&runtime->health->adc_missed, gap);
-        set_fault(runtime, NOCTI_V4_ADS_FAULT_SEQUENCE_GAP,
-                  NOCTI_V4_ADS_FAULT_ORIGIN_PROCESS_EVENT, ESP_ERR_INVALID_STATE);
-        return;
+    {
+        const uint32_t gap = nocti_v4_sequence_gap(runtime->last_sequence,
+                                                   event->sequence);
+        if (gap != 0u) {
+            counter_add(&runtime->health->adc_sequence_gap, gap);
+            counter_add(&runtime->health->adc_missed_sequence, gap);
+            counter_add(&runtime->health->adc_missed, gap);
+            set_fault(runtime, NOCTI_V4_ADS_FAULT_SEQUENCE_GAP,
+                      NOCTI_V4_ADS_FAULT_ORIGIN_PROCESS_EVENT, ESP_ERR_INVALID_STATE);
+            return;
+        }
+    }
+    if (running) {
+        uint64_t now_us = 0u;
+        uint32_t age_us = 0u;
+        nocti_v4_backlog_action_t action;
+        if (nocti_v4_time_now_us(runtime->timebase, &now_us) == ESP_OK &&
+            now_us > event->timestamp_us) {
+            age_us = (uint32_t)(now_us - event->timestamp_us);
+        }
+        action = nocti_v4_backlog_decide(backlog, age_us).action;
+        if (action == NOCTI_V4_BACKLOG_DROP) {
+            counter_add(&runtime->health->adc_missed, 1u);
+            counter_add(&runtime->health->adc_missed_backlog, 1u);
+            counter_add(&runtime->health->adc_backlog_catchup, 1u);
+            runtime->last_sequence = event->sequence;
+            return;
+        }
+        if (action == NOCTI_V4_BACKLOG_FAULT) {
+            const uint32_t missed = 1u + backlog;
+            counter_add(&runtime->health->adc_missed, missed);
+            counter_add(&runtime->health->adc_missed_backlog, missed);
+            set_fault(runtime, NOCTI_V4_ADS_FAULT_EVENT_BACKLOG,
+                      NOCTI_V4_ADS_FAULT_ORIGIN_PROCESS_EVENT, ESP_ERR_INVALID_STATE);
+            return;
+        }
+        record_queue_lag(runtime, age_us);
     }
     record_period(runtime, runtime->last_timestamp_us, event->timestamp_us);
     runtime->last_sequence = event->sequence;

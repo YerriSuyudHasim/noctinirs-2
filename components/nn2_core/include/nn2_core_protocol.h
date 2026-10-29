@@ -29,7 +29,10 @@ enum {
   NN2_CMD_SAFE_OFF = 0x0020,
   NN2_CMD_CLEAR_FAULT = 0x0021,
   NN2_CMD_SET_FS = 0x0100,
-  NN2_CMD_SET_LED_CURRENT = 0x0101
+  NN2_CMD_SET_LED_CURRENT = 0x0101,
+  /* Read-only V4 diagnostics. Existing reply layouts are unchanged. */
+  NN2_CMD_GET_HEALTH = 0x0030,
+  NN2_CMD_GET_TIMING = 0x0031
 };
 enum {
   NN2_REPLY_OK,

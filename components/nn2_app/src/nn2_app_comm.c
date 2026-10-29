@@ -276,6 +276,9 @@ static uint16_t execute(comm_t *c, uint64_t peer, uint64_t now, uint16_t op,
       return NN2_REPLY_STATE;
     c->current_ma[arg[0]] = nn2_core_get_u16(arg + 1);
     return NN2_REPLY_OK;
+  case NN2_CMD_GET_HEALTH:
+  case NN2_CMD_GET_TIMING:
+    return NN2_REPLY_OK;
   default:
     return NN2_REPLY_OK;
   }
@@ -343,8 +346,8 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
   /* Exact cached acknowledgements must survive session teardown (lost STOP
    * reply). Only fresh effects pass through current-session/owner validation.
    * Replaying an old session's ACK never refreshes a new session's liveness. */
-  if (!error && op != NN2_CMD_SAFE_OFF && req.session_id &&
-      req.session_id != c.session)
+  if (!error && op != NN2_CMD_SAFE_OFF && op != NN2_CMD_GET_HEALTH &&
+      op != NN2_CMD_GET_TIMING && req.session_id && req.session_id != c.session)
     error = NN2_REPLY_STATE;
   if (!error && c.owner && c.owner != peer && op != NN2_CMD_INFO &&
       op != NN2_CMD_GET_CONFIG && op != NN2_CMD_GET_TIME &&
@@ -405,6 +408,20 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
       body[64] = c.grace ? 1u : 0u;
       reply.length += 21;
     }
+  } else if (!error && (op == NN2_CMD_GET_HEALTH || op == NN2_CMD_GET_TIMING)) {
+    uint8_t diag[700];
+    const char *fallback = op == NN2_CMD_GET_HEALTH ? "v4health=0 reason=unavailable"
+                                                    : "v4timing=0 reason=unavailable";
+    size_t n = 0;
+    if (c.optical.read_diag)
+      n = c.optical.read_diag(c.optical.ctx, (uint8_t)(op == NN2_CMD_GET_HEALTH ? 0 : 1),
+                              diag, sizeof(diag));
+    if (n == 0 || n >= sizeof(diag)) {
+      n = strlen(fallback);
+      memcpy(body + 20, fallback, n);
+    } else
+      memcpy(body + 20, diag, n);
+    reply.length = (uint16_t)(reply.length + n);
   }
   size_t count = nn2_core_packet_encode(&reply, output, capacity);
   if (!conflict && cacheable && argc <= 3 && count <= REPLY_MAX) {

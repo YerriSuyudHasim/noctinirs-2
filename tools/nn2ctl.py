@@ -17,6 +17,7 @@ import zlib
 
 COMMANDS = {"heartbeat": 1, "info": 2, "status": 3, "get-config": 4, "get-time": 5,
             "start": 0x10, "stop": 0x11, "safe-off": 0x20, "clear-fault": 0x21,
+            "health": 0x30, "timing": 0x31,
             "set-fs": 0x100, "set-led-current": 0x101}
 ERRORS = ("OK", "INVALID_STATE", "INVALID_ARG", "UNKNOWN_COMMAND", "HW_FAULT", "BUSY",
           "BAD_FRAME", "PRECONDITION_FAILED", "RESERVED_FLAGS")
@@ -82,6 +83,8 @@ def describe_reply(packet, request_id=None, opcode=None):
         if extra: raise ValueError("unexpected error extension")
     elif op == COMMANDS["info"]:
         result["info"] = extra.decode("ascii")
+    elif op in (COMMANDS["health"], COMMANDS["timing"]):
+        result["diag"] = parse_diag(extra.decode("ascii"))
     elif op == COMMANDS["get-config"]:
         if len(extra) != 42 or extra[1] != 20: raise ValueError("config length")
         result.update(rate_hz=extra[0], slots=extra[1], current_ma=list(struct.unpack_from("<20H", extra, 2)))
@@ -190,7 +193,7 @@ class Client:
                         continue
                     # Session-changing replies may return a new ID or zero. All
                     # other successful session replies must match the held ID.
-                    if result["error"] == "OK" and self.session_id and op not in (0x10,0x11,0x20,0x21) and packet.session_id != self.session_id:
+                    if result["error"] == "OK" and self.session_id and op not in (0x10,0x11,0x20,0x21,0x30,0x31) and packet.session_id != self.session_id:
                         continue
                 except (ValueError,UnicodeDecodeError,struct.error): continue
                 if self.boot_id is not None and self.boot_id != result["boot_id"]:
@@ -219,6 +222,37 @@ def provision_line(ssid,password):
     if not 1<=len(s)<=32 or b"\0" in s or not 8<=len(p)<=63 or any(c<32 or c>126 for c in p):
         raise ValueError("credential encoding")
     return b"WIFI "+s.hex().encode()+b" "+p.hex().encode()+b"\n"
+
+def parse_diag(text):
+    """Parse a V4 health or timing report. This is not an ACQ1 frame."""
+    if not isinstance(text, str) or not text.startswith(("v4health=1 ", "v4timing=1 ")):
+        raise ValueError("diagnostic report")
+    fields = {}
+    for item in text.split():
+        if "=" not in item:
+            raise ValueError("diagnostic field")
+        key, value = item.split("=", 1)
+        if not key or key in fields:
+            raise ValueError("diagnostic field")
+        fields[key] = value
+    kind = "v4health" if text.startswith("v4health=") else "v4timing"
+    if fields.get(kind) != "1":
+        raise ValueError("diagnostic version")
+    if kind == "v4health":
+        required = ("adc_ok", "adc_missed", "adc_missed_backlog", "adc_backlog_catchup",
+                    "adc_sequence_gap", "crc_bad", "spi_errors", "event_depth_max",
+                    "frames")
+        if fields.get("frames") == "ACQ1":
+            raise ValueError("health must not claim ACQ1")
+    else:
+        required = ("spi_min_us", "spi_max_us", "spi_avg_us", "spi_lt40", "spi_ge100",
+                    "lag_max_us", "lag_ge250", "event_depth_max", "ads_hwm_words",
+                    "led_hwm_words", "sched_hwm_words", "service_over_budget",
+                    "cpu")
+    missing = [name for name in required if name not in fields]
+    if missing:
+        raise ValueError("diagnostic missing " + ",".join(missing))
+    return fields
 
 def describe_led_diagnostics(line):
     """Decode cached per-channel masks; never infer light from a valid bit."""
@@ -265,7 +299,7 @@ def usb_status(serial_port):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command",choices=list(COMMANDS)+["run", "usb-status"])
+    parser.add_argument("command",choices=list(COMMANDS)+["run"])
     parser.add_argument("--serial-port")
     parser.add_argument("--host",default="192.168.4.1")
     parser.add_argument("--port",type=int,default=3333)
@@ -284,8 +318,6 @@ def main():
     args=parser.parse_args()
     client=None
     try:
-        if args.command=="usb-status":
-            usb_status(args.serial_port);return 0
         if not 1<=args.port<=65535: raise ValueError("UDP port")
         if args.command=="set-fs" and args.rate is None: args.rate=5
         if args.rate is not None and not 2 <= args.rate <= 10: raise ValueError("rate must be an integer from2 to10 Hz")

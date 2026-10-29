@@ -14,10 +14,9 @@ An old device reply `ERR unsupported; SoftAP-only; use STATUS` comes from the
 root nn2_provision parser, which is not part of this migrated image.
 
 The new image identifies itself by `CONTROL_MODE baseline=V4_IDF61_NN2_CTRL`
-and `V4_NN2_CONTROL ... ip=192.168.4.1 port=3333`. USB VERSION and STATUS work;
-while scanning, only emergency SCAN_STOP / SAFE_OFF are accepted. Other V4
-mutation commands are disabled when NN2 control owns acquisition. Inspect USB
-SCAN_SESSION_REPORT, SCAN_HEALTH and ADC_DEBUG after stopping.
+and `V4_NN2_CONTROL ... ip=192.168.4.1 port=3333`. The USB command console is
+removed. Control and diagnostics are UDP 3333 commands: info, get-config,
+start, stop, status, health, and timing. Native V4 frames are not ACQ1.
 
 ## Host control
 
@@ -29,6 +28,8 @@ Build in this folder; run the host tool from the repository root:
 
 ```powershell
 python tools/nn2ctl.py info
+python tools/nn2ctl.py health
+python tools/nn2ctl.py timing
 python tools/nn2ctl.py run --rate 5 --seconds 10 --led
 ```
 
@@ -47,9 +48,11 @@ measurement export needs a separately specified binding.
 ## Ownership and stop behavior
 
 The single NN2 App/UDP owner is Core0/priority4, requested stack16384 bytes.
-A new Core1/priority1 worker (8192 bytes) serializes blocking V4 resource/setup
-and cleanup. V4 LED22 > scheduler21 > ADC20 remains intact. Main console stack
-is12288 bytes. Heap/stack/Wi-Fi coexistence margins have not been measured.
+A Core1/priority3 worker (8192 bytes) serializes blocking V4 resource/setup
+and cleanup and stays below the acquisition ladder. Core 1 order is ADS23 >
+LED22 > scheduler15. The task table, budgets, and boot82 evidence are in
+`docs/V4_IDF61_RTOS_HANDOFF.md`. Heap/stack/Wi-Fi coexistence margins have not
+been measured on hardware.
 
 Nonblocking STOP/cancel immediately closes a shared reset-release gate and holds
 PCA RESET low. The same gate prevents a late startup release after cancellation.

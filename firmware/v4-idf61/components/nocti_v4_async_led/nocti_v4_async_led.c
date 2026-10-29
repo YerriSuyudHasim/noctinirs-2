@@ -11,6 +11,7 @@
 #include "freertos/task.h"
 
 #include "nocti_v4_common.h"
+#include "nocti_v4_rtos.h"
 
 #define PCA_LEDOUT0                         0x02u
 #define PCA_LEDOUT_ON                        0x01u
@@ -23,14 +24,14 @@
 #define ASYNC_COMMAND_TIMEOUT_MS             1000u
 #define ASYNC_TRANSACTION_TIMEOUT_MS         50u
 #define ASYNC_QUIESCE_TIMEOUT_MS             100u
-#define ASYNC_TASK_STACK_BYTES               4096u
-/* V4-7.2 keeps PCA I2C allocation away from Wi-Fi core 0, but fixes the
- * V4-7.1 serialized wait chain: a short LED owner handoff must not be repeatedly
- * preempted by the 8-kSPS ADS task. The priority-22 owner runs only long
- * enough to submit one prebuilt transaction, blocks for ISR completion,
- * publishes one static completion record, and blocks on its command queue. */
-#define ASYNC_TASK_PRIORITY                  22u
-#define ASYNC_TASK_CORE                      1
+#define ASYNC_TASK_STACK_BYTES               NOCTI_V4_RTOS_STACK_LED_BYTES
+/* PCA I2C stays on core 1, away from the Wi-Fi core. ADS is priority 23 and
+ * may preempt this task for one SPI frame (budget 80 us). The LED task only
+ * queues a prebuilt payload, blocks on the I2C completion notification, and
+ * publishes one static completion record. It must not poll, log, or hold a
+ * critical section across the transfer. */
+#define ASYNC_TASK_PRIORITY                  NOCTI_V4_RTOS_PRIO_LED
+#define ASYNC_TASK_CORE                      NOCTI_V4_RTOS_CORE_ACQ
 #define ASYNC_TASK_STACK_WORDS \
     (ASYNC_TASK_STACK_BYTES / sizeof(StackType_t))
 

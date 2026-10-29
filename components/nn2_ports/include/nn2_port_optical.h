@@ -24,5 +24,10 @@ typedef struct {
     nn2_status_t (*read_frame)(void *, uint8_t *, size_t, uint64_t *timestamp);
     bool real_samples;
     const char *policy_info; /* Static capability text, or NULL for strict. */
+    /* Optional read-only diagnostic. kind 0 is health, kind 1 is timing.
+     * Called from the UDP owner task, never from an ISR or the ADC hot path.
+     * Writes ASCII without a trailing NUL requirement and returns the length.
+     * NULL or 0 leaves an unavailable report. Not an ACQ1 frame. */
+    size_t (*read_diag)(void *, uint8_t kind, uint8_t *out, size_t capacity);
 } nn2_port_optical_t;
 #endif

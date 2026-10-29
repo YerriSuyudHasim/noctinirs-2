@@ -81,7 +81,8 @@ static const nn2_core_command_t commands[] = {
     {NN2_CMD_GET_TIME, 8, false},      {NN2_CMD_START, 0, true},
     {NN2_CMD_STOP, 0, true},           {NN2_CMD_SAFE_OFF, 0, false},
     {NN2_CMD_CLEAR_FAULT, 0, true},    {NN2_CMD_SET_FS, 1, true},
-    {NN2_CMD_SET_LED_CURRENT, 3, true}};
+    {NN2_CMD_SET_LED_CURRENT, 3, true}, {NN2_CMD_GET_HEALTH, 0, false},
+    {NN2_CMD_GET_TIMING, 0, false}};
 const nn2_core_command_t *nn2_core_command(uint16_t opcode) {
   for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++)
     if (commands[i].opcode == opcode)
