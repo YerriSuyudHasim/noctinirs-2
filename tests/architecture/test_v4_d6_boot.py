@@ -1,0 +1,104 @@
+"""Static checks for the v4-idf61 D6 init order, brownout pin, and IR notes.
+
+Host/architecture only. No compiler, flash, or hardware.
+"""
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+LED = ROOT / "firmware/v4-idf61/components/nocti_v4_led/nocti_v4_led.c"
+BOARD = ROOT / "firmware/v4-idf61/components/nocti_v4_board/nocti_v4_board.c"
+ADS = ROOT / "firmware/v4-idf61/components/nocti_v4_ads/nocti_v4_ads.c"
+DEFAULTS = ROOT / "firmware/v4-idf61/sdkconfig.defaults"
+ADR3 = ROOT / "docs/adr/0003-rtos-task-topology.md"
+ADR4 = ROOT / "docs/adr/0004-host-protocol.md"
+BOOT = ROOT / "docs/V4_IDF61_BOOT_INIT.md"
+OWNER = "6498933500"
+
+
+def _function_body(source, name):
+    match = re.search(
+        r"static esp_err_t %s\(nocti_v4_led_t \*led\)\n\{" % re.escape(name),
+        source,
+    )
+    if match is None:
+        raise AssertionError("missing function " + name)
+    start = match.end()
+    depth = 1
+    for index, char in enumerate(source[start:], start):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:index]
+    raise AssertionError("unclosed function " + name)
+
+
+class V4D6Boot(unittest.TestCase):
+    def test_d6_write_order_is_iref_then_pwmall_then_ledout(self):
+        source = LED.read_text()
+        body = _function_body(source, "write_d6_emitter_off")
+        iref = body.find("PCA_IREFALL, 0x00u")
+        pwm = body.find("PCA_PWMALL, 0x00u")
+        ledout = body.find("PCA_LEDOUT0 + index), 0u")
+        self.assertGreaterEqual(iref, 0)
+        self.assertLess(iref, pwm)
+        self.assertLess(pwm, ledout)
+        golden = _function_body(source, "program_sync_golden_path")
+        d6_call = golden.find("write_d6_emitter_off(led)")
+        iref_zero = golden.find("verify_iref_zero(led)")
+        ledout_check = golden.find("verify_all_off(led)")
+        operating = golden.find("program_iref_verified(led)")
+        self.assertGreaterEqual(d6_call, 0)
+        self.assertLess(d6_call, iref_zero)
+        self.assertLess(iref_zero, ledout_check)
+        self.assertLess(ledout_check, operating)
+        self.assertIn("#define PCA_MAX_CURRENT_MA          30u", source)
+        self.assertIn("#define PCA_IREFALL     0x40u", source)
+
+    def test_oe_stays_undriven(self):
+        board = BOARD.read_text()
+        self.assertIn("board->oe_state = NOCTI_V4_OE_PHYSICAL_STATE_UNVERIFIED;", board)
+        self.assertNotIn("GPIO_NUM_26", board)
+        self.assertNotRegex(board, r"OE.*GPIO_NUM_")
+
+    def test_backlog_comment_matches_depth_8(self):
+        ads = ADS.read_text()
+        self.assertNotIn("Depth 16", ads)
+        self.assertIn("NOCTI_V4_BACKLOG_FAULT_DEPTH (8)", ads)
+
+    def test_brownout_is_the_idf_esp32s3_default(self):
+        defaults = DEFAULTS.read_text()
+        self.assertIn("CONFIG_ESP_BROWNOUT_DET=y", defaults)
+        self.assertIn("CONFIG_ESP_BROWNOUT_DET_LVL_SEL_7=y", defaults)
+        for level in range(1, 7):
+            self.assertNotIn(
+                "CONFIG_ESP_BROWNOUT_DET_LVL_SEL_%d=y" % level, defaults)
+
+    def test_adr_headers_cite_owner_authorization(self):
+        adr3 = ADR3.read_text()
+        adr4 = ADR4.read_text()
+        header3 = adr3.split("## 1. Context", 1)[0]
+        header4 = adr4.split("## 1. Context", 1)[0]
+        self.assertIn("rev 3", header3)
+        self.assertIn(OWNER, header3)
+        self.assertIn("2026-10-29 23:08 KST", header3)
+        self.assertIn("file rev 4", header4)
+        self.assertIn(OWNER, header4)
+        self.assertIn("2026-10-29 23:08 KST", header4)
+        self.assertIn(OWNER, adr3[adr3.find("## 11. Revision history"):])
+        self.assertIn(OWNER, adr4[adr4.find("| file rev 4 |"):])
+
+    def test_boot_doc_records_d6_and_brownout(self):
+        boot = BOOT.read_text()
+        self.assertIn("6333972667", boot)
+        self.assertIn("IREFALL", boot)
+        self.assertIn("CONFIG_ESP_BROWNOUT_DET_LVL_SEL_7=y", boot)
+        self.assertIn("2.44", boot)
+        self.assertIn("30 mA", boot)
+
+
+if __name__ == "__main__":
+    unittest.main()

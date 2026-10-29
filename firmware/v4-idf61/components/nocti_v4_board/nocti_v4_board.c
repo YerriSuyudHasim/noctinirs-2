@@ -66,6 +66,8 @@ esp_err_t nocti_v4_board_early_safe_init(nocti_v4_board_t *board)
         board->gpio_ready = true;
         board->pca_reset_asserted = true;
         board->ads131_reset_asserted = true;
+        /* OE# stays undriven. This image has no OE GPIO; the state remains
+         * unverified, including after the D6 IREFALL/PWMALL/LEDOUT writes. */
         board->oe_state = NOCTI_V4_OE_PHYSICAL_STATE_UNVERIFIED;
     }
     return err;

@@ -44,7 +44,7 @@ port follows.
 | GPIO set | V4 pin set kept | PCA RESET, ADS SYNC/RESET, CS, DRDY. Feat35 safe-init owns RESET only. |
 | ADS bring-up | V4 kept | `nocti_v4_ads_init` and `spi_device_polling_transmit` in `transfer_frame`. Feat35 `nn2_acquisition_init` (`31fb2a9:main/adapters/nn2_acquisition_esp.c:193`) and `nn2_ads131_transport.inc` polling start/end were not copied. |
 | Wi-Fi / NVS / netif | feat35 order kept, and it now runs after a later hardware failure | `control_init`: NVS, boot id, app comm, Wi-Fi init, UDP 3333, Wi-Fi start. USB provision (`nn2_provision_init` at feat35 `app_main.c` stage `USB diagnostics`) is not called. |
-| Config defaults | V4 `sdkconfig.defaults` kept. Runtime cap and Fs stay in the V4 control binding (`30` mA, Fs 2/4/5/8/10). | No feat35 profile Kconfig. |
+| Config defaults | V4 `sdkconfig.defaults` kept, with brownout pinned. Runtime cap and Fs stay in the V4 control binding (`30` mA, Fs 2/4/5/8/10). | No feat35 profile Kconfig. This project has one defaults file. |
 | Init fault handling | feat35 `fail:` label (`31fb2a9:main/app_main.c:225-248`): name the stage, hold emitters off, do not continue into acquisition | First zero flag is the stage. `health` carries `boot_stage`. A hardware failure re-asserts PCA RESET and latches `NN2_OPTICAL_FAULT` before the UDP task starts. `CLEAR` cannot clear it. |
 
 Feat35 `fail:` also disables the charger and releases the power-management
@@ -66,6 +66,44 @@ IDF I2C calls with a different completion wait. That adapter was not
 substituted for the V4 driver. PCA RESET is still released only inside
 `program_sync_golden_path` after the I2C bus exists
 (`nocti_v4_led.c`, low time then recovery).
+
+## D6 register order
+
+Owner decision, 2026-10-29 23:22 KST: follow D6 and pin brownout on.
+D6 is ADR-0004 §3.8.1, from [#33 comment 6333972667](https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6333972667):
+IREFALL=00h, then PWMALL=00h, then LEDOUT0–5=00h, then readback.
+Register addresses in that section are IREFALL `40h` and PWMALL `3Fh`.
+
+`write_d6_emitter_off` performs those three writes in that order, through
+the existing `i2c_master_transmit` path. It then reads IREF0–23 and
+LEDOUT0–5, including channels 10–13, and expects zero. Only after that
+readback does init write MODE1/MODE2/GRPPWM/GRPFREQ and the existing
+15 mA default IREF. LEDOUT stays the verified zero image, so the emitters
+stay off while that default current is stored. The 30 mA cap is unchanged.
+OE# is still not a GPIO. `nocti_v4_board_early_safe_init` leaves
+`oe_state` unverified, and the D6 writes do not drive it.
+
+A failed init still re-asserts PCA RESET. A successful init leaves RESET
+released. ADR-0004 B4 also holds RESET# LOW after the zero sequence, as
+the protocol STOPPED off-state. This image does not add that final hold
+on the success path: the later LED owner writes LEDOUT only while RESET
+is released, and no other function releases it. Early boot still holds
+RESET until this golden path runs. That final-hold difference is static
+only. It is not an electrical measurement.
+
+## Brownout
+
+`firmware/v4-idf61/sdkconfig.defaults` sets `CONFIG_ESP_BROWNOUT_DET=y`
+and `CONFIG_ESP_BROWNOUT_DET_LVL_SEL_7=y` (about 2.44 V). That choice is
+the ESP-IDF v6.1 default for ESP32-S3
+(`components/esp_hw_support/power_supply/port/esp32s3/Kconfig.power`,
+default `ESP_BROWNOUT_DET_LVL_SEL_7`). The schematic text "LDO 5V"
+(`Schematic_and_hardwareInfo/SCH_Thesis_main_2026-10-16.json`) and
+`docs/BOARD_POWER.md` do not state the module's 3V3 rail or a brownout
+threshold. ADR-0004 §3.8.1 item 3 leaves the threshold TBD and says not
+to invent one, so the IDF default is pinned instead of a new level.
+This project does not use the repository-root CI profile overlays.
+Those overlays build the root firmware, not this image.
 
 ## What still needs a board
 

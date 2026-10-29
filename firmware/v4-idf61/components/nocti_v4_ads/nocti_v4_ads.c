@@ -1775,7 +1775,8 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
     const bool running = runtime->lifecycle == NOCTI_V4_ADS_RUNNING_DARK;
     /* Qualification still refuses a two-deep remainder. A running scan uses
      * nocti_v4_backlog_service(): overwritten conversions are counted and the
-     * newest coherent event is read. Depth 16 or age 1 ms still faults. */
+     * newest coherent event is read. Fault depth is
+     * NOCTI_V4_BACKLOG_FAULT_DEPTH (8), or age 1 ms. */
     if (!running && backlog >= NOCTI_V4_ADS_MAX_EVENT_BACKLOG) {
         counter_add(&runtime->health->adc_missed_backlog, backlog);
         counter_add(&runtime->health->adc_missed, backlog);

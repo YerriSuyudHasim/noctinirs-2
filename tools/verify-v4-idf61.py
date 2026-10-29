@@ -58,8 +58,12 @@ def main():
     require("nvs_flash_erase(" not in network, "automatic NVS erasure")
     defaults = (PROJECT / "sdkconfig.defaults").read_text()
     for setting in ("CONFIG_FREERTOS_HZ=1000", "CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1=y",
-                    "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y", "CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240"):
+                    "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y", "CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240",
+                    "CONFIG_ESP_BROWNOUT_DET=y", "CONFIG_ESP_BROWNOUT_DET_LVL_SEL_7=y"):
         require(setting in defaults, "missing setting: " + setting)
+    for other in ("SEL_1=y", "SEL_2=y", "SEL_3=y", "SEL_4=y", "SEL_5=y", "SEL_6=y"):
+        require("CONFIG_ESP_BROWNOUT_DET_LVL_" + other not in defaults,
+                "brownout level is not the IDF ESP32-S3 default")
     require((PROJECT / "partitions.csv").read_bytes() ==
             (ROOT / "config/partitions/acquisition-16mb.csv").read_bytes(), "partition overlay mismatch")
     optical = (PROJECT / "components/nocti_v4_optical/nocti_v4_optical.c").read_text()

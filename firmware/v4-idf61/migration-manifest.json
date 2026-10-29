@@ -23,12 +23,13 @@
     {
       "path": "components/nocti_v4_ads/nocti_v4_ads.c",
       "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
-      "active_sha256": "12ecffcb77b5c3f98a43a6d46d853014331977355cd53ead21b38a2cde058e17",
+      "active_sha256": "ba15ee6e93cc9b201d816a0d4cda49e970efe66778d1ae3c4082fe52d853bb2a",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
         "Dark consumer subscribes to the task watchdog and waits at most one second",
-        "Failed ADS init removes the DRDY handler and SPI bus, then the tasks exit; SPI acquire waits at most 3 s"
+        "Failed ADS init removes the DRDY handler and SPI bus, then the tasks exit; SPI acquire waits at most 3 s",
+        "Backlog fault comment matches NOCTI_V4_BACKLOG_FAULT_DEPTH 8"
       ]
     },
     {
@@ -80,11 +81,12 @@
     {
       "path": "components/nocti_v4_board/nocti_v4_board.c",
       "historical_sha256": "36e37ac65357d1d70a97614208924aff06ec4f2d670c274893c61d802391ddf8",
-      "active_sha256": "d74e54b54b761edee9b0dde71de6dfd8abd527693959756ac9839e21c4e64ae5",
+      "active_sha256": "8c7c2b212884faacf92fbb01d229d0b92362169e42258ca019fa643a052a5b7c",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
-        "Drive PCA RESET and ADS reset low before gpio_config, with pulldown, then drive them again"
+        "Drive PCA RESET and ADS reset low before gpio_config, with pulldown, then drive them again",
+        "OE# remains undriven and unverified on the D6 init path"
       ]
     },
     {
@@ -188,10 +190,11 @@
     {
       "path": "components/nocti_v4_led/nocti_v4_led.c",
       "historical_sha256": "377f207398d1fb3618303c321b28a6d51c95e61fcf3f95a8fdf6f2c89a0aac46",
-      "active_sha256": "31162c2ea3b93ae2a8bf45802eee30b7d5743cc91fac35c77126f37734f8a60d",
+      "active_sha256": "411625f24bea869d4daff82cc4080f55f07df8476160b26cb00388fba9bfb825",
       "changes": [
         "Retain active NN2 30 mA bring-up ceiling instead of historical 50 mA command ceiling",
-        "Configuration-bus status labels follow the approved 100 kHz overlay"
+        "Configuration-bus status labels follow the approved 100 kHz overlay",
+        "D6 init writes IREFALL 00h, then PWMALL 00h, then LEDOUT0-5 00h before operating IREF"
       ]
     },
     {
