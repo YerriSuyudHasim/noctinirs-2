@@ -1,3 +1,9 @@
+> **V4 restart branch: `feat/35-v4-idf61-restart`.** We are starting over from
+> the V4 runtime, adapted to ESP-IDF 6.1 with explicit NN2 modifications.
+> Build the [V4 migration project](firmware/v4-idf61/README.md); the repository-root
+> firmware and the sections below retain the previous feat35 implementation.
+> This is a source checkpoint; build/link and board qualification remain pending.
+
 > Current local communication revision (2026-10-27): ADR-0004/1 replaces CF1.
 > See [local ADR binding](docs/adr/0004-local-implementation.md) for exact wire
 > layouts, CLI commands and simulation limits, and [evidence](docs/ADR004_EVIDENCE.md).

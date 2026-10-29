@@ -1,0 +1,508 @@
+{
+  "schema": 1,
+  "source": "reference/v4",
+  "target_sdk": "ESP-IDF 6.1",
+  "status": "local source candidate; NN2 communication bridge not compiled/linked or target-validated",
+  "files": [
+    {
+      "path": "components/nocti_v4_ads/CMakeLists.txt",
+      "historical_sha256": "1215deb74184d94fdec00eeb14c9e4bbe8c2607d9e2d49544d034636b0515b5b",
+      "active_sha256": "1215deb74184d94fdec00eeb14c9e4bbe8c2607d9e2d49544d034636b0515b5b",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_ads/include/nocti_v4_ads.h",
+      "historical_sha256": "9f8914cb107d25f1c6a5966d7841db4366186dc9ae80bb93ed1a279e61430aeb",
+      "active_sha256": "9f8914cb107d25f1c6a5966d7841db4366186dc9ae80bb93ed1a279e61430aeb",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_ads/nocti_v4_ads.c",
+      "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
+      "active_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_async_led/CMakeLists.txt",
+      "historical_sha256": "5a9cb48e54114d2fef920576c2409404b8b0fc9faa01c79c4c77a3dd18ace542",
+      "active_sha256": "5a9cb48e54114d2fef920576c2409404b8b0fc9faa01c79c4c77a3dd18ace542",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_async_led/include/nocti_v4_async_led.h",
+      "historical_sha256": "f1bb6ff473c281a26792706bb1baa3126e79f2073f42bf4660aab8590bb3f383",
+      "active_sha256": "e77907687bcb17fc30f31a43049117fef2890672b5509a0403f4376cb97f59b3",
+      "changes": [
+        "Line ending normalization only; runtime source retained",
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_async_led/nocti_v4_async_led.c",
+      "historical_sha256": "bd05bb16f584acd1b6da718820f575fc1cfa3b11eefb9fdc5eba769c7cea991b",
+      "active_sha256": "928bbbf49f9a721b0e2203b831d951b98022b9193363ea503cae1738651d1acb",
+      "changes": [
+        "Configuration-bus status labels follow the approved 100 kHz overlay",
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
+        "IDF6.1 compatibility: explicit ISR yield and direct-transaction completion proof before callback detach"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_board/CMakeLists.txt",
+      "historical_sha256": "ea696fae7676a84a8355966c660a88eb21bca9c44558a26b423cbdd2a9ec2fc4",
+      "active_sha256": "c2eb7a89949cfc5b16b48c1c53cf723065183b4106c6133281addfbbd3c33845",
+      "changes": [
+        "Line ending normalization only; runtime source retained",
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_board/include/nocti_v4_board.h",
+      "historical_sha256": "f7b327f764d249e0e5c2839dff39a85a80ee86b13a7cea0a6cf367ce80ad3e08",
+      "active_sha256": "efc31eddf80724d2d19c09b3d409a5f9ddc126c65747f6b846c39c6c93d38b3d",
+      "changes": [
+        "Preserve authorized 100 kHz configuration bus; runtime remains 800 kHz",
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_board/nocti_v4_board.c",
+      "historical_sha256": "36e37ac65357d1d70a97614208924aff06ec4f2d670c274893c61d802391ddf8",
+      "active_sha256": "d7eb8d2126f01e71d462540e518f5b5ad566b2ea7bb75ab24446e4145d7693dc",
+      "changes": [
+        "Line ending normalization only; runtime source retained",
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_common/CMakeLists.txt",
+      "historical_sha256": "dd7c7842ee7df851305c1dc9ba532267bf5a1b5dba849cff26519854890a833f",
+      "active_sha256": "dd7c7842ee7df851305c1dc9ba532267bf5a1b5dba849cff26519854890a833f",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_common/include/nocti_v4_ads_config.h",
+      "historical_sha256": "1ec6e74d6aaf1ca24ac94ab10a3a91607f34e8b6e5ab5ead364a0e7fdf897c43",
+      "active_sha256": "9c9c25bfac14bcbcc317fbee4e16447ab720933aa3d661eba6ab9f887941a936",
+      "changes": [
+        "Use the active board approved dedicated SPI2 controller; electrical pin map unchanged"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_common/include/nocti_v4_common.h",
+      "historical_sha256": "d1035b11d92fd7986d603ccbdef3fe0928e115f37279ff0dc8fb9adfcdc88ad8",
+      "active_sha256": "104337e7f54cc920dde71f88e8f10209f43cffb0edd0b9ddb069fdab2acf9c82",
+      "changes": [
+        "Migration identity; do not inherit historical target qualification claims"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_common/nocti_v4_common.c",
+      "historical_sha256": "6a9e08453e7d0450dffa95889a287603f26f816e0aa5aea5ebcdeeaff5425df2",
+      "active_sha256": "6a9e08453e7d0450dffa95889a287603f26f816e0aa5aea5ebcdeeaff5425df2",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_health/CMakeLists.txt",
+      "historical_sha256": "a170f8a2058066f8301a8b91e7885fec060c84156212dfae7313daabcdc79066",
+      "active_sha256": "a170f8a2058066f8301a8b91e7885fec060c84156212dfae7313daabcdc79066",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_health/include/nocti_v4_health.h",
+      "historical_sha256": "cd4f7afa786aa90b5de8e8a8befcb2756036700375dd983df59ad6b5e53f5477",
+      "active_sha256": "cd4f7afa786aa90b5de8e8a8befcb2756036700375dd983df59ad6b5e53f5477",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_health/nocti_v4_health.c",
+      "historical_sha256": "83674b048814e5e8da940300ebddac110c73686e11e7c0b336cbcd9f9a447b5c",
+      "active_sha256": "83674b048814e5e8da940300ebddac110c73686e11e7c0b336cbcd9f9a447b5c",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_i2c/CMakeLists.txt",
+      "historical_sha256": "ce0e6f951d2cd4de5700bb38a742d4cccf4fdabc795ff42f940d253685fa5ecd",
+      "active_sha256": "ce0e6f951d2cd4de5700bb38a742d4cccf4fdabc795ff42f940d253685fa5ecd",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_i2c/include/nocti_v4_i2c.h",
+      "historical_sha256": "f2775721b52e86a8fab6d5a55920f4818b6385c4a0548f4df8aa667d16bbabe0",
+      "active_sha256": "f2775721b52e86a8fab6d5a55920f4818b6385c4a0548f4df8aa667d16bbabe0",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_i2c/nocti_v4_i2c.c",
+      "historical_sha256": "8c30983cd3c548575b37a71dd6151d958f386bbe4699c8fdf0c7d3e3e572bf53",
+      "active_sha256": "8c30983cd3c548575b37a71dd6151d958f386bbe4699c8fdf0c7d3e3e572bf53",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_led/CMakeLists.txt",
+      "historical_sha256": "b1e69507c9fbc9fbcabb2d5b1576c2ea6cebbd1b0cec4f8475e949ff178c142c",
+      "active_sha256": "b1e69507c9fbc9fbcabb2d5b1576c2ea6cebbd1b0cec4f8475e949ff178c142c",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_led/include/nocti_v4_led.h",
+      "historical_sha256": "100f6367d7bc45a776e11a40e5679883bc63980cec11d2e35ab691cc6720b741",
+      "active_sha256": "9b15f148a9112803187abd433d5d2c5e0878249a8d40939c47f2f0b698b7963f",
+      "changes": [
+        "Configuration-bus status labels follow the approved 100 kHz overlay"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_led/nocti_v4_led.c",
+      "historical_sha256": "377f207398d1fb3618303c321b28a6d51c95e61fcf3f95a8fdf6f2c89a0aac46",
+      "active_sha256": "31162c2ea3b93ae2a8bf45802eee30b7d5743cc91fac35c77126f37734f8a60d",
+      "changes": [
+        "Retain active NN2 30 mA bring-up ceiling instead of historical 50 mA command ceiling",
+        "Configuration-bus status labels follow the approved 100 kHz overlay"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_network/CMakeLists.txt",
+      "historical_sha256": "483ec7f9def203f68bdc30b1bf35120b1b0273e2847404e7269bc815338880a6",
+      "active_sha256": "483ec7f9def203f68bdc30b1bf35120b1b0273e2847404e7269bc815338880a6",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_network/include/nocti_v4_network.h",
+      "historical_sha256": "d4a433b559f436ed651f27ac57faa0c914812c42679a56b3c34099a9eabf9deb",
+      "active_sha256": "92dd700b43f46a63030a89e746d83da6acafbf3e056b54aa566307f3a58076d1",
+      "changes": [
+        "Historical embedded AP password excluded; use ignored local sdkconfig"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_network/nocti_v4_network.c",
+      "historical_sha256": "139efda5b6b16e2892f75a28a360b2831ce379120e07b3eef60191a3cada3efd",
+      "active_sha256": "2a526a3e997b2ffa54d1cf7489e767bc2f0e86482d5085dc951ab8ec7afe6696",
+      "changes": [
+        "Reject missing local WPA2 configuration before starting the network",
+        "Remove automatic NVS erase fallback; preserve current provisioning",
+        "Use actual NETWORK_ERROR enum"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_optical/CMakeLists.txt",
+      "historical_sha256": "2e2255bbb6fbf19b816212b07df3f9c3a81b0022d45e47b927c31a4ff6531ad3",
+      "active_sha256": "2e2255bbb6fbf19b816212b07df3f9c3a81b0022d45e47b927c31a4ff6531ad3",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_optical/include/nocti_v4_optical.h",
+      "historical_sha256": "ac693aba8ae46c6c02101b54fe166425010ff581968abee051b9b34202bbce77",
+      "active_sha256": "ac693aba8ae46c6c02101b54fe166425010ff581968abee051b9b34202bbce77",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_optical/nocti_v4_optical.c",
+      "historical_sha256": "88027b1d4dcfa4fa2d45289c65145592a36a06b6ee9939131fd17f71c10dbdf9",
+      "active_sha256": "e4d06aaba58a81c04fce9f9b997dea2e15d44f5fdab92a0b18cc216e74bb3845",
+      "changes": [
+        "Fs2 extension: raw staging 128 to 256 records, allowing 200-sample slot plus ingest batch"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_scheduler/CMakeLists.txt",
+      "historical_sha256": "8f2f57715c50eb5c347b9b1e2b2af93c79a789551f547f5edc241a59b58b825e",
+      "active_sha256": "8f2f57715c50eb5c347b9b1e2b2af93c79a789551f547f5edc241a59b58b825e",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_scheduler/include/nocti_v4_scheduler.h",
+      "historical_sha256": "57f9afa3eb54fd523b110c66a1bb01df588995cc00ced03480dd46a301db7723",
+      "active_sha256": "68a9afb456dd31070adfe824c498b1c28e4a0ca5b11bd965a3cc06324d78259a",
+      "changes": [
+        "Line ending normalization only; runtime source retained",
+        "Declare scoped stopped-only Fs setter"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_scheduler/include/nocti_v4_scheduler_config.h",
+      "historical_sha256": "9e12701ba0c2ac3c05c66543b2063cd678bf2d974754c348158e4e7dc43afeab",
+      "active_sha256": "ed2a2b93d13a97a190a0b77252148b19b5354b0e17ad12f7055ee5246b0631af",
+      "changes": [
+        "Line ending normalization only; runtime source retained",
+        "Scale slot/frame and 44%/50% OFF geometry for supported stopped-only rates"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_scheduler/nocti_v4_scheduler.c",
+      "historical_sha256": "83064d25c3e559e6a0d3c6cdb2ec8a01f0a3c27d9b942b85a5d9673e1f3ec3d1",
+      "active_sha256": "0540887498f421825b254fa2a09104bef71734a643c7de3f305de03de553d163",
+      "changes": [
+        "Line ending normalization only; runtime source retained",
+        "Stopped-only Fs extension; atomic shared slot geometry, original 10 Hz defaults",
+        "Use PRIu32 for runtime uint32_t Fs/period values on Xtensa IDF6.1"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_time/CMakeLists.txt",
+      "historical_sha256": "f46e63b53388066d27b67b9bb62175b3a07a1484f46e5f234554ba064f35368e",
+      "active_sha256": "f46e63b53388066d27b67b9bb62175b3a07a1484f46e5f234554ba064f35368e",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_time/include/nocti_v4_time.h",
+      "historical_sha256": "2c4b71e05e9438161cd5a7572e96bc59797c30760d4a9468d4f1ce003e92294b",
+      "active_sha256": "2c4b71e05e9438161cd5a7572e96bc59797c30760d4a9468d4f1ce003e92294b",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "components/nocti_v4_time/nocti_v4_time.c",
+      "historical_sha256": "505b15d804e8f3958e42c9f1890476c034a76b3e5849f7f08ac2897ab28e97a4",
+      "active_sha256": "505b15d804e8f3958e42c9f1890476c034a76b3e5849f7f08ac2897ab28e97a4",
+      "changes": [
+        "Line ending normalization only; runtime source retained"
+      ]
+    },
+    {
+      "path": "main/app_main.c",
+      "historical_sha256": "e1b7168cd9769af113fcd14cc11076f3acb5be0061aa9e3cd5022366933c22b9",
+      "active_sha256": "039af21f9081073b2036ef778cb57a5c20c4229230f52a50cb2555eff72abe22",
+      "changes": [
+        "Guard SDK 6.1 and identify unqualified migration at boot/STATUS",
+        "Expose SCAN_SET_FS command, 30 mA command limit and scaled OFF help",
+        "Use PRIu32 for runtime uint32_t Fs/period values on Xtensa IDF6.1",
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+      ]
+    },
+    {
+      "path": "main/CMakeLists.txt",
+      "historical_sha256": "3464b704d76c53ee2795bf6010210ead7bc0ebc3be8216850885e8a1dab746a9",
+      "active_sha256": "df3868f57105b0e5d278eb863c08b8712b7f1bb4d5ce9cab5f24498d5e3cab8d",
+      "changes": [
+        "Line ending normalization only; runtime source retained",
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+      ]
+    }
+  ],
+  "active_project": "firmware/v4-idf61",
+  "baseline_fs_hz": 10,
+  "selected_extensions": [
+    "STOPPED-only Fs 2/4/5/8/10",
+    "active board pin/controller/limits overlay",
+    "no embedded credentials or automatic NVS erase"
+  ],
+  "generated_files": [
+    {
+      "path": "main/v4_nn2_control.inc",
+      "sha256": "7d19187163eab6590b05a79e09727fbab268da461c30b3e17e4434c592cdb21f"
+    }
+  ],
+  "shared_communication": [
+    {
+      "path": "components/nn2_core/CMakeLists.txt",
+      "sha256": "7f8b0b28359a7f8b31373d32460b5ae905b1e8dce4e70f4bb439296a6504002e"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_acquisition.h",
+      "sha256": "7f314812a920ad46a5b8184dedc76b6a9202847d3338b8d43cd6563f1ec5abb7"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_adc_record.h",
+      "sha256": "63a53467029bc7efe044781c66d8ea65808d9f87726caf22d42961dd34ae5d6d"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_optical.h",
+      "sha256": "cc26ea5ab0ac2bf02f5fc40d17c76b9446b14e4b67f730795c5645b956f93fe1"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_protocol.h",
+      "sha256": "6188eabba1916a2d02c8df2b66dbc00cfab98311c8def358b63867dcd43c5b89"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_ring.h",
+      "sha256": "58590ef5274238b06bf4413bca91782328fdd729647b5bc445eabcba1c1730f2"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_types.h",
+      "sha256": "98176616c2d4f9f75a51aac667b7b5412e8ed9767dce7ee090b17bfe8492338e"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_acquisition.c",
+      "sha256": "41784492839ba86d3c22aed64a95bddff82f14cc745a0da5a38ab06ac4337cad"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_protocol.c",
+      "sha256": "0cc092f0be8e866a4373b7a0c5cc788e7f7c57008724144f6b86f0a9609b7aef"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_ring.c",
+      "sha256": "49057b29ce781930b63f5475c0293d05bba4bc0627de5c50257018f764c71f4d"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_ring_internal.h",
+      "sha256": "7a889b22515b9d2f5ce073440dd124f75d67404279c6f8682564709eb5ebc41d"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_status.c",
+      "sha256": "fa41d3df11ebd31a963de87dc1246f0aec63a8b470683f51583fb802877e306f"
+    },
+    {
+      "path": "components/nn2_ports/CMakeLists.txt",
+      "sha256": "21c968b6d40f73bcd9f7bb39460dee31f167df019ff8bd949e8a922bc33eb37d"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_adc.h",
+      "sha256": "6f9e35ff364b16b589d28adb24c445843a0357091f54ea4cc51beb609e41d5ee"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_adc_stream.h",
+      "sha256": "8feb64df2c0632edf1363d25cfe9c91802090d62959c3bb0afcec3ef406c06d4"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_battery.h",
+      "sha256": "951c1b03e83715df9a54faaed0881c6547dfd293ecf07bb35caf409bc06da938"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_clock.h",
+      "sha256": "8e6835a7ef4dc43d4112306fe81025acf8d60e1393e534877dfea30bfe4e3ef9"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_led.h",
+      "sha256": "0a1ef831cd0d6aa8048eed2179742ac6cd7f202b212455f11d7797cb4e520e11"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_log.h",
+      "sha256": "43f5209ed3439640dff9472149246b7dc4bca2ac36f7df1a0c918feb89b75280"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_network_config.h",
+      "sha256": "b6e8de6ef9b50ee36bf29e694c9c712909db2e9794cefd38b4b03d79b3cbadd4"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_optical.h",
+      "sha256": "9a88cf60b78dd297bdec561c531a93686c326ab7de4f3eb87a0c33f3cf050b73"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_safety.h",
+      "sha256": "ab5a4e3c79c9976194818f07627ef5f965414636ca8fbbf2ef969723e939b6f3"
+    },
+    {
+      "path": "components/nn2_app/CMakeLists.txt",
+      "sha256": "7e57f2313a96f0a62e84a573791ecacf2f1f62054b2f4866f9c4078146459777"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_adc_diagnostic.h",
+      "sha256": "a28eadf887bc13cad4073f0268e5a326721bdc94d868044544c050fc1cbabbb2"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_battery.h",
+      "sha256": "57acd6a1bc6df3dd49a522950a409628bc87bacd7aeb704fbee663ffe9ceefb3"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_comm.h",
+      "sha256": "2fd06e656717a3f6443f1c1f63b63abb65f3abc62274c9ee346432b7db3a6eab"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_provision.h",
+      "sha256": "5eeb486627dea6a8173e6afe6b3fc624558bdacf15f2e71e8f69ba8220ea4574"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_sequencer.h",
+      "sha256": "0b8e3983dfb7ed62f727285b829948901d3e0ea255aa459eace36f140ce53218"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_adc_diagnostic.c",
+      "sha256": "fe7964c3677d726fca6f363475c4c20d0b7290e7b0e28faf9457a1d342f760b4"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_battery.c",
+      "sha256": "074e5bda435cc332bee06b1a965f0489065a197327af17f723200db1e0b8bfa1"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_comm.c",
+      "sha256": "a1575db0ecea244f836623c8b804da2350998e175d59dce5785dc44f078ebb92"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_provision.c",
+      "sha256": "fe5399bca1b1e9e775aebb14605816d5c17597f14b808d8fb6b6b097490a580b"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_sequencer.c",
+      "sha256": "ec675dc6678a9ae138128eeeb3a6bb3b0b8462e4809dcc4c0ed9a28731df13c9"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_sequencer_internal.h",
+      "sha256": "56e787883938f1070f56bdef7cd16b8aba0c4b0fdbadb8a4a5804d3ba5c5201c"
+    },
+    {
+      "path": "components/nn2_wifi/CMakeLists.txt",
+      "sha256": "726d67dbb47e6c90d58d8cf2d7f6f6a2411aaa0e2a9c4f9c099a360596b80503"
+    },
+    {
+      "path": "components/nn2_wifi/include/nn2_wifi.h",
+      "sha256": "c781a2241382d899457402a25e85f259135f7694ac83521d488b95b0b09098d8"
+    },
+    {
+      "path": "components/nn2_wifi/nn2_wifi.c",
+      "sha256": "ac4b81c1961cb86a21641341050c10daf99921039af6e2ecb6649f91d09a3f8b"
+    },
+    {
+      "path": "components/nn2_net/CMakeLists.txt",
+      "sha256": "a0553558200a2d6d151e4b3b975636e7f65fa85d1a1af4c6808becf1fc4d0ff4"
+    },
+    {
+      "path": "components/nn2_net/include/nn2_net.h",
+      "sha256": "704b42879b444aeb6ca9a56a1a904617e50bcc5f715d6f404ada516b9feac7b8"
+    },
+    {
+      "path": "components/nn2_net/nn2_net.c",
+      "sha256": "d71afcb32ea9f96be0679880f9adb8e598543587cfff6c8055fc9740208170e7"
+    },
+    {
+      "path": "components/nn2_config/CMakeLists.txt",
+      "sha256": "16f070f7762e08ad5b043c6b203f9769feefc351beefb9100c0bd7f91d592236"
+    },
+    {
+      "path": "components/nn2_config/include/nn2_config.h",
+      "sha256": "0b843a75f7854b3e40b557e8d724df907173575d6b202055f4d01d06895074d6"
+    },
+    {
+      "path": "components/nn2_config/nn2_config.c",
+      "sha256": "fa53f57638b7d07f0cdcca6a1b889303e560a911bbe9fb52cd7c926a10813c17"
+    }
+  ]
+}

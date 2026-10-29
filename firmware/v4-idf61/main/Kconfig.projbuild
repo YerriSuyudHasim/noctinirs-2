@@ -1,0 +1,18 @@
+menu "V4 IDF 6.1 migration"
+config NOCTI_V4_NN2_COMMUNICATION
+    bool "Use NN2 SoftAP/UDP control with V4 acquisition runtime"
+    default y
+    help
+        Reuses nn2ctl command/reply/session/lease handling. V4 console remains
+        read-only except emergency STOP; old V4 network is not initialized.
+        Native V4 optical frames are not relabelled as ACQ1.
+
+config NOCTI_V4_MIGRATION_WIFI_PASSWORD
+    string "Local bench SoftAP WPA2 password (8 to 63 characters)"
+    depends on !NOCTI_V4_NN2_COMMUNICATION
+    default ""
+    help
+        Set only in the ignored local sdkconfig. The historical embedded
+        password is intentionally excluded. Empty leaves network unavailable;
+        USB diagnostics and explicit-start behavior remain available.
+endmenu
