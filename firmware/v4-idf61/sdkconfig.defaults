@@ -1,15 +1,27 @@
 CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_FREERTOS_HZ=1000
+# D6 keeps the ESP brownout detector enabled (ADR-0004 §3.8.1 item 3).
+# This image has one defaults file; the root CI profiles build a different
+# project and are not applied here. Board docs label an "LDO 5V" net and do
+# not state the ESP32-S3 3V3 rail or a brownout threshold (ADR-0004 leaves
+# that threshold TBD). The level below is the ESP-IDF v6.1 ESP32-S3 default
+# from components/esp_hw_support/power_supply/port/esp32s3/Kconfig.power:
+# CONFIG_ESP_BROWNOUT_DET_LVL_SEL_7, about 2.44 V. It is pinned explicitly.
+CONFIG_ESP_BROWNOUT_DET=y
+CONFIG_ESP_BROWNOUT_DET_LVL_SEL_7=y
+# CONFIG_ESP_BROWNOUT_DET_LVL_SEL_6 is not set
+# CONFIG_ESP_BROWNOUT_DET_LVL_SEL_5 is not set
+# CONFIG_ESP_BROWNOUT_DET_LVL_SEL_4 is not set
+# CONFIG_ESP_BROWNOUT_DET_LVL_SEL_3 is not set
+# CONFIG_ESP_BROWNOUT_DET_LVL_SEL_2 is not set
+# CONFIG_ESP_BROWNOUT_DET_LVL_SEL_1 is not set
 # ADS, LED and scheduler subscribe themselves and kick at least once a second.
-# Panic is deliberate: a missed kick means one of those tasks is stuck. A
-# log-only timeout would leave the sample stream and the emitter in whatever
-# state the stuck task last set. Panic resets through the boot path, which
-# holds PCA RESET before I2C comes up.
+# TWDT panic deferred per Owner 2026-10-30; revisit after acquisition validation
 CONFIG_ESP_TASK_WDT_EN=y
 CONFIG_ESP_TASK_WDT_INIT=y
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
-CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_TASK_WDT_PANIC=n
 CONFIG_FREERTOS_IN_IRAM=y
 CONFIG_LIBC_NEWLIB=y
 

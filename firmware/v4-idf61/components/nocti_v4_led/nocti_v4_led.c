@@ -19,6 +19,8 @@ static const char *TAG = "nocti_v4_led";
 #define PCA_GRPFREQ     0x09u
 #define PCA_IREF0       0x22u
 #define PCA_PWMALL      0x3Fu
+/* PCA9956B IREFALL. ADR-0004 §3.8.1 D6 names this address 40h. */
+#define PCA_IREFALL     0x40u
 #define PCA_EFLAG0      0x41u
 #define PCA_EFLAG5      0x46u
 
@@ -209,6 +211,49 @@ static esp_err_t program_iref_verified(nocti_v4_led_t *led)
     return ESP_OK;
 }
 
+/* D6 emitter-off writes (ADR-0004 §3.8.1, #33 comment 6333972667):
+ * IREFALL=00h, then PWMALL=00h, then LEDOUT0-5=00h. Current stays zero
+ * before any PWM or LEDOUT update. OE# is not a GPIO on this image;
+ * nocti_v4_board_early_safe_init leaves oe_state unverified and this
+ * function does not drive it. */
+static esp_err_t write_d6_emitter_off(nocti_v4_led_t *led)
+{
+    esp_err_t err = nocti_v4_i2c_write_reg(led->i2c, PCA_IREFALL, 0x00u,
+                                           PCA_INIT_TIMEOUT_MS, led->health);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = nocti_v4_i2c_write_reg(led->i2c, PCA_PWMALL, 0x00u,
+                                 PCA_INIT_TIMEOUT_MS, led->health);
+    if (err != ESP_OK) {
+        return err;
+    }
+    for (uint8_t index = 0u; index < 6u; ++index) {
+        err = nocti_v4_i2c_write_reg(led->i2c, (uint8_t)(PCA_LEDOUT0 + index), 0u,
+                                     PCA_INIT_TIMEOUT_MS, led->health);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    return ESP_OK;
+}
+
+static esp_err_t verify_iref_zero(nocti_v4_led_t *led)
+{
+    for (uint8_t channel = 0u; channel < NOCTI_V4_PCA_CHANNEL_COUNT; ++channel) {
+        uint8_t observed = 0u;
+        const esp_err_t err = read_reg(led, (uint8_t)(PCA_IREF0 + channel), &observed);
+        if (err != ESP_OK) {
+            return err;
+        }
+        const esp_err_t check = check_equal(led, "IREF", 0u, observed);
+        if (check != ESP_OK) {
+            return check;
+        }
+    }
+    return ESP_OK;
+}
+
 static esp_err_t program_sync_golden_path(nocti_v4_led_t *led)
 {
     esp_err_t err = nocti_v4_board_assert_pca_reset(led->board);
@@ -234,12 +279,24 @@ static esp_err_t program_sync_golden_path(nocti_v4_led_t *led)
     ESP_LOGI(TAG, "PCA presence addr=0x%02X MODE1=0x%02X", NOCTI_V4_PCA_ADDRESS_7BIT,
              (unsigned)mode1);
 
+    err = write_d6_emitter_off(led);
+    if (err != ESP_OK) {
+        return fail_safe_reset(led, err);
+    }
+    err = verify_iref_zero(led);
+    if (err != ESP_OK) {
+        return fail_safe_reset(led, err);
+    }
+    err = verify_all_off(led);
+    if (err != ESP_OK) {
+        return fail_safe_reset(led, err);
+    }
+
     const struct { uint8_t reg; uint8_t value; } config[] = {
         {PCA_MODE1, PCA_MODE1_EXPECTED_WRITABLE},
         {PCA_MODE2, PCA_MODE2_EXPECTED_WRITABLE},
         {PCA_GRPPWM, 0x00u},
         {PCA_GRPFREQ, 0x00u},
-        {PCA_PWMALL, 0x00u},
     };
     for (size_t index = 0u; index < sizeof(config) / sizeof(config[0]); ++index) {
         err = nocti_v4_i2c_write_reg(led->i2c, config[index].reg, config[index].value,
@@ -248,17 +305,8 @@ static esp_err_t program_sync_golden_path(nocti_v4_led_t *led)
             return fail_safe_reset(led, err);
         }
     }
-    for (uint8_t index = 0u; index < 6u; ++index) {
-        err = nocti_v4_i2c_write_reg(led->i2c, (uint8_t)(PCA_LEDOUT0 + index), 0u,
-                                     PCA_INIT_TIMEOUT_MS, led->health);
-        if (err != ESP_OK) {
-            return fail_safe_reset(led, err);
-        }
-    }
-    err = verify_all_off(led);
-    if (err != ESP_OK) {
-        return fail_safe_reset(led, err);
-    }
+    /* Operating IREF (default 15 mA, cap 30 mA) is written only after LEDOUT
+     * readback is zero, so the emitters stay off. */
     err = program_iref_verified(led);
     if (err != ESP_OK) {
         return fail_safe_reset(led, err);
@@ -322,13 +370,27 @@ esp_err_t nocti_v4_led_all_off(nocti_v4_led_t *led)
     }
     led->health->led_all_off_commands++;
     led->safe_off_state = NOCTI_V4_SAFE_OFF_REQUESTED;
-    for (uint8_t index = 0u; index < 6u; ++index) {
-        const esp_err_t err = write_reg(led, (uint8_t)(PCA_LEDOUT0 + index), PCA_LEDOUT_OFF);
-        if (err != ESP_OK) {
-            return fail_safe_reset(led, err);
-        }
+    /* Sync bus only (queue depth 0). One i2c_master_transmit or
+     * transmit_receive per register, PCA_COMMAND_TIMEOUT_MS (50) each.
+     * Success is 8 D6 writes + 24 IREF reads + 6 LEDOUT reads + 24 IREF
+     * restore writes + 24 IREF restore reads = 86 calls. The first error
+     * returns through fail_safe_reset (one GPIO write, no retry). The
+     * in-scan async OFF burst is a separate 7-byte transmit. */
+    esp_err_t err = write_d6_emitter_off(led);
+    if (err != ESP_OK) {
+        return fail_safe_reset(led, err);
     }
-    const esp_err_t err = verify_all_off(led);
+    err = verify_iref_zero(led);
+    if (err != ESP_OK) {
+        return fail_safe_reset(led, err);
+    }
+    err = verify_all_off(led);
+    if (err != ESP_OK) {
+        return fail_safe_reset(led, err);
+    }
+    /* LEDOUT is the verified zero image. Put the previous IREF shadow
+     * back so a later ON is not a zero-current enable. */
+    err = program_iref_verified(led);
     if (err != ESP_OK) {
         return fail_safe_reset(led, err);
     }

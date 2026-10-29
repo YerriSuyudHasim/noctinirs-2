@@ -70,7 +70,7 @@ esp_err_t nocti_v4_led_reinit(nocti_v4_led_t *led);
 esp_err_t nocti_v4_led_readback(nocti_v4_led_t *led, bool print_result);
 /* STOPPED-only ownership is enforced by app_main. This temporarily performs
  * read-only PCA traffic at the 800-kbit/s qualification rate, then always
- * attempts to restore and reinitialize the 400-kHz synchronous golden path. */
+ * attempts to restore and reinitialize the 100 kHz synchronous golden path. */
 esp_err_t nocti_v4_led_run_fast_i2c_qualification(nocti_v4_led_t *led);
 void nocti_v4_led_get_fast_i2c_qualification(
     nocti_v4_i2c_fast_qual_status_t *out_status);
