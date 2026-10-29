@@ -198,9 +198,10 @@
     {
       "path": "components/nocti_v4_network/include/nocti_v4_network.h",
       "historical_sha256": "d4a433b559f436ed651f27ac57faa0c914812c42679a56b3c34099a9eabf9deb",
-      "active_sha256": "92dd700b43f46a63030a89e746d83da6acafbf3e056b54aa566307f3a58076d1",
+      "active_sha256": "87b5fe4aea74dce4e61c5d3c375170e3c19ceaf68594ee89d8947c3bf513abf5",
       "changes": [
-        "Historical embedded AP password excluded; use ignored local sdkconfig"
+        "Historical embedded AP password excluded; use ignored local sdkconfig",
+        "Handle omitted native-network password Kconfig symbol in NN2 communication mode; fallback empty, existing runtime validation retained"
       ]
     },
     {

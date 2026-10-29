@@ -53,7 +53,7 @@ def main():
     ads = (PROJECT / "components/nocti_v4_common/include/nocti_v4_ads_config.h").read_text()
     require(re.search(r"ADS_SPI_HOST\s+SPI2_HOST", ads), "approved SPI2 controller")
     net_header = (PROJECT / "components/nocti_v4_network/include/nocti_v4_network.h").read_text()
-    require(not re.search(r'^#define NOCTI_V4_WIFI_AP_PASSWORD\s+"', net_header, re.M), "embedded AP credential")
+    require(not re.search(r'^#define NOCTI_V4_WIFI_AP_PASSWORD\s+"[^"]+"', net_header, re.M), "embedded AP credential")
     network = (PROJECT / "components/nocti_v4_network/nocti_v4_network.c").read_text()
     require("nvs_flash_erase(" not in network, "automatic NVS erasure")
     defaults = (PROJECT / "sdkconfig.defaults").read_text()

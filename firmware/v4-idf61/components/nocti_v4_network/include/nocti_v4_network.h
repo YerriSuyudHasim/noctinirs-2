@@ -14,7 +14,14 @@ extern "C" {
 
 #define NOCTI_V4_WIFI_AP_SSID             "NOCTINIRS"
 #include "sdkconfig.h"
+/* Kconfig omits this string when the NN2 communication mode is selected.
+ * Native V4 networking remains compiled for diagnostics, but is not started.
+ * An empty fallback still fails its existing credential-length validation. */
+#if defined(CONFIG_NOCTI_V4_MIGRATION_WIFI_PASSWORD)
 #define NOCTI_V4_WIFI_AP_PASSWORD CONFIG_NOCTI_V4_MIGRATION_WIFI_PASSWORD
+#else
+#define NOCTI_V4_WIFI_AP_PASSWORD ""
+#endif
 #define NOCTI_V4_WIFI_AP_CHANNEL          6u
 #define NOCTI_V4_WIFI_AP_MAX_CONNECTIONS  1u
 #define NOCTI_V4_UDP_CONTROL_PORT         3333u

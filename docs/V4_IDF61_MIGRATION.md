@@ -135,3 +135,49 @@ staged whitespace and historical319-file integrity. The author's build/link,
 unit execution and hardware tests remain NOT RUN. CI results are not yet known;
 no independent review, merge or release approval is claimed. Local sdkconfig,
 credentials, SDK installations and generated build artifacts are excluded.
+
+
+## Owner build feedback: inactive native network password symbol
+
+With NN2 communication enabled, the dependent native-V4 password string is absent
+from sdkconfig.h. The still-compiled native network component referenced it
+unconditionally. The header now uses the configured string only when defined,
+otherwise an empty string. The existing8-63 character validation still rejects
+initializing native networking without credentials; no open AP or default
+password was added. NN2 networking continues using its own configuration.
+Manifest, whitespace and historical/source checks were refreshed. Author did
+not build, commit or flash this correction; owner incremental rebuild pending.
+
+
+## As-is synchronization checkpoint: user bench boot82
+
+Owner requested commit/push of the current branch without further functional
+changes, recording the unresolved service-latency failure for external analysis.
+The latest user report identifies baseline V4_IDF61_NN2_CTRL, boot82; exact binary
+hash/toolchain/build warnings/size were not supplied, so no exact source-to-image
+identity is claimed. The user built/deployed/tested the candidate; the author
+performed no build, flash or hardware operation.
+
+Reported INFO succeeds and START is accepted as STARTING. The first scheduled
+LED ON is submitted and completed, then ADC faults with EVENT_BACKLOG at
+PROCESS_EVENT. Rate qualification:1024 samples,8000SPS, period124-125us. Completed
+SPI transactions:32-45us, average33us. CRC/SPI/status error counters zero. DRDY
+event maximum depth4, missed_backlog3, raw-ring overflow0. The optical scan report
+records3085us and no completed frame. Scheduler event/completion errors are zero;
+async exit_failures1 is retained and control status reports ESP_ERR_INVALID_STATE.
+The initial fault is ADC backlog; exact CPU/interrupt blocking source remains
+unproven. PSRAM is disabled in both historical V4 sdkconfig and the migration;
+this does not establish a capacity-related root cause. Sample-service latency,
+priority22/21 work and SDK interrupt-masked paths remain investigation targets.
+
+This commit also records the already-applied missing native-network password
+Kconfig guard. Empty fallback does not enable an unsecured native AP. No further
+runtime or threshold changes are made for this synchronization request.
+
+Static checks passed: migration/shared-source provenance, component/board/config
+and Fs geometry, whitespace, historical319-file integrity. Host regressions and
+author build/link remain NOT RUN. Board integration is FAILED, not qualified;
+CI/specialist/independent review remain pending. The owner additionally requests
+an analysis of task responsibilities/service-time budgets and a future terminal-
+only command/diagnostic interface compatible with verified stable feat35 control.
+That command expansion is not implemented or claimed by this checkpoint.
