@@ -1,6 +1,7 @@
 #include "nn2_test.h"
 #include "nocti_v4_backlog.h"
 #include "nocti_v4_boot.h"
+#include "nocti_v4_rtos.h"
 
 static nocti_v4_backlog_event_t known(uint32_t sequence, uint32_t age_us)
 {
@@ -216,6 +217,21 @@ static void boot_runtime_requires_every_hardware_owner(void)
     TEST_ASSERT_EQUAL_INT(NOCTI_V4_BOOT_PCA, nocti_v4_boot_fault_stage(flags));
 }
 
+static void dark_priority_is_above_udp_and_below_optical(void)
+{
+    TEST_ASSERT_TRUE(NOCTI_V4_RTOS_PRIO_OPTICAL > NOCTI_V4_RTOS_PRIO_DARK);
+    TEST_ASSERT_TRUE(NOCTI_V4_RTOS_PRIO_DARK > NOCTI_V4_RTOS_PRIO_FRAME);
+    TEST_ASSERT_TRUE(NOCTI_V4_RTOS_PRIO_DARK > NOCTI_V4_RTOS_PRIO_NET);
+    TEST_ASSERT_EQUAL_UINT(6u, NOCTI_V4_RTOS_PRIO_DARK);
+}
+
+static void failed_ads_init_with_owners_requires_teardown(void)
+{
+    TEST_ASSERT_EQUAL_INT(1, nocti_v4_ads_failed_init_needs_teardown(1, 0));
+    TEST_ASSERT_EQUAL_INT(0, nocti_v4_ads_failed_init_needs_teardown(1, 1));
+    TEST_ASSERT_EQUAL_INT(0, nocti_v4_ads_failed_init_needs_teardown(0, 0));
+}
+
 static void empty_service_reads_nothing(void)
 {
     const nocti_v4_backlog_result_t result = nocti_v4_backlog_service(NULL, 0u);
@@ -241,5 +257,7 @@ void test_v4_rtos_suite(void)
     RUN_TEST(boot_ads_failure_still_reports_over_udp);
     RUN_TEST(boot_network_failure_is_named_after_the_owners);
     RUN_TEST(boot_runtime_requires_every_hardware_owner);
+    RUN_TEST(dark_priority_is_above_udp_and_below_optical);
+    RUN_TEST(failed_ads_init_with_owners_requires_teardown);
     RUN_TEST(empty_service_reads_nothing);
 }

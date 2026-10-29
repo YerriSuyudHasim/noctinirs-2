@@ -24,11 +24,14 @@
  * and it stays below the acquisition ladder. */
 #define NOCTI_V4_RTOS_PRIO_CONTROL 3u
 
-/* Core 0, highest first. The IDF Wi-Fi task remains above this band. */
+/* Core 0, highest first. The IDF Wi-Fi task remains above this band.
+ * Dark sits above the frame consumer and UDP so those tasks cannot hold it
+ * off the 5 s panic watchdog. It stays below optical. Wi-Fi itself can still
+ * preempt dark; that gap is an on-target measurement. */
 #define NOCTI_V4_RTOS_PRIO_OPTICAL 9u
+#define NOCTI_V4_RTOS_PRIO_DARK 6u
 #define NOCTI_V4_RTOS_PRIO_FRAME 5u
 #define NOCTI_V4_RTOS_PRIO_NET 4u
-#define NOCTI_V4_RTOS_PRIO_DARK 2u
 
 /* Stacks are bytes, passed to xTaskCreate* as ESP-IDF byte counts.
  * Shrink only after nn2ctl timing reports a high-water mark. */
@@ -57,9 +60,21 @@ _Static_assert(NOCTI_V4_RTOS_PRIO_LED > NOCTI_V4_RTOS_PRIO_SCHED,
                "LED handoff must preempt scheduler bookkeeping");
 _Static_assert(NOCTI_V4_RTOS_PRIO_SCHED > NOCTI_V4_RTOS_PRIO_OPTICAL,
                "soft work stays below the acquisition ladder");
-_Static_assert(NOCTI_V4_RTOS_PRIO_OPTICAL > NOCTI_V4_RTOS_PRIO_FRAME, "frame below optical");
+_Static_assert(NOCTI_V4_RTOS_PRIO_OPTICAL > NOCTI_V4_RTOS_PRIO_DARK,
+               "dark drain stays below optical classification");
+_Static_assert(NOCTI_V4_RTOS_PRIO_DARK > NOCTI_V4_RTOS_PRIO_FRAME,
+               "dark stays above the frame consumer");
 _Static_assert(NOCTI_V4_RTOS_PRIO_FRAME > NOCTI_V4_RTOS_PRIO_NET, "UDP below the frame consumer");
 _Static_assert(NOCTI_V4_RTOS_PRIO_NET > NOCTI_V4_RTOS_PRIO_CONTROL, "control below UDP");
-_Static_assert(NOCTI_V4_RTOS_PRIO_CONTROL > NOCTI_V4_RTOS_PRIO_DARK, "dark diagnostic is lowest");
+_Static_assert(NOCTI_V4_RTOS_PRIO_DARK > NOCTI_V4_RTOS_PRIO_NET,
+               "dark must not sit under UDP on the panic watchdog");
+
+/* Owners exist and init did not succeed: drop the ISR, the SPI bus, and the
+ * tasks before the caller treats the image as running. */
+static inline int nocti_v4_ads_failed_init_needs_teardown(int owners_created,
+                                                          int init_ok)
+{
+    return owners_created && !init_ok;
+}
 _Static_assert(NOCTI_V4_RTOS_BUDGET_ADS_SERVICE_US < NOCTI_V4_RTOS_BUDGET_DRDY_PERIOD_US,
                "ADS service budget must fit in one DRDY period");

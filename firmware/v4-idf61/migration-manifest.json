@@ -23,11 +23,12 @@
     {
       "path": "components/nocti_v4_ads/nocti_v4_ads.c",
       "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
-      "active_sha256": "25b78eebb08f8a4972abb0fed19f784a0bfbb6e5a2a1d72b899089129fcac1e1",
+      "active_sha256": "12ecffcb77b5c3f98a43a6d46d853014331977355cd53ead21b38a2cde058e17",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
-        "Dark consumer subscribes to the task watchdog and waits at most one second"
+        "Dark consumer subscribes to the task watchdog and waits at most one second",
+        "Failed ADS init removes the DRDY handler and SPI bus, then the tasks exit; SPI acquire waits at most 3 s"
       ]
     },
     {
@@ -339,11 +340,11 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "d9cf404043e982552b5d0a143b0509f5e7455804087f1729efa83c7f1e987ce3"
+      "sha256": "19381d8b2d0f5d8d01f47bf5ed6a0d2c8399f98f3612facd9d449b27bded88d1"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
-      "sha256": "a95c886d0f947423a00b2a60aeb084b2718be104c4990cce428c44b1e7fa1e51"
+      "sha256": "a7a5b46ce6a189c05293384f82e03d725b4c5d790aea691d65f2912f0d42ec1c"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_backlog.h",

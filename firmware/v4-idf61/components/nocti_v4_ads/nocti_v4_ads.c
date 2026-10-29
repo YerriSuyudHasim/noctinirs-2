@@ -10,6 +10,7 @@
 
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "esp_task_wdt.h"
 #include "esp_attr.h"
 #include "esp_intr_alloc.h"
 #include "esp_log.h"
@@ -180,10 +181,12 @@ typedef struct {
     TaskHandle_t ads_task;
     TaskHandle_t dark_task;
     SemaphoreHandle_t init_done;
+    SemaphoreHandle_t dark_exited;
     SemaphoreHandle_t command_done;
     SemaphoreHandle_t command_lock;
     SemaphoreHandle_t drain_done;
     StaticSemaphore_t init_done_storage;
+    StaticSemaphore_t dark_exited_storage;
     StaticSemaphore_t command_done_storage;
     StaticSemaphore_t command_lock_storage;
     StaticSemaphore_t drain_done_storage;
@@ -192,6 +195,8 @@ typedef struct {
     uint8_t command_queue_buffer[4u * sizeof(ads_command_t)];
 
     volatile bool initialized;
+    volatile bool task_exit;
+    bool drdy_handler_added;
     volatile bool ready;
     volatile bool rate_valid;
     volatile bool capture_enabled;
@@ -593,7 +598,10 @@ static esp_err_t transport_acquire(ads_transport_t *transport)
     if (transport->bus_acquired) {
         return ESP_OK;
     }
-    const esp_err_t err = spi_device_acquire_bus(transport->device, portMAX_DELAY);
+    /* One owner of this bus. A missed release must fault instead of waiting
+     * forever. Three seconds is inside the 8 s init wait and the 5 s TWDT. */
+    const esp_err_t err = spi_device_acquire_bus(
+        transport->device, pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS));
     if (err == ESP_OK) {
         transport->bus_acquired = true;
     }
@@ -1060,7 +1068,52 @@ static esp_err_t install_drdy_interrupt(ads_runtime_t *runtime)
     if (err != ESP_OK) {
         return err;
     }
+    runtime->drdy_handler_added = true;
     return gpio_intr_disable(NOCTI_V4_ADS131_DRDY_GPIO);
+}
+
+/* Failed init must not leave a disabled DRDY handler or an acquired SPI bus.
+ * Tasks exit after this. If the dark task does not exit, the ADS task stays
+ * in its kicked idle loop with ready clear, which is the safe-idle fallback. */
+static void quiesce_failed_init(ads_runtime_t *runtime)
+{
+    if (runtime->drdy_handler_added) {
+        (void)gpio_isr_handler_remove(NOCTI_V4_ADS131_DRDY_GPIO);
+        (void)gpio_intr_disable(NOCTI_V4_ADS131_DRDY_GPIO);
+        runtime->drdy_handler_added = false;
+    }
+    transport_release(&runtime->transport);
+    if (runtime->transport.device_added && runtime->transport.device != NULL &&
+        spi_bus_remove_device(runtime->transport.device) == ESP_OK) {
+        runtime->transport.device = NULL;
+        runtime->transport.device_added = false;
+    }
+    if (runtime->transport.bus_initialized && !runtime->transport.device_added &&
+        spi_bus_free(NOCTI_V4_ADS_SPI_HOST) == ESP_OK) {
+        runtime->transport.bus_initialized = false;
+    }
+    if (runtime->board != NULL && runtime->board->gpio_ready) {
+        (void)nocti_v4_board_assert_ads131_reset(runtime->board);
+    }
+}
+
+static int request_dark_exit(ads_runtime_t *runtime)
+{
+    if (runtime->dark_task == NULL) {
+        return 1;
+    }
+    __atomic_store_n(&runtime->task_exit, true, __ATOMIC_RELEASE);
+    xTaskNotifyGive(runtime->dark_task);
+    if (xTaskGetCurrentTaskHandle() == runtime->ads_task) {
+        nocti_v4_task_wdt_kick();
+    }
+    if (runtime->dark_exited != NULL &&
+        xSemaphoreTake(runtime->dark_exited,
+                       pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS + 200u)) == pdTRUE) {
+        runtime->dark_task = NULL;
+        return 1;
+    }
+    return 0;
 }
 
 static esp_err_t wait_for_event(ads_runtime_t *runtime, drdy_event_t *out_event)
@@ -1918,6 +1971,14 @@ static void dark_consumer_task(void *argument)
     /* Idle waits stay inside the 5 s TWDT. STOP still notifies this task. */
     nocti_v4_task_wdt_subscribe();
     for (;;) {
+        if (__atomic_load_n(&runtime->task_exit, __ATOMIC_ACQUIRE)) {
+            (void)esp_task_wdt_delete(NULL);
+            if (runtime->dark_exited != NULL) {
+                (void)xSemaphoreGive(runtime->dark_exited);
+            }
+            runtime->dark_task = NULL;
+            vTaskDelete(NULL);
+        }
         nocti_v4_task_wdt_kick();
         nocti_v4_raw_sample_t sample;
         if (__atomic_load_n(&runtime->raw_consumer_mode, __ATOMIC_ACQUIRE) ==
@@ -1967,9 +2028,14 @@ static void ads_task(void *argument)
     runtime->public_ads->interface_initialized = true;
     runtime->public_ads->hardware_initialized = err == ESP_OK;
     runtime->public_ads->ready = runtime->ready;
+    int dark_gone = 0;
     if (err != ESP_OK) {
         runtime->lifecycle = NOCTI_V4_ADS_FAULTED;
         ESP_LOGE(TAG, "ADS init/rate validation failed: %s", esp_err_to_name(err));
+        if (nocti_v4_ads_failed_init_needs_teardown(1, 0)) {
+            quiesce_failed_init(runtime);
+            dark_gone = request_dark_exit(runtime);
+        }
     } else {
         ESP_LOGI(TAG,
                  "ADS ready ID=%04X MODE=%04X CLOCK=%04X GAIN=%04X CFG=%04X rate=%lu SPS period=%lu us min=%lu max=%lu",
@@ -1981,6 +2047,11 @@ static void ads_task(void *argument)
                  (unsigned long)runtime->validation_period_max_us);
     }
     (void)xSemaphoreGive(runtime->init_done);
+    if (err != ESP_OK && dark_gone) {
+        (void)esp_task_wdt_delete(NULL);
+        runtime->ads_task = NULL;
+        vTaskDelete(NULL);
+    }
 
     for (;;) {
         /* DRDY's event ring is the record of work. The notification wakes this
@@ -2033,6 +2104,9 @@ static esp_err_t execute_command(nocti_v4_ads_t *ads, ads_command_type_t type,
         return ESP_ERR_INVALID_STATE;
     }
     ads_runtime_t *runtime = (ads_runtime_t *)ads->runtime;
+    if (runtime->ads_task == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
     if (xSemaphoreTake(runtime->command_lock,
                        pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS)) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
@@ -2087,13 +2161,15 @@ esp_err_t nocti_v4_ads_init(nocti_v4_ads_t *ads, nocti_v4_board_t *board,
     ads->runtime = runtime;
 
     runtime->init_done = xSemaphoreCreateBinaryStatic(&runtime->init_done_storage);
+    runtime->dark_exited = xSemaphoreCreateBinaryStatic(&runtime->dark_exited_storage);
     runtime->command_done = xSemaphoreCreateBinaryStatic(&runtime->command_done_storage);
     runtime->command_lock = xSemaphoreCreateMutexStatic(&runtime->command_lock_storage);
     runtime->drain_done = xSemaphoreCreateBinaryStatic(&runtime->drain_done_storage);
     runtime->command_queue = xQueueCreateStatic(4u, sizeof(ads_command_t),
                                                  runtime->command_queue_buffer,
                                                  &runtime->command_queue_storage);
-    if (runtime->init_done == NULL || runtime->command_done == NULL ||
+    if (runtime->init_done == NULL || runtime->dark_exited == NULL ||
+        runtime->command_done == NULL ||
         runtime->command_lock == NULL || runtime->drain_done == NULL ||
         runtime->command_queue == NULL) {
         return ESP_ERR_NO_MEM;
@@ -2110,10 +2186,15 @@ esp_err_t nocti_v4_ads_init(nocti_v4_ads_t *ads, nocti_v4_board_t *board,
                                 NOCTI_V4_STACK_ADC_BYTES, runtime,
                                 NOCTI_V4_PRIO_ADC, &runtime->ads_task,
                                 NOCTI_V4_CORE_REALTIME) != pdPASS) {
+        if (nocti_v4_ads_failed_init_needs_teardown(runtime->dark_task != NULL, 0)) {
+            (void)request_dark_exit(runtime);
+        }
         return ESP_ERR_NO_MEM;
     }
     if (xSemaphoreTake(runtime->init_done,
                        pdMS_TO_TICKS(NOCTI_V4_ADS_INIT_TIMEOUT_MS)) != pdTRUE) {
+        /* The task has not reached its own teardown. Deleting it here could
+         * cut through the SPI or GPIO driver. */
         return ESP_ERR_TIMEOUT;
     }
     return runtime->init_result;

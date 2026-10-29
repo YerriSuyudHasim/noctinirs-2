@@ -21,7 +21,13 @@ static esp_err_t s_control_error=ESP_OK;
 static const char *s_boot_stage="not_started";
 static void control_set_boot_stage(const char *name)
 {
-    if (name!=NULL && name[0]!='\0') s_boot_stage=name;
+    if (name!=NULL && name[0]!='\0')
+        __atomic_store_n(&s_boot_stage, name, __ATOMIC_RELEASE);
+}
+static const char *control_boot_stage(void)
+{
+    const char *stage=__atomic_load_n(&s_boot_stage, __ATOMIC_ACQUIRE);
+    return stage!=NULL ? stage : "not_started";
 }
 /* Sticky. CLEAR cannot hide a boot failure, and START requires IDLE. */
 static void control_note_boot_fault(void)
@@ -203,7 +209,7 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             " deadline_depth_max=%" PRIu32 " led_queue_depth_max=%" PRIu32
             " task_wdt_subscribe_errors=%" PRIu32 " task_wdt_kick_errors=%" PRIu32
             " frames=unsupported",
-            s_boot_stage,
+            control_boot_stage(),
             HLOAD(adc_missed), HLOAD(adc_backlog_catchup), HLOAD(adc_missed_backlog),
             HLOAD(adc_ok), HLOAD(adc_missed_sequence),
             HLOAD(adc_sequence_gap), HLOAD(adc_missed_other),

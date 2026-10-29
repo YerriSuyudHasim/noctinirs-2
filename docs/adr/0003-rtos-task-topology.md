@@ -283,6 +283,8 @@ This section amends the Accepted ordering in §3.5 and R4 for one image. Status 
 
 `nocti_v4_ads` priority 23 > `nocti_v4_led` priority 22 > `nocti_v4_sched` priority 15.
 
+On core 0 the same header places `nocti_v4_dark` at priority 6, below `nocti_v4_optical` (9) and above `nocti_v4_frame` (5) and `v4_nn2_net` (4). Dark subscribes to the 5 s panic task watchdog. At priority 2, sustained work in Wi-Fi/lwIP plus optical, the frame consumer, and UDP could keep it from kicking and reset the chip. Priority 6 removes the frame and UDP sources of that stall. The IDF Wi-Fi task remains above this band, so the dark runnable gap under Wi-Fi load is an on-target measurement and is **NOT RUN**.
+
 **Rationale (boot82).** The previous image used the historical ladder ADS 20, scheduler 21, LED 22, all on core 1. After rate qualification (1024 samples, 8000 SPS, period 124–125 µs) the first LED ON completed, then `EVENT_BACKLOG` at `PROCESS_EVENT`. Depth max was 4, `adc_missed_backlog` was 3, SPI was 32–45 µs (average 33), and CRC, SPI, and status errors were 0. ADS131M04 keeps only the latest conversion, so the three older queued DRDY events were overwritten while the LED task and the scheduler outranked the ADS task. Putting ADS above LED, and the scheduler below both, is the response to that evidence. The design record is `docs/V4_IDF61_RTOS_HANDOFF.md`.
 
 **Conditions under which this order stands:**

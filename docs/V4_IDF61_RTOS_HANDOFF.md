@@ -22,13 +22,16 @@ one SPI. Stacks are bytes. High-water marks on the wire are FreeRTOS words.
 | `nocti_v4_led` | Queue one prebuilt PCA payload and block for the I2C ISR. No schedule policy. | 1 | 22 | 4096 | submit CPU ≤ 40 µs, then block |
 | `nocti_v4_sched` | Absolute slot edge and nonblocking LED handoff. Slot state stays here. | 1 | 15 | 6144 | handoff ≤ 50 µs, then block |
 | `nocti_v4_optical` | Raw-batch classification. Not on the DRDY core. | 0 | 9 | 6144 | soft; must not enter core 1 |
+| `nocti_v4_dark` | Dark-only raw drain. Above frame and UDP so the panic watchdog is not starved by them. | 0 | 6 | 4096 | idle during scan |
 | `nocti_v4_frame` | Completed-frame consumer. | 0 | 5 | 4096 | soft |
 | `v4_nn2_net` | UDP owner: commands, health, timing. No SPI. | 0 | 4 | 16384 | on demand |
 | `v4_control` | Stopped-only I2C setup and STOP cleanup. Below the ladder. | 1 | 3 | 8192 | not in the 8 kSPS window |
-| `nocti_v4_dark` | Dark-only raw drain. | 0 | 2 | 4096 | idle during scan |
 
 The IDF Wi-Fi task stays on core 0 at its SDK priority, above this soft band.
-PSRAM stays off: IO35–37 belong to the ADS SPI bus.
+Dark is priority 6 so the frame consumer and UDP cannot hold it off the 5 s
+panic watchdog. Wi-Fi and lwIP can still preempt it. The dark runnable gap
+under Wi-Fi load has to be measured on a board before that priority is treated
+as closed. PSRAM stays off: IO35–37 belong to the ADS SPI bus.
 
 ## Handoff
 
