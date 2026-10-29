@@ -13,6 +13,7 @@ int main(void)
     test_ads131_control_suite();
     test_ads131_transport_suite();
     test_v4_rtos_suite();
+    test_v4_sample_clock_suite();
     int result = UNITY_END();
     return (Unity.NumberOfTests > 0u && Unity.TestIgnores == 0u && result == 0) ? 0 : 1;
 }

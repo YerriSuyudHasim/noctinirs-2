@@ -560,8 +560,8 @@ from this PR.
 
 ## 9. Phase checklist
 
-- [x] Phase 0. This document committed and pushed before code.
-- [ ] Phase 1. `nocti_v4_sample_clock.h` plus host tests.
+- [x] Phase 0. This document committed and pushed before code (`aee7d77`).
+- [x] Phase 1. `nocti_v4_sample_clock.h` plus host tests. Class U of this module: 12 cases, 0 failures, in `test/host/test_v4_sample_clock.c`. The suite SHA is the Phase 1 commit. Class H remains NOT RUN.
 - [ ] Phase 2. Scheduler/LED submits from the sample index. GPTimer alarms do not arm edges. Settle/guard consumed as sample counts.
 - [ ] Phase 3. Optical classification by sequence range. Frame anchor from the watched DRDY.
 - [ ] Phase 4. Wire version 2 and LE TIME64. `nn2ctl` parser test. `frames=unsupported` remains, for the reason in §5.2.

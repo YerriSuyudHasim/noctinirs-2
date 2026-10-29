@@ -123,7 +123,7 @@ def main():
             else:
                 path = isolated / 'test/host/test_main.c'
                 source = path.read_text()
-                for suite in ('ring', 'sequencer', 'contract', 'storage', 'acquisition', 'ads131', 'ads131_control', 'ads131_transport', 'v4_rtos'):
+                for suite in ('ring', 'sequencer', 'contract', 'storage', 'acquisition', 'ads131', 'ads131_control', 'ads131_transport', 'v4_rtos', 'v4_sample_clock'):
                     source = source.replace('    test_' + suite + '_suite();', '')
                 path.write_text(source)
             control = execute(isolated, evidence / kind / 'build', evidence / kind)
