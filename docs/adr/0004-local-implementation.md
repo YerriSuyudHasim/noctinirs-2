@@ -1,5 +1,12 @@
 # ADR-0004: Local control implementation and V3/V4 communication improvements
 
+> 2026-10-29 Owner direction: the `firmware/v4-idf61` image takes all command
+> control over Wi-Fi UDP `nn2ctl`. Serial command control is removed. Opcodes
+> `0x0030` (`health`) and `0x0031` (`timing`) are UDP read-only diagnostics.
+> A USB STATUS sentence later in this file is history of the earlier binding.
+> It is not a command path on that image. Upstream record:
+> [0004-host-protocol.md](0004-host-protocol.md).
+
 > Later local amendment: [ADR-0005](0005-led-bringup.md) changes the boot config
 > default to 5 Hz / 30 mA and adds an optional real LED-only port. In that mode
 > STARTING/STOPPING are asynchronous, info advertises led=REAL_BRINGUP and
@@ -81,6 +88,8 @@ effect, including safe_off. Host bit0 is ignored as specified by the proposal.
 | 0021 | clear-fault | none | yes |
 | 0100 | set-fs | u8 in {1,2,4,5,8,10} | yes |
 | 0101 | set-led-current | channel:u8 0..19, current_mA:u16 0..50 | yes |
+| 0030 | health | none | bypass |
+| 0031 | timing | none | bypass |
 
 Numbers above are hexadecimal. set-led-current stores simulation configuration
 only and cannot energize an emitter. No CLAIM, RELEASE or injected-FAULT opcode
@@ -102,6 +111,8 @@ Success extensions after that prefix:
 - heartbeat/get-time: `t_host:u64, t_rx_us:u64, t_tx_us:u64` (24 bytes).
 - status: the same 24-byte time echo, then `requests, duplicates, grace_expirations,
   malformed, reserved_flags_rejects` as five u32 values and `grace_active:u8`.
+- health: ASCII `v4health=1` counters, including `boot_stage`. Not an ACQ1 frame.
+- timing: ASCII `v4timing=1` service and SPI bins. Not an ACQ1 frame.
 - Other implemented commands: no extension.
 
 All current replies carry SIMULATED. Unsupported subsystem evidence/counters are

@@ -125,8 +125,10 @@ minus the DRDY timestamp, against the 80 µs budget. `spi_*` remains the SPI
 transaction alone. `service_*` is the end-to-end time. An unordered timestamp
 pair increments `service_unknown` and the over-budget counter.
 
-ADS, LED, and the scheduler subscribe to `esp_task_wdt` and kick at least once
-a second. Their idle waits are 1 s. `CONFIG_ESP_TASK_WDT_TIMEOUT_S` is 5 and
+ADS, LED, the scheduler, and the dark consumer subscribe to `esp_task_wdt`
+and kick at least once a second. Their idle waits are 1 s. The dark consumer
+used to wait on `portMAX_DELAY` with no subscription; that wait is now the
+same 1 s bound. `CONFIG_ESP_TASK_WDT_TIMEOUT_S` is 5 and
 `CONFIG_ESP_TASK_WDT_PANIC` is enabled on purpose. A missed kick means one of
 those tasks is stuck. Printing the timeout and continuing would leave the
 sample stream and the emitter in the state that task last set. Panic resets

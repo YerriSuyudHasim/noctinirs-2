@@ -23,10 +23,11 @@
     {
       "path": "components/nocti_v4_ads/nocti_v4_ads.c",
       "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
-      "active_sha256": "cd12af99c8e3c071bc43427710e9b1a26f7bc867938b405ca49654f1aeba285e",
+      "active_sha256": "25b78eebb08f8a4972abb0fed19f784a0bfbb6e5a2a1d72b899089129fcac1e1",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
+        "Dark consumer subscribes to the task watchdog and waits at most one second"
       ]
     },
     {

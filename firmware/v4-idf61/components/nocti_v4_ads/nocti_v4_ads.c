@@ -1915,7 +1915,10 @@ static void dark_consumer_task(void *argument)
     runtime->dark_task_core = xPortGetCoreID();
     __atomic_store_n(&runtime->health->dark_consumer_task_core,
                      runtime->dark_task_core, __ATOMIC_RELEASE);
+    /* Idle waits stay inside the 5 s TWDT. STOP still notifies this task. */
+    nocti_v4_task_wdt_subscribe();
     for (;;) {
+        nocti_v4_task_wdt_kick();
         nocti_v4_raw_sample_t sample;
         if (__atomic_load_n(&runtime->raw_consumer_mode, __ATOMIC_ACQUIRE) ==
             NOCTI_V4_ADS_RAW_CONSUMER_DARK_DIAGNOSTIC) {
@@ -1932,7 +1935,7 @@ static void dark_consumer_task(void *argument)
         }
         /* The raw ring remains the source of samples; notification is only the
          * wake-up edge. STOP explicitly notifies this task for a final drain. */
-        (void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS));
     }
 }
 

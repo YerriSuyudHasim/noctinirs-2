@@ -5,7 +5,7 @@
 | ID | ADR-0003 |
 | Title | ESP32-S3 dual-core FreeRTOS task topology (optical acquisition + Wi-Fi command path) |
 | Status | **Accepted** (unchanged by rev 2). Owner Accept `confirm_accept_write`, 2026-10-17 Asia/Shanghai, landed via PR #29 squash `6309c06bdedd01bd2430ccd62b5c4604b34f9d8a` after Agent 07 IR APPROVE on head `cbb0c9b36a3825a9bd8c1bbd756c32e6e41c6059`. Rev 2 amends the Accepted inventory under Owner write authorization via Nori, 2026-10-17 Asia/Shanghai ([#25](https://github.com/YerriSuyudHasim/noctinirs-2/issues/25#issuecomment-6226379710)): sole placeholder `nn2_ads` superseded by `nn2_ads131` and `nn2_ads1299`. This amend still needs a fresh Agent 07 IR on its head SHA before Owner merge. Firmware not implemented. Class H / flash / WCET **NOT RUN**. **Accepted** does not by itself authorize implementation, flash, or Class H. |
-| Date | 2026-10-17 (rev 2; dual-ADS amend; Status remains **Accepted**) |
+| Date | 2026-10-17 (rev 2; dual-ADS amend); 2026-10-29 (rev 3; V4 image order). Status remains **Accepted**. |
 | Issue | [#25](https://github.com/YerriSuyudHasim/noctinirs-2/issues/25) |
 | Author role | Architect (Agent 02) and RTOS Specialist (Agent 05); file recorded from the #25 consensus under Owner write authorization |
 | Independent reviewer | Agent 07 — APPROVE on Proposed PR #27 head `e8dfbe852e1d920fce476a90ce3a495f4b6ed33c` and on Accept PR #29 head `cbb0c9b36a3825a9bd8c1bbd756c32e6e41c6059` ([#29](https://github.com/YerriSuyudHasim/noctinirs-2/pull/29#issuecomment-6225890253)). This dual-ADS amend still requires a fresh Agent 07 independent review on this pull request’s head SHA before Owner merge. The reviewer must not be an author of this ADR. |
@@ -160,6 +160,8 @@ Rationale (Agent 05, Owner-delegated, dual-ADS Class S): LED edge completion mus
 
 **Literal priority numbers are OPEN until Class H.** This ADR assigns none. V4 22/21/20 are do-not-lift evidence (§1.3). The historical ADS priority 20 does not assign an NN2 number to either task and does not rank `nn2_ads131` against `nn2_ads1299`.
 
+**Rev 3 scoped deviation (2026-10-29).** The V4 IDF 6.1 image under `firmware/v4-idf61` runs one ADS131M04 task above the LED task. That order, its boot82 rationale, and the conditions that keep it in force are §3.14. It does not replace the Accepted dual-ADS baseline in the paragraph above.
+
 **Frame consumer affinity (Proposed):** Core **0**, mid-priority. **Reject** placing `nn2_frame` on Core 1 below the ADS band {`nn2_ads131`, `nn2_ads1299`} as the Proposed placement. Core 1 stays the hard-RT optical chain (LED, DeadlineTimer scheduler, and the ADS band). The consumer is post-acquisition work; another runnable on Core 1 risks extra jitter on that chain. **Affinity remains OPEN until Class H** measures it. The Proposed placement is not a final pin.
 
 **Risk carried with that placement:** M1 transport is Wi-Fi on Core 0. `nn2_frame` must not starve under Wi-Fi softirq load. Runnable latency and TWDT margin with Wi-Fi active are Class H bring-up measurements (**NOT RUN**).
@@ -248,7 +250,7 @@ NN2 TWDT is **new**. It is not a lift from V4 (`esp_task_wdt` has 0 hits under `
 | Topic | State in this ADR |
 |---|---|
 | Final core affinity, including the frame consumer | Proposed Core 0 mid-prio for `nn2_frame`; **OPEN** until Class H |
-| Literal priority numbers | **OPEN**. Ordering LED (`nn2_led`) > sched (`nn2_sched`) > ADS band {`nn2_ads131`, `nn2_ads1299`} is the Accepted baseline. |
+| Literal priority numbers | **OPEN**. Ordering LED (`nn2_led`) > sched (`nn2_sched`) > ADS band {`nn2_ads131`, `nn2_ads1299`} is the Accepted baseline. The V4 IDF 6.1 image order in §3.14 is a scoped deviation from that baseline. |
 | Relative priority of `nn2_ads131` vs `nn2_ads1299` | **OPEN** until Class H. Not ranked by this amend. |
 | Stack depth and unit | **OPEN** |
 | Queue and ring depths | **OPEN** |
@@ -272,6 +274,23 @@ NN2 TWDT is **new**. It is not a lift from V4 (`esp_task_wdt` has 0 hits under `
 - No optical geometry restatement (ADR-0002).
 - No clinical, diagnostic, or patient-safety claims.
 - No BLE, no M1 storage, no M1 power/fuel-gauge.
+
+### 3.14 Rev 3 — V4 IDF 6.1 Core-1 order (2026-10-29)
+
+This section amends the Accepted ordering in §3.5 and R4 for one image. Status stays **Accepted**. The amendment does not authorize flash, Class H, or a merge.
+
+**Implemented order**, single source `firmware/v4-idf61/components/nocti_v4_common/include/nocti_v4_rtos.h`, core 1:
+
+`nocti_v4_ads` priority 23 > `nocti_v4_led` priority 22 > `nocti_v4_sched` priority 15.
+
+**Rationale (boot82).** The previous image used the historical ladder ADS 20, scheduler 21, LED 22, all on core 1. After rate qualification (1024 samples, 8000 SPS, period 124–125 µs) the first LED ON completed, then `EVENT_BACKLOG` at `PROCESS_EVENT`. Depth max was 4, `adc_missed_backlog` was 3, SPI was 32–45 µs (average 33), and CRC, SPI, and status errors were 0. ADS131M04 keeps only the latest conversion, so the three older queued DRDY events were overwritten while the LED task and the scheduler outranked the ADS task. Putting ADS above LED, and the scheduler below both, is the response to that evidence. The design record is `docs/V4_IDF61_RTOS_HANDOFF.md`.
+
+**Conditions under which this order stands:**
+
+1. It applies only to `firmware/v4-idf61`, which has one ADS131M04 sample task and no `nn2_ads1299` task.
+2. The Accepted product baseline remains LED (`nn2_led`) > scheduler (`nn2_sched`) > ADS band {`nn2_ads131`, `nn2_ads1299`}. Relative rank of the two ADS tasks stays **OPEN**. This revision does not assign Class H numbers to those `nn2_*` names.
+3. The order stands until a Class H measurement of DRDY service versus LED I2C completion, on a named board and image hash, records that ADS priority 23 makes the LED miss its slot edge, or until the Owner writes a different order. Boot82 itself stays open until an on-target `health` report shows `adc_missed=0` and `adc_backlog_catchup=0`.
+4. Literal values 23, 22, and 15 are the V4 table. They are not a freeze of every future priority number. Wi-Fi stays on core 0.
 
 ## 4. Evidence classes
 
@@ -409,3 +428,4 @@ Standing rules: no merge, release, or flash without specific Owner approval; `re
 | 0 | 2026-10-16 | Initial Proposed record from #25 Owner-confirmed G1 consensus and Agent 05 §4–§6. Core-1 ordering LED > sched > ADS with numbers OPEN. Frame consumer Core 0 mid-prio Proposed, affinity OPEN. Naming `nn2_*`. M1 LAN STA transport. Class H **NOT RUN**. No firmware. | **Proposed** |
 | 1 | 2026-10-17 | Status **Proposed → Accepted** under Owner Accept write authorization `confirm_accept_write` (2026-10-17 Asia/Shanghai). Prior Proposed land SHA `27e33d874387579986d781d547c61d8441d3631b` (squash of PR #27). Agent 07 IR APPROVE on Accept PR #29 head `cbb0c9b36a3825a9bd8c1bbd756c32e6e41c6059`; squash land `6309c06bdedd01bd2430ccd62b5c4604b34f9d8a`. Topology contract is the approved design baseline for later firmware issues. Does not authorize implementation, flash, or Class H. Affinity, literal priorities, stacks, and queues stay **OPEN**. Class H / flash / WCET **NOT RUN**. No firmware. Inventory at this rev still used the sole placeholder `nn2_ads`, superseded in rev 2. | **Accepted** |
 | 2 | 2026-10-17 | Amend of Accepted content (Status unchanged). Owner dual-ADS lock via Nori on [#25](https://github.com/YerriSuyudHasim/noctinirs-2/issues/25#issuecomment-6226293188): both ADCs on Nocti board v1; sole placeholder `nn2_ads` superseded by `nn2_ads131` and `nn2_ads1299`. G1 Class S: Architect one `nn2_port_adc_t` / two adapters ([6226298179](https://github.com/YerriSuyudHasim/noctinirs-2/issues/25#issuecomment-6226298179)); RTOS ordering `nn2_led` > `nn2_sched` > {`nn2_ads131`, `nn2_ads1299`}, relative ADS priority **OPEN**, both Core-1 candidates, Wi-Fi Core 0 ([6226299155](https://github.com/YerriSuyudHasim/noctinirs-2/issues/25#issuecomment-6226299155)). Affinity, literal priorities, stacks, and queues stay **OPEN**. Dual-rate follow-up [#31](https://github.com/YerriSuyudHasim/noctinirs-2/issues/31) is not implemented here (M1 fNIRS-first; not an M1 blocker). Class H / flash / firmware **NOT RUN**. Fresh Agent 07 IR required on this head before Owner merge. | **Accepted** |
+| 3 | 2026-10-29 | Scoped deviation for `firmware/v4-idf61` only (§3.14): `nocti_v4_ads` 23 > `nocti_v4_led` 22 > `nocti_v4_sched` 15 on core 1. Rationale is boot82 (ADS 20 under scheduler 21 and LED 22 left three DRDY conversions overwritten). Stands until Class H shows the LED missing its edge, or the Owner writes another order. The Accepted dual-ADS baseline is unchanged. Class H **NOT RUN**. | **Accepted** |
