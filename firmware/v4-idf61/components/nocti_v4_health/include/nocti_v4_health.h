@@ -257,6 +257,9 @@ typedef struct {
     uint32_t adc_lag_80_to_124_us;
     uint32_t adc_lag_125_to_249_us;
     uint32_t adc_lag_ge_250_us;
+    /* Lifetime TWDT subscribe/kick failures. Not cleared with a scan session. */
+    uint32_t task_wdt_subscribe_errors;
+    uint32_t task_wdt_kick_errors;
 } nocti_v4_health_t;
 
 void nocti_v4_health_reset(nocti_v4_health_t *health);

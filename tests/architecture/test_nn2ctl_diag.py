@@ -14,6 +14,7 @@ HEALTH = (
     "adc_missed_other=0 drdy_event_overflow=0 adc_ring_overflow=0 "
     "crc_bad=0 spi_errors=0 ads_status_faults=0 event_depth_max=4 "
     "raw_depth_max=1 deadline_depth_max=1 led_queue_depth_max=1 "
+    "task_wdt_subscribe_errors=0 task_wdt_kick_errors=0 "
     "frames=unsupported"
 )
 TIMING = (

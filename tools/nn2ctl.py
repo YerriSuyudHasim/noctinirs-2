@@ -241,7 +241,8 @@ def parse_diag(text):
     if kind == "v4health":
         required = ("boot82_bound", "adc_ok", "adc_missed", "adc_missed_backlog",
                     "adc_backlog_catchup", "adc_sequence_gap", "crc_bad",
-                    "spi_errors", "event_depth_max", "frames")
+                    "spi_errors", "event_depth_max", "task_wdt_subscribe_errors",
+                    "task_wdt_kick_errors", "frames")
         if fields.get("frames") == "ACQ1":
             raise ValueError("health must not claim ACQ1")
     else:

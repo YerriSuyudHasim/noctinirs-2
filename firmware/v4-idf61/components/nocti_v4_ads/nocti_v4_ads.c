@@ -1065,6 +1065,8 @@ static esp_err_t install_drdy_interrupt(ads_runtime_t *runtime)
 
 static esp_err_t wait_for_event(ads_runtime_t *runtime, drdy_event_t *out_event)
 {
+    /* One kick per wait. The following block is at most the 100 ms event timeout. */
+    nocti_v4_task_wdt_kick();
     uint64_t start_us = 0u;
     (void)nocti_v4_time_now_us(runtime->timebase, &start_us);
     const uint64_t deadline_us = start_us +
@@ -1407,8 +1409,21 @@ static esp_err_t stop_dark_internal(ads_runtime_t *runtime)
     if (consumer != NULL) {
         xTaskNotifyGive(consumer);
     }
-    if (xSemaphoreTake(runtime->drain_done,
-                       pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS)) != pdTRUE) {
+    /* The 3 s drain budget stays. Each slice is 1 s so a kick always lands
+     * inside the 5 s task-watchdog window. */
+    TickType_t drain_left = pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS);
+    bool drained = false;
+    while (drain_left > 0u) {
+        const TickType_t slice = drain_left > pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS) ?
+            pdMS_TO_TICKS(NOCTI_V4_RTOS_WDT_IDLE_WAIT_MS) : drain_left;
+        nocti_v4_task_wdt_kick();
+        if (xSemaphoreTake(runtime->drain_done, slice) == pdTRUE) {
+            drained = true;
+            break;
+        }
+        drain_left -= slice;
+    }
+    if (!drained) {
         if (!fault_history) {
             set_fault(runtime, NOCTI_V4_ADS_FAULT_STOP_DRAIN_TIMEOUT,
                       NOCTI_V4_ADS_FAULT_ORIGIN_STOP_DARK, ESP_ERR_TIMEOUT);
@@ -1927,6 +1942,9 @@ static void ads_task(void *argument)
     runtime->ads_task_core = xPortGetCoreID();
     __atomic_store_n(&runtime->health->ads_task_core, runtime->ads_task_core,
                      __ATOMIC_RELEASE);
+    /* Before rate qualification, so that 1024-sample startup is already watched. */
+    nocti_v4_task_wdt_subscribe();
+    nocti_v4_task_wdt_kick();
     runtime->lifecycle = NOCTI_V4_ADS_STOPPED;
     __atomic_store_n(&runtime->gpio_isr_callback_core, -1, __ATOMIC_RELEASE);
 
@@ -1960,7 +1978,6 @@ static void ads_task(void *argument)
                  (unsigned long)runtime->validation_period_max_us);
     }
     (void)xSemaphoreGive(runtime->init_done);
-    nocti_v4_task_wdt_subscribe();
 
     for (;;) {
         /* DRDY's event ring is the record of work. The notification wakes this

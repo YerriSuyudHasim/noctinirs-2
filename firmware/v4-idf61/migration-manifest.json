@@ -23,7 +23,7 @@
     {
       "path": "components/nocti_v4_ads/nocti_v4_ads.c",
       "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
-      "active_sha256": "d44e43696f67b2fbd27bfad7b42e9280470d951a14873e1e1fc0b10bc1dbc38d",
+      "active_sha256": "cd12af99c8e3c071bc43427710e9b1a26f7bc867938b405ca49654f1aeba285e",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
@@ -49,7 +49,7 @@
     {
       "path": "components/nocti_v4_async_led/nocti_v4_async_led.c",
       "historical_sha256": "bd05bb16f584acd1b6da718820f575fc1cfa3b11eefb9fdc5eba769c7cea991b",
-      "active_sha256": "7558cff6e0aa2bf082ca1176c8d66ce4cf64c025a2b5b17549e61e2241333fb2",
+      "active_sha256": "122abd96778e2f85f6ef354c007db4e9dd41a02c34dd0d78ca1e42d91e2df55a",
       "changes": [
         "Configuration-bus status labels follow the approved 100 kHz overlay",
         "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
@@ -87,7 +87,7 @@
     {
       "path": "components/nocti_v4_common/CMakeLists.txt",
       "historical_sha256": "dd7c7842ee7df851305c1dc9ba532267bf5a1b5dba849cff26519854890a833f",
-      "active_sha256": "2feaa3bc1949b5e70b841b7f81d3bb8842395f9de4e2c6a204aec25319baff09",
+      "active_sha256": "e7a8b4750ac6218dd3f63eb49e227285241a27c7f60ef2a982af299e622c1ef9",
       "changes": [
         "Line ending normalization only; runtime source retained"
       ]
@@ -104,7 +104,7 @@
     {
       "path": "components/nocti_v4_common/include/nocti_v4_common.h",
       "historical_sha256": "d1035b11d92fd7986d603ccbdef3fe0928e115f37279ff0dc8fb9adfcdc88ad8",
-      "active_sha256": "987e0cb731d67844d7e7bbb371f7f438cdfa0ecfdeeef3a772d1069d867b1ff4",
+      "active_sha256": "2df8b42987631353e2cdd95dc0e67550f42765dfeabe768cce4abdf22a6b0cba",
       "changes": [
         "Migration identity; do not inherit historical target qualification claims"
       ]
@@ -112,7 +112,7 @@
     {
       "path": "components/nocti_v4_common/nocti_v4_common.c",
       "historical_sha256": "6a9e08453e7d0450dffa95889a287603f26f816e0aa5aea5ebcdeeaff5425df2",
-      "active_sha256": "65fa1d8ed8106fd581127d3416a14704597f66c2529b08c2861fa1dd5106cff0",
+      "active_sha256": "ac99bf71282bffafc1f38be57a5a586d9aec657f8bfb7c7a5d4a516d4a29faf4",
       "changes": [
         "Line ending normalization only; runtime source retained"
       ]
@@ -128,7 +128,7 @@
     {
       "path": "components/nocti_v4_health/include/nocti_v4_health.h",
       "historical_sha256": "cd4f7afa786aa90b5de8e8a8befcb2756036700375dd983df59ad6b5e53f5477",
-      "active_sha256": "d7b29d4228d040a21027fce05971a633debed4648ac001ca816db5fd3ca929d3",
+      "active_sha256": "24208bf972d6590cc3f40d3cfe4ba82c1a40da531efcb45ebf7d983978d214fc",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
@@ -273,7 +273,7 @@
     {
       "path": "components/nocti_v4_scheduler/nocti_v4_scheduler.c",
       "historical_sha256": "83064d25c3e559e6a0d3c6cdb2ec8a01f0a3c27d9b942b85a5d9673e1f3ec3d1",
-      "active_sha256": "91275c8e42879e0b151e8e9b0e6e0ff8e4da1375f6121fe6f4d091d3c278bd13",
+      "active_sha256": "623841a06c2e3ebca083a5d9fb8590a78728b244f8bd1eb310d9ceef2bb59ed8",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "Stopped-only Fs extension; atomic shared slot geometry, original 10 Hz defaults",
@@ -336,7 +336,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "984a233e33707f6a2a0ce70c2e680870ae240c6c6c11c819e41479e5f3cddcd2"
+      "sha256": "54c31b2e5b2b377e4da547e2fdf6c9219e998f2b001613bc84f549c1625696f0"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",

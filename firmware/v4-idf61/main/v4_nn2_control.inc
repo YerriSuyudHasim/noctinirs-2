@@ -158,6 +158,11 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
 {
     (void)ctx;
     if (!out || cap < 32u) return 0u;
+    nocti_v4_task_wdt_log_pending();
+    __atomic_store_n(&s_health.task_wdt_subscribe_errors,
+                     nocti_v4_task_wdt_subscribe_errors(), __ATOMIC_RELAXED);
+    __atomic_store_n(&s_health.task_wdt_kick_errors,
+                     nocti_v4_task_wdt_kick_errors(), __ATOMIC_RELAXED);
     nocti_v4_ads_sample_stack_watermarks(&s_ads);
     nocti_v4_async_led_sample_stack_watermark(&s_async_led);
     nocti_v4_scheduler_sample_stack_watermark(&s_scheduler);
@@ -182,6 +187,7 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             " spi_errors=%" PRIu32 " ads_status_faults=%" PRIu32
             " event_depth_max=%" PRIu32 " raw_depth_max=%" PRIu32
             " deadline_depth_max=%" PRIu32 " led_queue_depth_max=%" PRIu32
+            " task_wdt_subscribe_errors=%" PRIu32 " task_wdt_kick_errors=%" PRIu32
             " frames=unsupported",
             HLOAD(adc_missed), HLOAD(adc_backlog_catchup), HLOAD(adc_missed_backlog),
             HLOAD(adc_ok), HLOAD(adc_missed_sequence),
@@ -189,7 +195,8 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             HLOAD(drdy_event_overflow), HLOAD(adc_ring_overflow), HLOAD(crc_bad),
             HLOAD(spi_errors), HLOAD(ads_status_faults),
             adc.drdy_event_ring_depth_max, adc.raw_ring_depth_max,
-            sched.deadline_ring_depth_max, HLOAD(async_command_queue_depth_max));
+            sched.deadline_ring_depth_max, HLOAD(async_command_queue_depth_max),
+            HLOAD(task_wdt_subscribe_errors), HLOAD(task_wdt_kick_errors));
     } else {
         wrote = snprintf((char *)out, cap,
             "v4timing=1 boot82_bound=0 adc_missed=%" PRIu32

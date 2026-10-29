@@ -126,11 +126,26 @@ transaction alone. `service_*` is the end-to-end time. An unordered timestamp
 pair increments `service_unknown` and the over-budget counter.
 
 ADS, LED, and the scheduler subscribe to `esp_task_wdt` and kick at least once
-a second. Their idle waits are 1 s, inside the 5 s SDK timeout
-(`CONFIG_ESP_TASK_WDT_TIMEOUT_S`). Panic stays at the SDK default. A task
-stuck with interrupts masked for longer than that timeout can still evade the
-watchdog; that case is a bench measurement, not something this subscription
-claims to catch.
+a second. Their idle waits are 1 s. `CONFIG_ESP_TASK_WDT_TIMEOUT_S` is 5 and
+`CONFIG_ESP_TASK_WDT_PANIC` is enabled on purpose. A missed kick means one of
+those tasks is stuck. Printing the timeout and continuing would leave the
+sample stream and the emitter in the state that task last set. Panic resets
+through the boot path, which holds PCA RESET before I2C starts. A task that
+masks interrupts for longer than the timeout can still evade the watchdog.
+
+Subscribe and kick failures increment `task_wdt_subscribe_errors` and
+`task_wdt_kick_errors`. The kick path does not log. The LED task, the
+scheduler, and a health or timing request log the new total.
+
+After subscribe, the longest ADS stretch without a kick is one 1 s watchdog
+slice. `wait_for_event` kicks on entry and then blocks at most 100 ms.
+`stop_dark` still allows 3 s for the raw drain, in 1 s slices with a kick
+before each slice. Rate qualification is 1024 frames at 8 kSPS, about 180 ms
+when every frame arrives on time, and it aborts on the first 100 ms miss.
+A frame dump is at most 3 discard frames plus 4 captured frames. The channel-0
+self-test is 3 discard frames plus 32 samples. With DRDY at 125 µs those two
+diagnostics finish in well under 10 ms. The pathological case, every wait
+returning just before the 100 ms timeout, is still one kick per wait.
 
 `df796ba` put this project's ADS priority back to 20 under LED 22 and
 scheduler 21. That is the same starvation order boot82 hit. It was not copied.
