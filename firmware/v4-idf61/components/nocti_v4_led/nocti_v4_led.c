@@ -370,13 +370,27 @@ esp_err_t nocti_v4_led_all_off(nocti_v4_led_t *led)
     }
     led->health->led_all_off_commands++;
     led->safe_off_state = NOCTI_V4_SAFE_OFF_REQUESTED;
-    for (uint8_t index = 0u; index < 6u; ++index) {
-        const esp_err_t err = write_reg(led, (uint8_t)(PCA_LEDOUT0 + index), PCA_LEDOUT_OFF);
-        if (err != ESP_OK) {
-            return fail_safe_reset(led, err);
-        }
+    /* Sync bus only (queue depth 0). One i2c_master_transmit or
+     * transmit_receive per register, PCA_COMMAND_TIMEOUT_MS (50) each.
+     * Success is 8 D6 writes + 24 IREF reads + 6 LEDOUT reads + 24 IREF
+     * restore writes + 24 IREF restore reads = 86 calls. The first error
+     * returns through fail_safe_reset (one GPIO write, no retry). The
+     * in-scan async OFF burst is a separate 7-byte transmit. */
+    esp_err_t err = write_d6_emitter_off(led);
+    if (err != ESP_OK) {
+        return fail_safe_reset(led, err);
     }
-    const esp_err_t err = verify_all_off(led);
+    err = verify_iref_zero(led);
+    if (err != ESP_OK) {
+        return fail_safe_reset(led, err);
+    }
+    err = verify_all_off(led);
+    if (err != ESP_OK) {
+        return fail_safe_reset(led, err);
+    }
+    /* LEDOUT is the verified zero image. Put the previous IREF shadow
+     * back so a later ON is not a zero-current enable. */
+    err = program_iref_verified(led);
     if (err != ESP_OK) {
         return fail_safe_reset(led, err);
     }

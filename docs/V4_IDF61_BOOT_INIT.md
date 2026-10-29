@@ -91,6 +91,16 @@ is released, and no other function releases it. Early boot still holds
 RESET until this golden path runs. That final-hold difference is static
 only. It is not an electrical measurement.
 
+`nocti_v4_led_all_off` uses that same write and zero-readback order on
+the synchronous bus. Callers are `nocti_v4_led_off`, `nocti_v4_led_on`
+before a single channel enable, fast I2C qualification, `scan_start`,
+and async enter. After the zero readback it writes the previous IREF
+shadow again while LEDOUT stays 0. A failed call still takes
+`fail_safe_reset`. The per-slot async OFF burst stays one 7-byte
+`i2c_master_transmit` on the queue-depth-4 bus. `write_d6_emitter_off`
+runs only at queue depth 0. Async exit then `nocti_v4_led_reinit`, which
+runs this D6 sequence again.
+
 ## Brownout
 
 `firmware/v4-idf61/sdkconfig.defaults` sets `CONFIG_ESP_BROWNOUT_DET=y`

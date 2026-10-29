@@ -190,11 +190,12 @@
     {
       "path": "components/nocti_v4_led/nocti_v4_led.c",
       "historical_sha256": "377f207398d1fb3618303c321b28a6d51c95e61fcf3f95a8fdf6f2c89a0aac46",
-      "active_sha256": "411625f24bea869d4daff82cc4080f55f07df8476160b26cb00388fba9bfb825",
+      "active_sha256": "bef6d7e14d82e924b2a394ec7452ecb140853023c94215487924dd54043a3df5",
       "changes": [
         "Retain active NN2 30 mA bring-up ceiling instead of historical 50 mA command ceiling",
         "Configuration-bus status labels follow the approved 100 kHz overlay",
-        "D6 init writes IREFALL 00h, then PWMALL 00h, then LEDOUT0-5 00h before operating IREF"
+        "D6 init writes IREFALL 00h, then PWMALL 00h, then LEDOUT0-5 00h before operating IREF",
+        "Runtime all-off uses D6 IREFALL, PWMALL, LEDOUT0-5, then zero readback"
       ]
     },
     {

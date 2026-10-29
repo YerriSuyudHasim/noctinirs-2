@@ -19,7 +19,7 @@ OWNER = "6498933500"
 
 def _function_body(source, name):
     match = re.search(
-        r"static esp_err_t %s\(nocti_v4_led_t \*led\)\n\{" % re.escape(name),
+        r"(?:static )?esp_err_t %s\([^\)]*\)\n\{" % re.escape(name),
         source,
     )
     if match is None:
@@ -57,6 +57,35 @@ class V4D6Boot(unittest.TestCase):
         self.assertLess(ledout_check, operating)
         self.assertIn("#define PCA_MAX_CURRENT_MA          30u", source)
         self.assertIn("#define PCA_IREFALL     0x40u", source)
+
+    def test_runtime_off_uses_d6_write_order(self):
+        source = LED.read_text()
+        body = _function_body(source, "nocti_v4_led_all_off")
+        d6 = body.find("write_d6_emitter_off(led)")
+        iref = body.find("verify_iref_zero(led)")
+        ledout = body.find("verify_all_off(led)")
+        restore = body.find("program_iref_verified(led)")
+        self.assertGreaterEqual(d6, 0)
+        self.assertLess(d6, iref)
+        self.assertLess(iref, ledout)
+        self.assertLess(ledout, restore)
+        self.assertNotIn("PCA_LEDOUT0 + index", body)
+        off = _function_body(source, "nocti_v4_led_off")
+        self.assertIn("nocti_v4_led_all_off(led)", off)
+        on = _function_body(source, "nocti_v4_led_on")
+        self.assertLess(on.find("nocti_v4_led_all_off(led)"), on.find("PCA_LEDOUT_ON"))
+        qual = _function_body(source, "nocti_v4_led_run_fast_i2c_qualification")
+        self.assertIn("nocti_v4_led_all_off(led)", qual)
+        async_led = (ROOT / "firmware/v4-idf61/components/nocti_v4_async_led/nocti_v4_async_led.c").read_text()
+        enter = _function_body(async_led, "enter_async")
+        self.assertIn("nocti_v4_led_all_off(runtime->led)", enter)
+        app = (ROOT / "firmware/v4-idf61/main/app_main.c").read_text()
+        start = app.split("static esp_err_t scan_start(void)\n", 1)[1].split(
+            "static esp_err_t scan_stop(void)\n", 1)[0]
+        self.assertIn("nocti_v4_led_all_off(&s_led)", start)
+        i2c = (ROOT / "firmware/v4-idf61/components/nocti_v4_i2c/nocti_v4_i2c.c").read_text()
+        self.assertIn("i2c_master_transmit(", i2c)
+        self.assertIn("i2c_master_transmit_receive(", i2c)
 
     def test_oe_stays_undriven(self):
         board = BOARD.read_text()
