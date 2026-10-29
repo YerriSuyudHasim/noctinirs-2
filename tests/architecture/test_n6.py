@@ -184,7 +184,7 @@ class N6Tests(unittest.TestCase):
         wrapper = self.root / 'tools/class-s-gate.sh'
         for rc in (0, 1, 3, 2, 127):
             with self.subTest(rc=rc):
-                wrapper.write_text('exit ' + str(rc) + '\n')
+                wrapper.write_text('exit ' + str(rc) + '\n', newline='\n')
                 p = self.shell(script)
                 self.assertEqual(p.returncode, 0 if rc == 0 else 1, p.stdout + p.stderr)
 

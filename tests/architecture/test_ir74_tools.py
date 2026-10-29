@@ -1,8 +1,11 @@
 """IR74 tooling regressions; temporary files and mocks, no compiler or linker."""
 import hashlib
+import copy
 import json
 from pathlib import Path
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -44,10 +47,31 @@ class ProfileValidation(unittest.TestCase):
             self.path.write_text(self.config('COMMUNICATION').replace(token, ''))
             with self.assertRaises(ValueError): profiles.check(self.path, profile='communication')
 
-    def test_default_stays_fake_and_shared_editor_does_not_opt_in(self):
-        settings = json.loads((ROOT / '.vscode/settings.json').read_text())
-        self.assertEqual(settings['idf.sdkconfigDefaults'], ['sdkconfig.defaults'])
-        self.assertFalse(any('NN2_EXPECT_LED_' in a for a in settings['idf.cmakeCompilerArgs']))
+    def branch_profile(self):
+        source = (ROOT / 'config/active-build-profile.cmake').read_text()
+        name = re.search(r'set\(NN2_BRANCH_PROFILE "([a-z][a-z0-9-]+)"\)', source)
+        defaults = re.search(r'set\(NN2_BRANCH_DEFAULTS\s+(.*?)\)', source, re.S)
+        self.assertIsNotNone(name, 'branch profile must have an explicit identifier')
+        self.assertIsNotNone(defaults, 'branch profile must declare its overlays')
+        return name.group(1), defaults.group(1).split()
+
+    def assert_editor_isolation(self, settings):
+        args = settings['idf.cmakeCompilerArgs']
+        self.assertFalse(any('NN2_EXPECT_LED_' in arg for arg in args))
+        selectors = [arg for arg in args if arg.startswith('-DNN2_USE_BRANCH_PROFILE=')]
+        if not selectors:
+            self.assertEqual(settings['idf.sdkconfigDefaults'], ['sdkconfig.defaults'])
+            return
+        self.assertEqual(selectors, ['-DNN2_USE_BRANCH_PROFILE=ON'])
+        name, defaults = self.branch_profile()
+        self.assertEqual(settings['idf.sdkconfigDefaults'], defaults)
+        self.assertEqual(settings['idf.sdkconfigFilePath'],
+                         '${workspaceFolder}/build/profile-configs/' + name + '/sdkconfig')
+        self.assertEqual(settings['idf.buildPath'], '${workspaceFolder}/build/' + name)
+        for overlay in defaults:
+            self.assertTrue((ROOT / overlay).is_file(), 'missing overlay: ' + overlay)
+
+    def test_default_stays_fake_and_ci_profiles_remain_explicit(self):
         self.assertIn('default NN2_PROFILE_FAKE', (ROOT / 'main/Kconfig.projbuild').read_text())
         self.assertIn('CONFIG_NN2_PROFILE_FAKE=y', (ROOT / 'sdkconfig.defaults').read_text())
         for workflow in ['firmware-build.yml', 'reproducible-build.yml']:
@@ -55,6 +79,69 @@ class ProfileValidation(unittest.TestCase):
             for profile in ['fake', 'communication', 'diagnostic']:
                 self.assertIn('- profile: ' + profile, content)
             self.assertIn('defaults: sdkconfig.defaults;sdkconfig.fake', content)
+
+    def test_editor_profile_matches_explicit_branch_selection(self):
+        settings = json.loads((ROOT / '.vscode/settings.json').read_text())
+        self.assert_editor_isolation(settings)
+        generic = copy.deepcopy(settings)
+        generic['idf.cmakeCompilerArgs'] = [arg for arg in settings['idf.cmakeCompilerArgs']
+                                            if not arg.startswith('-DNN2_USE_BRANCH_PROFILE=')]
+        generic['idf.sdkconfigDefaults'] = ['sdkconfig.defaults']
+        self.assert_editor_isolation(generic)
+
+    def test_editor_rejects_implicit_or_mismatched_board_selection(self):
+        original = json.loads((ROOT / '.vscode/settings.json').read_text())
+        name, defaults = self.branch_profile()
+        original.update({
+            'idf.cmakeCompilerArgs': [arg for arg in original['idf.cmakeCompilerArgs']
+                                      if not arg.startswith('-DNN2_USE_BRANCH_PROFILE=')] +
+                                     ['-DNN2_USE_BRANCH_PROFILE=ON'],
+            'idf.sdkconfigDefaults': defaults,
+            'idf.sdkconfigFilePath': '${workspaceFolder}/build/profile-configs/' + name + '/sdkconfig',
+            'idf.buildPath': '${workspaceFolder}/build/' + name,
+        })
+        self.assert_editor_isolation(original)
+        for field, value in (
+                ('idf.cmakeCompilerArgs', [a for a in original['idf.cmakeCompilerArgs']
+                                           if not a.startswith('-DNN2_USE_BRANCH_PROFILE=')]),
+                ('idf.sdkconfigDefaults', defaults + ['unlisted-sdkconfig-overlay']),
+                ('idf.sdkconfigFilePath', '${workspaceFolder}/sdkconfig'),
+                ('idf.buildPath', '${workspaceFolder}/build'),
+                ('idf.cmakeCompilerArgs', original['idf.cmakeCompilerArgs'] + ['-DNN2_USE_BRANCH_PROFILE=OFF'])):
+            with self.subTest(field=field, value=value):
+                settings = copy.deepcopy(original)
+                settings[field] = value
+                with self.assertRaises(AssertionError):
+                    self.assert_editor_isolation(settings)
+
+    def test_actual_cmake_keeps_generic_default_and_isolates_explicit_profile(self):
+        temporary = self.path.parent
+        (temporary / 'config').mkdir()
+        shutil.copy2(ROOT / 'config/active-build-profile.cmake', temporary / 'config')
+        name, defaults = self.branch_profile()
+        for overlay in defaults:
+            shutil.copy2(ROOT / overlay, temporary / overlay)
+        helper = (ROOT / 'cmake/nn2_branch_profile.cmake').as_posix()
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                output = temporary / 'selected.txt'
+                script = temporary / 'profile.cmake'
+                script.write_text('include("' + helper + '")\n'
+                                  'set(SDKCONFIG original-sdkconfig CACHE FILEPATH "" FORCE)\n'
+                                  'set(SDKCONFIG_DEFAULTS sdkconfig.defaults CACHE STRING "" FORCE)\n' +
+                                  ('set(NN2_USE_BRANCH_PROFILE ON CACHE BOOL "" FORCE)\n' if enabled else '') +
+                                  'nn2_prepare_branch_profile()\nfile(WRITE "' + output.as_posix() +
+                                  '" "${NN2_USE_BRANCH_PROFILE}\\n${SDKCONFIG}\\n${SDKCONFIG_DEFAULTS}\\n")\n')
+                result = subprocess.run(['cmake', '-P', str(script)], cwd=temporary,
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                selected = output.read_text().splitlines()
+                if enabled:
+                    self.assertEqual(selected, ['ON',
+                        (temporary / 'build/profile-configs' / name / 'sdkconfig').as_posix(),
+                        ';'.join((temporary / overlay).as_posix() for overlay in defaults)])
+                else:
+                    self.assertEqual(selected, ['OFF', 'original-sdkconfig', 'sdkconfig.defaults'])
 
 
 class CollectorCoverage(unittest.TestCase):
