@@ -23,13 +23,14 @@
     {
       "path": "components/nocti_v4_ads/nocti_v4_ads.c",
       "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
-      "active_sha256": "ba15ee6e93cc9b201d816a0d4cda49e970efe66778d1ae3c4082fe52d853bb2a",
+      "active_sha256": "ce5e4e2ace9ebc64b052ec5d284240c9fa936446e38811e32cd91a38836aed42",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
         "Dark consumer subscribes to the task watchdog and waits at most one second",
         "Failed ADS init removes the DRDY handler and SPI bus, then the tasks exit; SPI acquire waits at most 3 s",
-        "Backlog fault comment matches NOCTI_V4_BACKLOG_FAULT_DEPTH 8"
+        "Backlog fault comment matches NOCTI_V4_BACKLOG_FAULT_DEPTH 8",
+        "Sample-index master clock"
       ]
     },
     {
@@ -93,9 +94,10 @@
     {
       "path": "components/nocti_v4_common/CMakeLists.txt",
       "historical_sha256": "dd7c7842ee7df851305c1dc9ba532267bf5a1b5dba849cff26519854890a833f",
-      "active_sha256": "e7a8b4750ac6218dd3f63eb49e227285241a27c7f60ef2a982af299e622c1ef9",
+      "active_sha256": "7489d987133813e6c21d34f31905cce8b141a97a6b7b48df3a3bf9f1eb626aac",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "Sample-index master clock"
       ]
     },
     {
@@ -118,9 +120,10 @@
     {
       "path": "components/nocti_v4_common/nocti_v4_common.c",
       "historical_sha256": "6a9e08453e7d0450dffa95889a287603f26f816e0aa5aea5ebcdeeaff5425df2",
-      "active_sha256": "ac99bf71282bffafc1f38be57a5a586d9aec657f8bfb7c7a5d4a516d4a29faf4",
+      "active_sha256": "d28d7453041698797a592700fc030a11dc4182f4dd068810e900217f0b0718a5",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "Sample-index master clock"
       ]
     },
     {
@@ -134,10 +137,11 @@
     {
       "path": "components/nocti_v4_health/include/nocti_v4_health.h",
       "historical_sha256": "cd4f7afa786aa90b5de8e8a8befcb2756036700375dd983df59ad6b5e53f5477",
-      "active_sha256": "24208bf972d6590cc3f40d3cfe4ba82c1a40da531efcb45ebf7d983978d214fc",
+      "active_sha256": "be60d29e6615833ca6d0df50f457a9ed7da2177402c9f6380954555d69bd8af1",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
+        "Sample-index master clock"
       ]
     },
     {
@@ -221,11 +225,12 @@
     {
       "path": "components/nocti_v4_network/nocti_v4_network.c",
       "historical_sha256": "139efda5b6b16e2892f75a28a360b2831ce379120e07b3eef60191a3cada3efd",
-      "active_sha256": "2a526a3e997b2ffa54d1cf7489e767bc2f0e86482d5085dc951ab8ec7afe6696",
+      "active_sha256": "24e0e80754d1859b37b1a4aef96838be6311f088fdffc719da8b1bd4012f0312",
       "changes": [
         "Reject missing local WPA2 configuration before starting the network",
         "Remove automatic NVS erase fallback; preserve current provisioning",
-        "Use actual NETWORK_ERROR enum"
+        "Use actual NETWORK_ERROR enum",
+        "Sample-index master clock"
       ]
     },
     {
@@ -239,18 +244,20 @@
     {
       "path": "components/nocti_v4_optical/include/nocti_v4_optical.h",
       "historical_sha256": "ac693aba8ae46c6c02101b54fe166425010ff581968abee051b9b34202bbce77",
-      "active_sha256": "ac693aba8ae46c6c02101b54fe166425010ff581968abee051b9b34202bbce77",
+      "active_sha256": "9220f84340402689737fdc423f373a9dfea335734b3c80e1d97b31a952780369",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "Sample-index master clock"
       ]
     },
     {
       "path": "components/nocti_v4_optical/nocti_v4_optical.c",
       "historical_sha256": "88027b1d4dcfa4fa2d45289c65145592a36a06b6ee9939131fd17f71c10dbdf9",
-      "active_sha256": "11ce92c5901cb1a4a38ff02eb7740249a4cc98f27dcf5cb028181c1081351c22",
+      "active_sha256": "884aaea599cd5c71950516f64c3e4171ab364306b18a7b5573c0fd0847705023",
       "changes": [
         "Fs2 extension: raw staging 128 to 256 records, allowing 200-sample slot plus ingest batch",
-        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
+        "Sample-index master clock"
       ]
     },
     {
@@ -264,10 +271,11 @@
     {
       "path": "components/nocti_v4_scheduler/include/nocti_v4_scheduler.h",
       "historical_sha256": "57f9afa3eb54fd523b110c66a1bb01df588995cc00ced03480dd46a301db7723",
-      "active_sha256": "68a9afb456dd31070adfe824c498b1c28e4a0ca5b11bd965a3cc06324d78259a",
+      "active_sha256": "08eb04fce21bb58fdc3897ad50ad3db455622b4199a81156ac09e283857fa43e",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "Declare scoped stopped-only Fs setter"
+        "Declare scoped stopped-only Fs setter",
+        "Sample-index master clock"
       ]
     },
     {
@@ -283,11 +291,12 @@
     {
       "path": "components/nocti_v4_scheduler/nocti_v4_scheduler.c",
       "historical_sha256": "83064d25c3e559e6a0d3c6cdb2ec8a01f0a3c27d9b942b85a5d9673e1f3ec3d1",
-      "active_sha256": "623841a06c2e3ebca083a5d9fb8590a78728b244f8bd1eb310d9ceef2bb59ed8",
+      "active_sha256": "b973b34cc5916eedeab2fefd065b4d25d59efc622d266e72c252010154121215",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "Stopped-only Fs extension; atomic shared slot geometry, original 10 Hz defaults",
-        "Use PRIu32 for runtime uint32_t Fs/period values on Xtensa IDF6.1"
+        "Use PRIu32 for runtime uint32_t Fs/period values on Xtensa IDF6.1",
+        "Sample-index master clock"
       ]
     },
     {
@@ -347,7 +356,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "19381d8b2d0f5d8d01f47bf5ed6a0d2c8399f98f3612facd9d449b27bded88d1"
+      "sha256": "ce48f05b7019859723057ade1b32739a4afb8d9be6d3e747bd49735695ebf759"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",

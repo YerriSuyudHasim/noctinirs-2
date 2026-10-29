@@ -1440,7 +1440,7 @@ size_t nocti_v4_scheduler_append_sync(const nocti_v4_scheduler_t *scheduler,
                      " slot_samples=%" PRIu32 " off_samples=%" PRIu32
                      " missed=%" PRIu32 " catchup=%" PRIu32 " gap=%" PRIu32
                      " edge_miss=%" PRIu32 " on_d=%s off_d=%s",
-                     NOCTI_V4_SAMPLE_ADC_HZ,
+                     (uint32_t)NOCTI_V4_SAMPLE_ADC_HZ,
                      runtime->sync_anchor_valid ? runtime->sync_anchor : 0u,
                      runtime->sync_frame_delta_valid ? runtime->sync_frame_delta : 0u,
                      runtime->sample_geometry.slot_samples,
