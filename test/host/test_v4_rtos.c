@@ -1,5 +1,6 @@
 #include "nn2_test.h"
 #include "nocti_v4_backlog.h"
+#include "nocti_v4_boot.h"
 
 static nocti_v4_backlog_event_t known(uint32_t sequence, uint32_t age_us)
 {
@@ -146,6 +147,75 @@ static void spsc_preserves_order_and_counts_overflow(void)
     TEST_ASSERT_EQUAL_UINT32(100u, value);
 }
 
+static nocti_v4_boot_flags_t boot_flags(int gpio, int core, int i2c, int pca,
+                                       int ads, int runtime, int network)
+{
+    nocti_v4_boot_flags_t flags;
+    flags.gpio = gpio;
+    flags.core = core;
+    flags.i2c = i2c;
+    flags.pca = pca;
+    flags.ads = ads;
+    flags.runtime = runtime;
+    flags.network = network;
+    return flags;
+}
+
+static void boot_ready_runs_runtime_and_network(void)
+{
+    const nocti_v4_boot_flags_t flags = boot_flags(1, 1, 1, 1, 1, 1, 1);
+    TEST_ASSERT_EQUAL_INT(1, nocti_v4_boot_attempt_runtime(flags));
+    TEST_ASSERT_EQUAL_INT(1, nocti_v4_boot_attempt_network(flags));
+    TEST_ASSERT_EQUAL_INT(0, nocti_v4_boot_hardware_failed(flags));
+    TEST_ASSERT_EQUAL_INT(NOCTI_V4_BOOT_READY, nocti_v4_boot_fault_stage(flags));
+    TEST_ASSERT_EQUAL_STRING("ready", nocti_v4_boot_stage_name(NOCTI_V4_BOOT_READY));
+}
+
+static void boot_gpio_failure_skips_network(void)
+{
+    const nocti_v4_boot_flags_t flags = boot_flags(0, -1, -1, -1, -1, -1, -1);
+    TEST_ASSERT_EQUAL_INT(0, nocti_v4_boot_attempt_runtime(flags));
+    TEST_ASSERT_EQUAL_INT(0, nocti_v4_boot_attempt_network(flags));
+    TEST_ASSERT_EQUAL_INT(1, nocti_v4_boot_hardware_failed(flags));
+    TEST_ASSERT_EQUAL_INT(NOCTI_V4_BOOT_SAFE_GPIO, nocti_v4_boot_fault_stage(flags));
+    TEST_ASSERT_EQUAL_STRING("safe_gpio",
+                             nocti_v4_boot_stage_name(NOCTI_V4_BOOT_SAFE_GPIO));
+}
+
+static void boot_i2c_failure_still_reports_over_udp(void)
+{
+    const nocti_v4_boot_flags_t flags = boot_flags(1, 1, 0, -1, -1, -1, -1);
+    TEST_ASSERT_EQUAL_INT(0, nocti_v4_boot_attempt_runtime(flags));
+    TEST_ASSERT_EQUAL_INT(1, nocti_v4_boot_attempt_network(flags));
+    TEST_ASSERT_EQUAL_INT(NOCTI_V4_BOOT_I2C, nocti_v4_boot_fault_stage(flags));
+}
+
+static void boot_ads_failure_still_reports_over_udp(void)
+{
+    const nocti_v4_boot_flags_t flags = boot_flags(1, 1, 1, 1, 0, -1, -1);
+    TEST_ASSERT_EQUAL_INT(0, nocti_v4_boot_attempt_runtime(flags));
+    TEST_ASSERT_EQUAL_INT(1, nocti_v4_boot_attempt_network(flags));
+    TEST_ASSERT_EQUAL_INT(NOCTI_V4_BOOT_ADS, nocti_v4_boot_fault_stage(flags));
+}
+
+static void boot_network_failure_is_named_after_the_owners(void)
+{
+    const nocti_v4_boot_flags_t flags = boot_flags(1, 1, 1, 1, 1, 1, 0);
+    TEST_ASSERT_EQUAL_INT(0, nocti_v4_boot_hardware_failed(flags));
+    TEST_ASSERT_EQUAL_INT(NOCTI_V4_BOOT_NETWORK, nocti_v4_boot_fault_stage(flags));
+    TEST_ASSERT_EQUAL_STRING("network", nocti_v4_boot_stage_name(NOCTI_V4_BOOT_NETWORK));
+}
+
+static void boot_runtime_requires_every_hardware_owner(void)
+{
+    nocti_v4_boot_flags_t flags = boot_flags(1, 1, 1, 1, 1, -1, -1);
+    TEST_ASSERT_EQUAL_INT(1, nocti_v4_boot_attempt_runtime(flags));
+    TEST_ASSERT_EQUAL_INT(NOCTI_V4_BOOT_RUNTIME, nocti_v4_boot_fault_stage(flags));
+    flags.pca = 0;
+    TEST_ASSERT_EQUAL_INT(0, nocti_v4_boot_attempt_runtime(flags));
+    TEST_ASSERT_EQUAL_INT(NOCTI_V4_BOOT_PCA, nocti_v4_boot_fault_stage(flags));
+}
+
 static void empty_service_reads_nothing(void)
 {
     const nocti_v4_backlog_result_t result = nocti_v4_backlog_service(NULL, 0u);
@@ -165,5 +235,11 @@ void test_v4_rtos_suite(void)
     RUN_TEST(backlog_unknown_age_does_not_drop_as_if_it_were_fresh);
     RUN_TEST(sequence_hole_is_counted_and_stops_the_service);
     RUN_TEST(spsc_preserves_order_and_counts_overflow);
+    RUN_TEST(boot_ready_runs_runtime_and_network);
+    RUN_TEST(boot_gpio_failure_skips_network);
+    RUN_TEST(boot_i2c_failure_still_reports_over_udp);
+    RUN_TEST(boot_ads_failure_still_reports_over_udp);
+    RUN_TEST(boot_network_failure_is_named_after_the_owners);
+    RUN_TEST(boot_runtime_requires_every_hardware_owner);
     RUN_TEST(empty_service_reads_nothing);
 }

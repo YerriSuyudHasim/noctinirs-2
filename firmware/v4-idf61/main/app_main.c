@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 #include "nocti_v4_async_led.h"
 #include "nocti_v4_board.h"
+#include "nocti_v4_boot.h"
 #include "nocti_v4_ads.h"
 #include "nocti_v4_common.h"
 #include "nocti_v4_health.h"
@@ -254,17 +255,28 @@ void app_main(void)
     print_version();
     printf("BOOT phase=SAFE_GPIO: asserting PCA RESET# before I2C/PCA initialization; LED physical state=UNVERIFIED until external observation.\n");
 
-    esp_err_t err = nocti_v4_board_early_safe_init(&s_board);
-    if (err != ESP_OK) {
-        printf("BOOT_FAIL stage=SAFE_GPIO result=%s; optical safety is UNKNOWN\n", nocti_v4_err_name(err));
+    /* Stage order follows feat35 app_main (31fb2a9 main/app_main.c). Owners
+     * stay the V4 I2C and ADS131 SPI drivers. Charger, battery, and USB
+     * provision from that boot are not started. */
+    nocti_v4_boot_flags_t boot = {
+        .gpio = -1, .core = -1, .i2c = -1, .pca = -1,
+        .ads = -1, .runtime = -1, .network = -1,
+    };
+
+    const esp_err_t gpio_err = nocti_v4_board_early_safe_init(&s_board);
+    boot.gpio = gpio_err == ESP_OK ? 1 : 0;
+    if (boot.gpio != 1) {
+        printf("BOOT_FAIL stage=SAFE_GPIO result=%s; optical safety is UNKNOWN\n",
+               nocti_v4_err_name(gpio_err));
     } else if (s_app_main_core != NOCTI_V4_APP_MAIN_CORE) {
-        err = ESP_ERR_INVALID_STATE;
+        boot.core = 0;
         printf("BOOT_FAIL stage=RT_CORE_CONTRACT result=%s app_main_core=%" PRId32
                " expected_core=%d; RESET# remains asserted=%u\n",
-               nocti_v4_err_name(err), s_app_main_core,
+               nocti_v4_err_name(ESP_ERR_INVALID_STATE), s_app_main_core,
                NOCTI_V4_APP_MAIN_CORE,
                s_board.pca_reset_asserted ? 1u : 0u);
     } else {
+        boot.core = 1;
         printf("BOOT_RT_CORE_CONTRACT OK app_main_core=%" PRId32
                " ads_prio=%u led_prio=%u sched_prio=%u"
                " ads_budget_us=%u console=removed control=UDP3333"
@@ -272,49 +284,90 @@ void app_main(void)
                s_app_main_core, (unsigned)NOCTI_V4_RTOS_PRIO_ADS,
                (unsigned)NOCTI_V4_RTOS_PRIO_LED, (unsigned)NOCTI_V4_RTOS_PRIO_SCHED,
                (unsigned)NOCTI_V4_RTOS_BUDGET_ADS_SERVICE_US);
-        err = nocti_v4_i2c_init_sync(&s_i2c, &s_health);
-        if (err != ESP_OK) {
+    }
+
+    if (boot.core == 1) {
+        const esp_err_t i2c_err = nocti_v4_i2c_init_sync(&s_i2c, &s_health);
+        boot.i2c = i2c_err == ESP_OK ? 1 : 0;
+        if (boot.i2c != 1) {
             printf("BOOT_FAIL stage=I2C_SYNC_QDEPTH_0 result=%s; RESET# remains asserted=%u\n",
-                   nocti_v4_err_name(err), s_board.pca_reset_asserted ? 1u : 0u);
-        } else {
-            err = nocti_v4_led_init(&s_led, &s_board, &s_i2c, &s_health);
-            report_result("BOOT_PCA_SYNC_INIT", err);
-            if (err != ESP_OK) {
-                printf("BOOT_PCA_SYNC_INIT failure leaves RESET# asserted=%u safe_off=%s\n",
-                       s_board.pca_reset_asserted ? 1u : 0u,
-                       nocti_v4_safe_off_state_name(s_led.safe_off_state));
-            }
+                   nocti_v4_err_name(i2c_err), s_board.pca_reset_asserted ? 1u : 0u);
         }
     }
-    if (err == ESP_OK) {
-        err = nocti_v4_ads_init(&s_ads, &s_board, &s_timebase, &s_health);
-        report_result("BOOT_ADS_DARK_INIT", err);
+    if (boot.i2c == 1) {
+        const esp_err_t pca_err = nocti_v4_led_init(&s_led, &s_board, &s_i2c, &s_health);
+        boot.pca = pca_err == ESP_OK ? 1 : 0;
+        report_result("BOOT_PCA_SYNC_INIT", pca_err);
+        if (boot.pca != 1) {
+            printf("BOOT_PCA_SYNC_INIT failure leaves RESET# asserted=%u safe_off=%s\n",
+                   s_board.pca_reset_asserted ? 1u : 0u,
+                   nocti_v4_safe_off_state_name(s_led.safe_off_state));
+        }
+    }
+    if (boot.pca == 1) {
+        const esp_err_t ads_err = nocti_v4_ads_init(&s_ads, &s_board, &s_timebase, &s_health);
+        boot.ads = ads_err == ESP_OK ? 1 : 0;
+        report_result("BOOT_ADS_DARK_INIT", ads_err);
     } else {
         printf("BOOT_ADS_DARK_INIT SKIPPED reason=PCA_SAFE_OFF_NOT_VERIFIED\n");
     }
-    const esp_err_t async_init = s_i2c.initialized && s_led.initialized ?
-        nocti_v4_async_led_init(&s_async_led, &s_board, &s_i2c, &s_led,
-                                 &s_timebase, &s_health) : ESP_ERR_INVALID_STATE;
+
+    esp_err_t async_init = ESP_ERR_INVALID_STATE;
+    esp_err_t scheduler_init = ESP_ERR_INVALID_STATE;
+    if (nocti_v4_boot_attempt_runtime(boot)) {
+        async_init = s_i2c.initialized && s_led.initialized ?
+            nocti_v4_async_led_init(&s_async_led, &s_board, &s_i2c, &s_led,
+                                     &s_timebase, &s_health) : ESP_ERR_INVALID_STATE;
+        if (async_init == ESP_OK && nocti_v4_ads_ready(&s_ads)) {
+            scheduler_init = nocti_v4_scheduler_init(&s_scheduler, &s_timebase,
+                                                      &s_async_led, &s_health);
+        }
+        if (scheduler_init == ESP_OK) {
+            scheduler_init = nocti_v4_optical_init(&s_optical, &s_ads, &s_scheduler,
+                                                    &s_timebase, &s_health);
+        }
+        boot.runtime = scheduler_init == ESP_OK ? 1 : 0;
+    }
     report_result("BOOT_ASYNC_LED_TEST_INIT", async_init);
-    esp_err_t scheduler_init = async_init == ESP_OK && nocti_v4_ads_ready(&s_ads) ?
-        nocti_v4_scheduler_init(&s_scheduler, &s_timebase, &s_async_led, &s_health) :
-        ESP_ERR_INVALID_STATE;
-    if (scheduler_init == ESP_OK) {
-        scheduler_init = nocti_v4_optical_init(&s_optical, &s_ads, &s_scheduler,
-                                                &s_timebase, &s_health);
-    }
     report_result("BOOT_V4_5_SCHEDULER_INIT", scheduler_init);
-    esp_err_t network_init = scheduler_init == ESP_OK ?
-#if CONFIG_NOCTI_V4_NN2_COMMUNICATION
-        control_init() :
-#else
-        nocti_v4_network_init(&s_network, &s_timebase, &s_health) :
-#endif
-        ESP_ERR_INVALID_STATE;
-    if (network_init == ESP_OK && !CONFIG_NOCTI_V4_NN2_COMMUNICATION) {
-        network_init = nocti_v4_optical_bind_completed_frame_sink(
-            &s_optical, nocti_v4_network_frame_sink, &s_network);
+
+    if (nocti_v4_boot_hardware_failed(boot) && boot.gpio == 1) {
+        (void)nocti_v4_board_set_emitter_gate(&s_board, false);
+        control_note_boot_fault();
     }
-    report_result("BOOT_V4_7_NETWORK_INIT", network_init);
+    if (nocti_v4_boot_attempt_network(boot)) {
+        /* Publish the stage before UDP can answer. control_init replaces it
+         * with ready only after Wi-Fi comes up and no hardware flag failed. */
+        control_set_boot_stage(nocti_v4_boot_stage_name(nocti_v4_boot_fault_stage(boot)));
+        esp_err_t network_init;
+#if CONFIG_NOCTI_V4_NN2_COMMUNICATION
+        network_init = control_init();
+#else
+        network_init = nocti_v4_network_init(&s_network, &s_timebase, &s_health);
+        if (network_init == ESP_OK && boot.runtime == 1) {
+            network_init = nocti_v4_optical_bind_completed_frame_sink(
+                &s_optical, nocti_v4_network_frame_sink, &s_network);
+        }
+        if (network_init == ESP_OK && !nocti_v4_boot_hardware_failed(boot)) {
+            control_set_boot_stage(nocti_v4_boot_stage_name(NOCTI_V4_BOOT_READY));
+        }
+#endif
+        boot.network = network_init == ESP_OK ? 1 : 0;
+        if (boot.network != 1) {
+            if (boot.gpio == 1) {
+                (void)nocti_v4_board_set_emitter_gate(&s_board, false);
+            }
+            control_note_boot_fault();
+            control_set_boot_stage(nocti_v4_boot_stage_name(nocti_v4_boot_fault_stage(boot)));
+        }
+        report_result("BOOT_V4_7_NETWORK_INIT", network_init);
+    } else {
+        control_set_boot_stage(nocti_v4_boot_stage_name(NOCTI_V4_BOOT_SAFE_GPIO));
+        printf("BOOT_V4_7_NETWORK_INIT SKIPPED reason=SAFE_GPIO_UNKNOWN\n");
+    }
+    printf("BOOT_STAGE stage=%s gpio=%d core=%d i2c=%d pca=%d ads=%d runtime=%d network=%d\n",
+           nocti_v4_boot_stage_name(nocti_v4_boot_fault_stage(boot)),
+           boot.gpio, boot.core, boot.i2c, boot.pca, boot.ads,
+           boot.runtime, boot.network);
     printf("CONTROL udp=3333 commands=info,get-config,start,stop,status,health,timing; USB command console removed\n");
 }

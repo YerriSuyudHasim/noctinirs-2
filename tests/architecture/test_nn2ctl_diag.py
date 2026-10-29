@@ -9,7 +9,7 @@ import nn2ctl
 
 
 HEALTH = (
-    "v4health=1 boot82_bound=0 adc_missed=3 adc_backlog_catchup=3 "
+    "v4health=1 boot_stage=ready boot82_bound=0 adc_missed=3 adc_backlog_catchup=3 "
     "adc_missed_backlog=3 adc_ok=10 adc_missed_sequence=0 adc_sequence_gap=0 "
     "adc_missed_other=0 drdy_event_overflow=0 adc_ring_overflow=0 "
     "crc_bad=0 spi_errors=0 ads_status_faults=0 event_depth_max=4 "
@@ -45,6 +45,7 @@ class DiagParse(unittest.TestCase):
         self.assertEqual(health["diag"]["adc_missed_backlog"], "3")
         self.assertEqual(health["diag"]["event_depth_max"], "4")
         self.assertEqual(health["diag"]["frames"], "unsupported")
+        self.assertEqual(health["diag"]["boot_stage"], "ready")
         self.assertEqual(timing["diag"]["spi_max_us"], "45")
         self.assertEqual(timing["diag"]["service_max_us"], "70")
         self.assertEqual(timing["diag"]["adc_backlog_catchup"], "3")

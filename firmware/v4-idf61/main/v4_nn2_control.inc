@@ -18,6 +18,20 @@ static uint8_t s_control_state=NN2_OPTICAL_IDLE;
 static bool s_control_wanted, s_control_working, s_control_stop, s_control_fault;
 static bool s_control_clean=true;
 static esp_err_t s_control_error=ESP_OK;
+static const char *s_boot_stage="not_started";
+static void control_set_boot_stage(const char *name)
+{
+    if (name!=NULL && name[0]!='\0') s_boot_stage=name;
+}
+/* Sticky. CLEAR cannot hide a boot failure, and START requires IDLE. */
+static void control_note_boot_fault(void)
+{
+    portENTER_CRITICAL(&s_control_lock);
+    s_control_fault=true;
+    s_control_error=ESP_FAIL;
+    if (s_control_state!=NN2_OPTICAL_RUNNING) s_control_state=NN2_OPTICAL_FAULT;
+    portEXIT_CRITICAL(&s_control_lock);
+}
 static bool control_start_allowed(void)
 {
     portENTER_CRITICAL(&s_control_lock);
@@ -178,7 +192,7 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
     int wrote;
     if (kind == 0u) {
         wrote = snprintf((char *)out, cap,
-            "v4health=1 boot82_bound=0 adc_missed=%" PRIu32
+            "v4health=1 boot_stage=%s boot82_bound=0 adc_missed=%" PRIu32
             " adc_backlog_catchup=%" PRIu32 " adc_missed_backlog=%" PRIu32
             " adc_ok=%" PRIu32
             " adc_missed_sequence=%" PRIu32 " adc_sequence_gap=%" PRIu32
@@ -189,6 +203,7 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             " deadline_depth_max=%" PRIu32 " led_queue_depth_max=%" PRIu32
             " task_wdt_subscribe_errors=%" PRIu32 " task_wdt_kick_errors=%" PRIu32
             " frames=unsupported",
+            s_boot_stage,
             HLOAD(adc_missed), HLOAD(adc_backlog_catchup), HLOAD(adc_missed_backlog),
             HLOAD(adc_ok), HLOAD(adc_missed_sequence),
             HLOAD(adc_sequence_gap), HLOAD(adc_missed_other),
@@ -263,6 +278,7 @@ static esp_err_t control_init(void)
     if (result==ESP_OK) result=nn2_net_init(&s_nn2_app,&clock,3333u);
     if (result==ESP_OK) result=nn2_wifi_start();
     if (result!=ESP_OK) { (void)control_off(NULL); return result; }
+    if (!s_control_fault) control_set_boot_stage(nocti_v4_boot_stage_name(NOCTI_V4_BOOT_READY));
     if (xTaskCreatePinnedToCore(control_network,"v4_nn2_net",NOCTI_V4_RTOS_STACK_NET_BYTES,NULL,NOCTI_V4_RTOS_PRIO_NET,&s_control_network,NOCTI_V4_RTOS_CORE_SOFT)!=pdPASS) {
         (void)control_off(NULL); (void)nn2_wifi_stop(); return ESP_ERR_NO_MEM;
     }
@@ -272,4 +288,6 @@ static esp_err_t control_init(void)
 #else
 static bool control_start_allowed(void) { return true; }
 static void control_allow_safe_restore(void) { }
+static void control_set_boot_stage(const char *name) { (void)name; }
+static void control_note_boot_fault(void) { }
 #endif

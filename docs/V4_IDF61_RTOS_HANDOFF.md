@@ -203,3 +203,6 @@ open. Repeat once with `health` during the run. STOP must still end in
 | `d2f6d04d76773891458817d83822b2c6c23cebf9` | `feat/33-board-bringup` tip: ADS priority 5, LED 22; ADR-0005 no I2C in the ISR | Priority 5 not adopted; ISR rule kept |
 
 Branch tip this work started from: `92fe99cf5df8b78abd6cd298553965380f2fffdb`.
+
+Board init stages, and which of them follow feat35 `31fb2a9`, are recorded in
+`docs/V4_IDF61_BOOT_INIT.md`. The task table in this file is unchanged.

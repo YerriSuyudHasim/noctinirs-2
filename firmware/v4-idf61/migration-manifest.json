@@ -78,10 +78,11 @@
     {
       "path": "components/nocti_v4_board/nocti_v4_board.c",
       "historical_sha256": "36e37ac65357d1d70a97614208924aff06ec4f2d670c274893c61d802391ddf8",
-      "active_sha256": "d7eb8d2126f01e71d462540e518f5b5ad566b2ea7bb75ab24446e4145d7693dc",
+      "active_sha256": "d74e54b54b761edee9b0dde71de6dfd8abd527693959756ac9839e21c4e64ae5",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
+        "Drive PCA RESET and ADS reset low before gpio_config, with pulldown, then drive them again"
       ]
     },
     {
@@ -307,13 +308,14 @@
     {
       "path": "main/app_main.c",
       "historical_sha256": "e1b7168cd9769af113fcd14cc11076f3acb5be0061aa9e3cd5022366933c22b9",
-      "active_sha256": "4f36dfa737bd35a7229782f1ae8ce5d757f3f2c96b67375c08b93e0ec0ef441a",
+      "active_sha256": "5f6a5daeca4adced663bbf32ffc9f0608f820d3bcd983b2a980eb7d06eadb7e7",
       "changes": [
         "Guard SDK 6.1 and identify unqualified migration at boot/STATUS",
         "Expose SCAN_SET_FS command, 30 mA command limit and scaled OFF help",
         "Use PRIu32 for runtime uint32_t Fs/period values on Xtensa IDF6.1",
         "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
-        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
+        "Staged boot: runtime only after GPIO, I2C, PCA, and ADS; UDP still starts after a later hardware fault"
       ]
     },
     {
@@ -336,7 +338,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "54c31b2e5b2b377e4da547e2fdf6c9219e998f2b001613bc84f549c1625696f0"
+      "sha256": "d9cf404043e982552b5d0a143b0509f5e7455804087f1729efa83c7f1e987ce3"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -345,6 +347,10 @@
     {
       "path": "components/nocti_v4_common/include/nocti_v4_backlog.h",
       "sha256": "0c9f5e634ef32b179c7de0e7bb117093d0ebd6906e0e96295995baf307800a1e"
+    },
+    {
+      "path": "components/nocti_v4_common/include/nocti_v4_boot.h",
+      "sha256": "7e12e44fd8b1d8b563108244edf9f85a68b147a0047bce7e94ec39cd5b9fe3d4"
     }
   ],
   "shared_communication": [

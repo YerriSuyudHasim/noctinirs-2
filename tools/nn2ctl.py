@@ -239,7 +239,7 @@ def parse_diag(text):
     if fields.get(kind) != "1":
         raise ValueError("diagnostic version")
     if kind == "v4health":
-        required = ("boot82_bound", "adc_ok", "adc_missed", "adc_missed_backlog",
+        required = ("boot_stage", "boot82_bound", "adc_ok", "adc_missed", "adc_missed_backlog",
                     "adc_backlog_catchup", "adc_sequence_gap", "crc_bad",
                     "spi_errors", "event_depth_max", "task_wdt_subscribe_errors",
                     "task_wdt_kick_errors", "frames")
