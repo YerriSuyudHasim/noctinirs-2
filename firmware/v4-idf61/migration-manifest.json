@@ -142,7 +142,7 @@
     {
       "path": "components/nocti_v4_health/include/nocti_v4_health.h",
       "historical_sha256": "cd4f7afa786aa90b5de8e8a8befcb2756036700375dd983df59ad6b5e53f5477",
-      "active_sha256": "be60d29e6615833ca6d0df50f457a9ed7da2177402c9f6380954555d69bd8af1",
+      "active_sha256": "df440680ac40e838b580bdf69f12397349b97b1c326984353c43afa4fe88dbc9",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
@@ -258,7 +258,7 @@
     {
       "path": "components/nocti_v4_optical/nocti_v4_optical.c",
       "historical_sha256": "88027b1d4dcfa4fa2d45289c65145592a36a06b6ee9939131fd17f71c10dbdf9",
-      "active_sha256": "884aaea599cd5c71950516f64c3e4171ab364306b18a7b5573c0fd0847705023",
+      "active_sha256": "c1e67e91e4f98469d26c4685f1fbe28e87e12eba53fb0e46116e5888c0330bf8",
       "changes": [
         "Fs2 extension: raw staging 128 to 256 records, allowing 200-sample slot plus ingest batch",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
@@ -297,7 +297,7 @@
     {
       "path": "components/nocti_v4_scheduler/nocti_v4_scheduler.c",
       "historical_sha256": "83064d25c3e559e6a0d3c6cdb2ec8a01f0a3c27d9b942b85a5d9673e1f3ec3d1",
-      "active_sha256": "e2db2d46bae2c9dbac0973d299f13759eb508707c4c7a2eb679a6ff17d49b253",
+      "active_sha256": "804e410a9b005f2ad463cba799572c2b6859ba653b27e815a76aaac045b2c528",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "Stopped-only Fs extension; atomic shared slot geometry, original 10 Hz defaults",
@@ -363,7 +363,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "30f98b5b1aa80f3622aac9d021068f536a3cbc39f3ed5677bfe38d73e1ddb7e8"
+      "sha256": "e31790449390f6e6f5af42517522a78bfff6b6d3fe5cc57982efcc3764f6cc9e"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -505,7 +505,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "c51522360b6bb506b816b8a12db5b077680db302b6ed1446193c6eba5e6eb2a2"
+      "sha256": "1dea47fc1eb8e1c39642cf196f54bb125c72304119626c39b343998fc19cf2d5"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",
