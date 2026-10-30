@@ -39,6 +39,40 @@ def reply(opcode, text, session=0):
 
 
 class DiagParse(unittest.TestCase):
+    def test_fault_names_use_nn2_namespace_in_status_and_timing(self):
+        for opcode, extra in ((3, struct.pack("<QQQIIIIIB", 1, 2, 3, 4, 5, 6, 7, 8, 0)),
+                              (0x31, TIMING.encode("ascii"))):
+            for code, name in ((0, "NONE"), (0x102, "FAULT_OFF"),
+                               (0x10A, "FAULT_CLOCK"), (267, "FAULT_OPTICAL"),
+                               (0xFFFF, "UNKNOWN_0xFFFF")):
+                payload = struct.pack("<IHHBHBQQ", 7, opcode, 0, 5, code, 0, 9, 11) + extra
+                packet = nn2ctl.decode(nn2ctl.encode_envelope(payload, msg_type=nn2ctl.REPLY))
+                parsed = nn2ctl.describe_reply(packet, 7, opcode)
+                self.assertEqual(parsed["fault"], code)
+                self.assertEqual(parsed["fault_name"], name)
+
+    def test_async_health_counters_are_preserved(self):
+        fields = {"async_latency_min_us": 40, "async_latency_max_us": 180,
+                  "async_latency_avg_us": 80, "async_on_pending_at_submit": 0,
+                  "async_off_pending_at_submit": 0, "sample_clock_late_commits": 2,
+                  "led_completion_timeout": 0}
+        text = HEALTH + " " + " ".join(f"{key}={value}" for key, value in fields.items())
+        parsed = nn2ctl.describe_reply(reply(0x30, text), 7, 0x30)
+        for key, value in fields.items():
+            self.assertEqual(parsed["diag"][key], str(value))
+
+    def test_async_per_slot_durations_and_unknowns(self):
+        text = HEALTH + " i2c_on_us=" + ",".join(["92"] * 20)
+        text += " i2c_off_us=" + ",".join(["x"] + ["45"] * 19)
+        parsed = nn2ctl.describe_reply(reply(0x30, text), 7, 0x30)
+        self.assertEqual(len(parsed["async_i2c"]), 20)
+        self.assertEqual(parsed["async_i2c"][19]["on_submit_complete_us"], 92)
+        self.assertIsNone(parsed["async_i2c"][0]["off_submit_complete_us"])
+        self.assertEqual(parsed["async_i2c"][1]["off_submit_complete_us"], 45)
+        for invalid in ("1,2", ",".join(["-1"] * 20)):
+            with self.assertRaises(ValueError):
+                nn2ctl.parse_async_i2c({"i2c_on_us": invalid, "i2c_off_us": ",".join(["0"] * 20)})
+
     def test_health_and_timing_round_trip(self):
         health = nn2ctl.describe_reply(reply(0x30, HEALTH), 7, 0x30)
         timing = nn2ctl.describe_reply(reply(0x31, TIMING), 7, 0x31)

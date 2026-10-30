@@ -54,7 +54,9 @@ def check_public_opacity(build, evidence):
     entry = next(c for c in commands if Path(c['file']).name == 'nn2_core_ring.c')
     # CMake emits native backslashes in Windows command/file entries. They
     # are path separators, not POSIX shlex escapes.
-    command = entry['command'].replace('\\', '/') if os.name == 'nt' else entry['command']
+    command = entry.get('command', '')
+    if os.name == 'nt':
+        command = command.replace('\\', '/')
     original = entry.get('arguments') or shlex.split(command)
     source = entry['file'].replace('\\', '/') if os.name == 'nt' else entry['file']
     base = []
@@ -115,7 +117,7 @@ def main():
             # Retained isolated source copy is part of the control evidence.
             isolated = evidence / kind / 'source'
             for path in ('test/host', 'components', 'cmake', 'main/adapters', 'tools',
-                         'firmware/v4-idf61/components/nocti_v4_common/include'):
+                         'firmware/v4-idf61/components/nocti_v4_common'):
                 shutil.copytree(ROOT / path, isolated / path)
             if kind == 'assertion-failure':
                 path = isolated / 'test/host/test_ring.c'
@@ -127,7 +129,7 @@ def main():
             else:
                 path = isolated / 'test/host/test_main.c'
                 source = path.read_text()
-                for suite in ('ring', 'sequencer', 'contract', 'storage', 'acquisition', 'ads131', 'ads131_control', 'ads131_transport', 'v4_rtos', 'v4_sample_clock'):
+                for suite in ('ring', 'sequencer', 'contract', 'storage', 'acquisition', 'ads131', 'ads131_control', 'ads131_transport', 'v4_rtos', 'v4_sample_clock', 'v4_sample_edge'):
                     source = source.replace('    test_' + suite + '_suite();', '')
                 path.write_text(source)
             control = execute(isolated, evidence / kind / 'build', evidence / kind)

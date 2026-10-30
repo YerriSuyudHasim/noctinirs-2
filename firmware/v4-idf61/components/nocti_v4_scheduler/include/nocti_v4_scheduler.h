@@ -168,6 +168,8 @@ void nocti_v4_scheduler_get_status(const nocti_v4_scheduler_t *scheduler,
 /* Append one nn2ctl timing suffix. Values are sample indices and signed
  * edge deltas (actual first-affected minus planned edge). 'x' means the
  * commit for that slot has not been observed. Returns bytes written. */
+size_t nocti_v4_scheduler_append_led_timing(const nocti_v4_scheduler_t *scheduler,
+                                           char *out, size_t cap);
 size_t nocti_v4_scheduler_append_sync(const nocti_v4_scheduler_t *scheduler,
                                       char *out, size_t cap);
 void nocti_v4_scheduler_print_status(const nocti_v4_scheduler_t *scheduler);

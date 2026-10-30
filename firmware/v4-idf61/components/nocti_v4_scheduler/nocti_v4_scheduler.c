@@ -144,6 +144,8 @@ typedef struct {
     uint8_t sample_next_slot;
     uint64_t sample_anchor_us;
     uint8_t sample_anchor_valid;
+    uint32_t sync_on_i2c_us[NOCTI_V4_SLOT_COUNT];
+    uint32_t sync_off_i2c_us[NOCTI_V4_SLOT_COUNT];
     uint32_t sync_on_planned[NOCTI_V4_SLOT_COUNT];
     uint32_t sync_on_actual[NOCTI_V4_SLOT_COUNT];
     uint8_t sync_on_known[NOCTI_V4_SLOT_COUNT];
@@ -545,17 +547,17 @@ static void capture_slot0_anchor(scheduler_runtime_t *runtime, slot_record_t *re
 }
 
 static void note_sample_commit(scheduler_runtime_t *runtime, slot_record_t *record,
-                               int on_phase)
+                               int on_phase,
+                               const nocti_v4_async_led_completion_t *completion)
 {
-    uint32_t observed = 0u;
-    uint32_t generation = 0u;
+    const uint32_t observed = completion->sample_sequence;
     nocti_v4_sample_slot_plan_t plan;
     if (runtime == NULL || record == NULL || record->sample_plan_valid == 0u ||
         runtime->sample_origin_valid == 0u || record->frame_sequence == 0u) {
         return;
     }
-    if (!nocti_v4_sample_edge_observed(&observed, &generation) ||
-        generation != runtime->sample_generation) {
+    if (!completion->sample_valid ||
+        completion->sample_generation != runtime->sample_generation) {
         return;
     }
     if (!nocti_v4_sample_slot_plan(&runtime->sample_geometry, runtime->sample_origin,
@@ -621,8 +623,8 @@ static void process_led_completion(
         fault_scan(runtime, completion->result);
         return;
     }
-    nocti_v4_async_led_status_t status;
-    nocti_v4_async_led_get_status(runtime->async_led, &status);
+    nocti_v4_async_led_state_t status;
+    nocti_v4_async_led_get_state(runtime->async_led, &status);
     slot_record_t *record = slot_at(
         runtime,
         (int32_t)(completion->frame_sequence %
@@ -650,6 +652,7 @@ static void process_led_completion(
         completion->payload_length == 7u &&
         record->state == NOCTI_V4_SLOT_LED_ON_PENDING) {
         portENTER_CRITICAL(&runtime->state_lock);
+        runtime->sync_on_i2c_us[record->slot_index] = latency_us;
         record->led_on_command_id = completion->command_id;
         record->led_on_queue_ts = completion->queue_timestamp_us;
         record->led_on_dequeue_ts = completion->dequeue_timestamp_us;
@@ -662,7 +665,7 @@ static void process_led_completion(
                                          NOCTI_V4_LED_ON_SETTLE_US;
         record->state = NOCTI_V4_SLOT_LED_ON_STABLE;
         portEXIT_CRITICAL(&runtime->state_lock);
-        note_sample_commit(runtime, record, 1);
+        note_sample_commit(runtime, record, 1, completion);
         record_latency(runtime->health, true, latency_us,
                        &runtime->on_latency_sum_us,
                        &runtime->on_latency_count);
@@ -673,6 +676,7 @@ static void process_led_completion(
         completion->payload_length == 2u &&
         record->state == NOCTI_V4_SLOT_LED_OFF_PENDING) {
         portENTER_CRITICAL(&runtime->state_lock);
+        runtime->sync_off_i2c_us[record->slot_index] = latency_us;
         record->led_off_command_id = completion->command_id;
         record->led_off_queue_ts = completion->queue_timestamp_us;
         record->led_off_dequeue_ts = completion->dequeue_timestamp_us;
@@ -685,7 +689,7 @@ static void process_led_completion(
                                           NOCTI_V4_LED_OFF_SETTLE_US;
         record->state = NOCTI_V4_SLOT_LED_OFF_STABLE;
         portEXIT_CRITICAL(&runtime->state_lock);
-        note_sample_commit(runtime, record, 0);
+        note_sample_commit(runtime, record, 0, completion);
         record_latency(runtime->health, false, latency_us,
                        &runtime->off_latency_sum_us,
                        &runtime->off_latency_count);
@@ -767,8 +771,8 @@ static void process_deadline(scheduler_runtime_t *runtime, const deadline_event_
         if (record != NULL) {
             attach_sample_plan(runtime, record);
         }
-        nocti_v4_async_led_status_t before;
-        nocti_v4_async_led_get_status(runtime->async_led, &before);
+        nocti_v4_async_led_state_t before;
+        nocti_v4_async_led_get_state(runtime->async_led, &before);
         if (record == NULL || before.mode != PCA_IO_MODE_ASYNC ||
             !before.submissions_allowed || before.transaction_pending ||
             before.selected_source >= 0) {
@@ -834,8 +838,8 @@ static void process_deadline(scheduler_runtime_t *runtime, const deadline_event_
     portENTER_CRITICAL(&runtime->state_lock);
     record->scheduler_off_deadline_ts = event->deadline_us;
     portEXIT_CRITICAL(&runtime->state_lock);
-    nocti_v4_async_led_status_t before;
-    nocti_v4_async_led_get_status(runtime->async_led, &before);
+    nocti_v4_async_led_state_t before;
+    nocti_v4_async_led_get_state(runtime->async_led, &before);
     if (before.mode != PCA_IO_MODE_ASYNC || !before.submissions_allowed ||
         before.transaction_pending ||
         before.selected_source != (int32_t)record->logical_source) {
@@ -1412,6 +1416,37 @@ static int append_delta_list(char *out, size_t cap, const uint32_t *planned,
         used += (size_t)wrote;
     }
     return (int)used;
+}
+
+static bool append_latency_list(char *out, size_t cap,
+                                const uint32_t *values, const uint8_t *known)
+{
+    size_t used = 0u;
+    for (uint32_t slot = 0u; slot < NOCTI_V4_SLOT_COUNT; ++slot) {
+        const char *comma = slot == 0u ? "" : ",";
+        const int wrote = known[slot] ?
+            snprintf(out + used, cap - used, "%s%" PRIu32, comma, values[slot]) :
+            snprintf(out + used, cap - used, "%sx", comma);
+        if (wrote < 0 || (size_t)wrote >= cap - used) return false;
+        used += (size_t)wrote;
+    }
+    return true;
+}
+
+size_t nocti_v4_scheduler_append_led_timing(const nocti_v4_scheduler_t *scheduler,
+                                           char *out, size_t cap)
+{
+    if (scheduler == NULL || scheduler->runtime == NULL || out == NULL || cap == 0u)
+        return 0u;
+    const scheduler_runtime_t *runtime = scheduler->runtime;
+    char on_us[240], off_us[240];
+    if (!append_latency_list(on_us, sizeof(on_us), runtime->sync_on_i2c_us,
+                             runtime->sync_on_known) ||
+        !append_latency_list(off_us, sizeof(off_us), runtime->sync_off_i2c_us,
+                             runtime->sync_off_known)) return 0u;
+    const int wrote = snprintf(out, cap, " i2c_on_us=%s i2c_off_us=%s", on_us, off_us);
+    if (wrote < 0 || (size_t)wrote >= cap) { out[0] = '\0'; return 0u; }
+    return (size_t)wrote;
 }
 
 size_t nocti_v4_scheduler_append_sync(const nocti_v4_scheduler_t *scheduler,

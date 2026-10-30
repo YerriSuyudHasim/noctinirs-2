@@ -90,6 +90,7 @@ void nocti_v4_sample_edge_arm(TaskHandle_t task, uint32_t generation)
         generation = 1u;
     }
     __atomic_store_n(&edge->have_submit, 0u, __ATOMIC_RELAXED);
+    __atomic_store_n(&edge->wake_pending, 0u, __ATOMIC_RELAXED);
     __atomic_store_n(&edge->watch_armed, 0u, __ATOMIC_RELAXED);
     __atomic_store_n(&edge->latch_valid, 0u, __ATOMIC_RELAXED);
     __atomic_store_n(&edge->observed_valid, 0u, __ATOMIC_RELAXED);
@@ -110,6 +111,7 @@ void nocti_v4_sample_edge_set_submit(uint32_t sequence)
     nocti_v4_sample_edge_state_t *edge = &nocti_v4_sample_edge_state;
     __atomic_store_n(&edge->next_submit_sequence, sequence, __ATOMIC_RELAXED);
     __atomic_store_n(&edge->have_submit, 1u, __ATOMIC_RELEASE);
+    __atomic_store_n(&edge->wake_pending, 0u, __ATOMIC_RELEASE);
 }
 
 void nocti_v4_sample_edge_set_watch(uint32_t sequence)
@@ -120,7 +122,7 @@ void nocti_v4_sample_edge_set_watch(uint32_t sequence)
     __atomic_store_n(&edge->watch_armed, 1u, __ATOMIC_RELEASE);
 }
 
-int nocti_v4_sample_edge_observed(uint32_t *sequence, uint32_t *generation)
+int IRAM_ATTR nocti_v4_sample_edge_observed(uint32_t *sequence, uint32_t *generation)
 {
     nocti_v4_sample_edge_state_t *edge = &nocti_v4_sample_edge_state;
     if (sequence == NULL ||

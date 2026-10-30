@@ -1,6 +1,30 @@
 #include "nn2_test.h"
 #include "nocti_v4_sample_clock.h"
 
+static void delayed_task_delivery_cannot_move_the_physical_commit(void)
+{
+    nocti_v4_sample_geometry_t geo;
+    nocti_v4_sample_slot_plan_t plan, delayed;
+    nocti_v4_sample_k_count_t count;
+    TEST_ASSERT_TRUE(nocti_v4_sample_geometry_for(10u, 2200u, &geo));
+    TEST_ASSERT_TRUE(nocti_v4_sample_slot_plan(&geo, 1000u, 0u, 0u, &plan));
+    delayed = plan;
+    /* Callback captures these indices; the scheduler may receive the record
+     * forty samples later. Delivery time cannot become first-affected time. */
+    nocti_v4_sample_note_commit(&plan, 1, 999u);
+    nocti_v4_sample_note_commit(&plan, 0, 1017u);
+    nocti_v4_sample_count_slot(&geo, &plan, &count);
+    TEST_ASSERT_EQUAL_UINT32(1000u, plan.on_first_affected);
+    TEST_ASSERT_EQUAL_UINT32(1018u, plan.off_first_affected);
+    TEST_ASSERT_EQUAL_UINT32(14u, count.on_stable);
+    TEST_ASSERT_EQUAL_UINT32(17u, count.off_stable);
+    nocti_v4_sample_note_commit(&delayed, 1, 1039u);
+    nocti_v4_sample_note_commit(&delayed, 0, 1057u);
+    nocti_v4_sample_count_slot(&geo, &delayed, &count);
+    TEST_ASSERT_EQUAL_UINT32(0u, count.on_stable);
+    TEST_ASSERT_EQUAL_UINT32(0u, count.off_stable);
+}
+
 static void geometry_matches_the_ten_hertz_grid(void)
 {
     nocti_v4_sample_geometry_t geo;
@@ -249,6 +273,7 @@ static void time64_is_little_endian(void)
 
 void test_v4_sample_clock_suite(void)
 {
+    RUN_TEST(delayed_task_delivery_cannot_move_the_physical_commit);
     RUN_TEST(geometry_matches_the_ten_hertz_grid);
     RUN_TEST(every_allowed_rate_holds_k_target);
     RUN_TEST(rejected_rates_do_not_produce_a_plan);

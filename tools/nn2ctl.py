@@ -64,6 +64,12 @@ def decode(data):
         raise ValueError("CRC32")
     return Envelope(kind, protocol, flags, session, sequence, stamp, data[28:-4])
 
+def fault_name(code):
+    """NN2 application fault namespace, not esp_err_t (0x010B is optical)."""
+    return {0: "NONE", 0x0102: "FAULT_OFF", 0x010A: "FAULT_CLOCK",
+            0x010B: "FAULT_OPTICAL"}.get(code, f"UNKNOWN_0x{code:04X}")
+
+
 def describe_reply(packet, request_id=None, opcode=None):
     if packet.msg_type != REPLY or len(packet.payload) < 28:
         raise ValueError("short/non-reply packet")
@@ -77,7 +83,8 @@ def describe_reply(packet, request_id=None, opcode=None):
         raise ValueError("simulation provenance")
     extra = packet.payload[28:]
     result = dict(request_id=rid, opcode=op, error=ERRORS[error], state=STATES[state],
-                  simulated=bool(simulated), fault=fault, boot_id=boot, device_us=packet.timestamp_us,
+                  simulated=bool(simulated), fault=fault, fault_name=fault_name(fault),
+                  boot_id=boot, device_us=packet.timestamp_us,
                   session_id=packet.session_id, msg_sequence=packet.sequence, received_us=rx)
     if error:
         if extra: raise ValueError("unexpected error extension")
@@ -86,6 +93,8 @@ def describe_reply(packet, request_id=None, opcode=None):
     elif op in (COMMANDS["health"], COMMANDS["timing"]):
         text = extra.decode("ascii")
         result["diag"] = parse_diag(text)
+        if "i2c_on_us" in result["diag"] or "i2c_off_us" in result["diag"]:
+            result["async_i2c"] = parse_async_i2c(result["diag"])
         if op == COMMANDS["timing"] and "on_d" in result["diag"]:
             result["sync"] = parse_sync(result["diag"])
     elif op == COMMANDS["get-config"]:
@@ -216,7 +225,8 @@ class Client:
 def require_ok(result):
     if result["error"] != "OK":
         raise RuntimeError("device returned "+result["error"]+
-                           f" (state={result.get('state', 'unknown')}, fault={result.get('fault', 'unknown')})")
+                           f" (state={result.get('state', 'unknown')}, fault={result.get('fault', 'unknown')}"
+                           f" {result.get('fault_name', 'UNKNOWN')})")
     return result
 
 def provision_line(ssid,password):
@@ -241,6 +251,21 @@ def parse_v4_optical_time(payload):
     if rate != 8000:
         raise ValueError("adc rate")
     return dict(version=2, anchor_us=anchor, first_sample_sequence=first, adc_fs_hz=rate)
+
+def parse_async_i2c(fields):
+    """Latest per-slot submit-to-ISR-completion durations; x means unknown."""
+    values = []
+    for key in ("i2c_on_us", "i2c_off_us"):
+        parts = fields.get(key, "").split(",")
+        if len(parts) != 20:
+            raise ValueError("async I2C slot list")
+        row = [None if value == "x" else int(value, 10) for value in parts]
+        if any(value is not None and not 0 <= value <= 0xffffffff for value in row):
+            raise ValueError("async I2C duration")
+        values.append(row)
+    return [dict(slot=slot, on_submit_complete_us=values[0][slot],
+                 off_submit_complete_us=values[1][slot]) for slot in range(20)]
+
 
 def parse_sync(fields):
     """Expand a timing report into planned and actual LED-edge sample indices.

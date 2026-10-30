@@ -208,6 +208,11 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             " event_depth_max=%" PRIu32 " raw_depth_max=%" PRIu32
             " deadline_depth_max=%" PRIu32 " led_queue_depth_max=%" PRIu32
             " task_wdt_subscribe_errors=%" PRIu32 " task_wdt_kick_errors=%" PRIu32
+            " async_latency_min_us=%" PRIu32 " async_latency_max_us=%" PRIu32
+            " async_latency_avg_us=%" PRIu32
+            " async_on_pending_at_submit=%" PRIu32 " async_off_pending_at_submit=%" PRIu32
+            " sample_clock_late_commits=%" PRIu32 " led_completion_timeout=%" PRIu32
+            " sched_error=%d adc_error=%d"
             " frames=unsupported",
             control_boot_stage(),
             HLOAD(adc_missed), HLOAD(adc_backlog_catchup), HLOAD(adc_missed_backlog),
@@ -217,7 +222,15 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             HLOAD(spi_errors), HLOAD(ads_status_faults),
             adc.drdy_event_ring_depth_max, adc.raw_ring_depth_max,
             sched.deadline_ring_depth_max, HLOAD(async_command_queue_depth_max),
-            HLOAD(task_wdt_subscribe_errors), HLOAD(task_wdt_kick_errors));
+            HLOAD(task_wdt_subscribe_errors), HLOAD(task_wdt_kick_errors),
+            HLOAD(async_latency_min_us), HLOAD(async_latency_max_us),
+            HLOAD(async_latency_avg_us), HLOAD(async_on_pending_at_submit),
+            HLOAD(async_off_pending_at_submit), HLOAD(sample_clock_late_commits),
+            HLOAD(led_completion_timeout), sched.last_error, adc.last_error);
+        if (wrote > 0 && (size_t)wrote < cap) {
+            wrote += (int)nocti_v4_scheduler_append_led_timing(
+                &s_scheduler, (char *)out + wrote, cap - (size_t)wrote);
+        }
     } else {
         wrote = snprintf((char *)out, cap,
             "v4timing=1 boot82_bound=0 adc_missed=%" PRIu32

@@ -14,6 +14,7 @@
 typedef struct {
     volatile uint32_t generation;
     volatile uint32_t have_submit;
+    volatile uint32_t wake_pending;
     volatile uint32_t next_submit_sequence;
     volatile uint32_t observed_sequence;
     volatile uint32_t observed_generation;
@@ -67,9 +68,11 @@ static inline void __attribute__((always_inline)) IRAM_ATTR nocti_v4_sample_edge
     if (task == NULL || higher_priority_woken == NULL) {
         return;
     }
-    if (__atomic_load_n(&edge->have_submit, __ATOMIC_ACQUIRE) == 0u ||
+    if (__atomic_load_n(&edge->wake_pending, __ATOMIC_ACQUIRE) == 0u &&
+        (__atomic_load_n(&edge->have_submit, __ATOMIC_ACQUIRE) == 0u ||
         nocti_v4_sample_reached(
-            sequence, __atomic_load_n(&edge->next_submit_sequence, __ATOMIC_RELAXED))) {
+            sequence, __atomic_load_n(&edge->next_submit_sequence, __ATOMIC_RELAXED)))) {
+        __atomic_store_n(&edge->wake_pending, 1u, __ATOMIC_RELEASE);
         vTaskNotifyGiveFromISR(task, higher_priority_woken);
     }
 }
