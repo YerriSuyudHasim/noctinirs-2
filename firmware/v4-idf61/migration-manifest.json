@@ -185,7 +185,7 @@
     {
       "path": "components/nocti_v4_led/CMakeLists.txt",
       "historical_sha256": "b1e69507c9fbc9fbcabb2d5b1576c2ea6cebbd1b0cec4f8475e949ff178c142c",
-      "active_sha256": "b1e69507c9fbc9fbcabb2d5b1576c2ea6cebbd1b0cec4f8475e949ff178c142c",
+      "active_sha256": "e1449c3170750c7c56c18d68d2ca21855d8cb9db490eaf980d9be5a480782e6f",
       "changes": [
         "Line ending normalization only; runtime source retained"
       ]
@@ -202,7 +202,7 @@
     {
       "path": "components/nocti_v4_led/nocti_v4_led.c",
       "historical_sha256": "377f207398d1fb3618303c321b28a6d51c95e61fcf3f95a8fdf6f2c89a0aac46",
-      "active_sha256": "bef6d7e14d82e924b2a394ec7452ecb140853023c94215487924dd54043a3df5",
+      "active_sha256": "ec4791be70bfcfe8223f113c5f1e87c7f5223f7d6cad62b50182fb89318d8f39",
       "changes": [
         "Retain active NN2 30 mA bring-up ceiling instead of historical 50 mA command ceiling",
         "Configuration-bus status labels follow the approved 100 kHz overlay",
@@ -297,7 +297,7 @@
     {
       "path": "components/nocti_v4_scheduler/nocti_v4_scheduler.c",
       "historical_sha256": "83064d25c3e559e6a0d3c6cdb2ec8a01f0a3c27d9b942b85a5d9673e1f3ec3d1",
-      "active_sha256": "804e410a9b005f2ad463cba799572c2b6859ba653b27e815a76aaac045b2c528",
+      "active_sha256": "3d4a5b21c2dcace5b752797ddcdd8412c858d580a1117064614718df4e89a970",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "Stopped-only Fs extension; atomic shared slot geometry, original 10 Hz defaults",
@@ -363,7 +363,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "e31790449390f6e6f5af42517522a78bfff6b6d3fe5cc57982efcc3764f6cc9e"
+      "sha256": "54ccaeffe13edafdd2634b35a0a08d3ed46d5cf45debc274025d9f47e2e1cfd2"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -397,7 +397,7 @@
     },
     {
       "path": "components/nn2_core/include/nn2_core_optical.h",
-      "sha256": "cc26ea5ab0ac2bf02f5fc40d17c76b9446b14e4b67f730795c5645b956f93fe1"
+      "sha256": "a382f887cbc7fd1db6aa03d313d7b7e29f62763b4cf3c9e30d2749a00fc864c2"
     },
     {
       "path": "components/nn2_core/include/nn2_core_protocol.h",
@@ -505,7 +505,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "1dea47fc1eb8e1c39642cf196f54bb125c72304119626c39b343998fc19cf2d5"
+      "sha256": "aca5f65c4b628ff428ee1bd280487ee5ff54ecc22f91c4e7e3cca5aabd19893b"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",
