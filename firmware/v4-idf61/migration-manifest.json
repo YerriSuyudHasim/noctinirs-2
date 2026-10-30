@@ -385,7 +385,7 @@
   "shared_communication": [
     {
       "path": "components/nn2_core/CMakeLists.txt",
-      "sha256": "7f8b0b28359a7f8b31373d32460b5ae905b1e8dce4e70f4bb439296a6504002e"
+      "sha256": "d1f7d2ade55481ea4df2d6c76429a09b27f3998e0d9ad7c1f9f78135b22f3ff7"
     },
     {
       "path": "components/nn2_core/include/nn2_core_acquisition.h",

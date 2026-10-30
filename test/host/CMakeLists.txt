@@ -74,3 +74,16 @@ foreach(order IN ITEMS forward reverse)
 endforeach()
 enable_testing()
 add_test(NAME nn2_host_tests COMMAND nn2_host_tests)
+
+# Shared wire fixtures are generated as typed C inputs, not recalculated hex.
+set(optical_vectors "${CMAKE_BINARY_DIR}/optical_vectors.c")
+add_custom_command(OUTPUT "${optical_vectors}"
+    COMMAND "${Python3_EXECUTABLE}" "${ROOT}/test/golden/generate_c_vectors.py"
+        "${ROOT}/test/golden/optical_frame_vectors.json" "${optical_vectors}"
+    DEPENDS "${ROOT}/test/golden/generate_c_vectors.py"
+        "${ROOT}/test/golden/optical_frame_vectors.json" VERBATIM)
+add_executable(nn2_optical_codec_tests "${optical_vectors}")
+target_link_libraries(nn2_optical_codec_tests PRIVATE nn2_behavior)
+target_compile_options(nn2_optical_codec_tests PRIVATE -Wall -Wextra -Werror -pedantic)
+nn2_require_c11(nn2_optical_codec_tests)
+add_test(NAME nn2_optical_codec_tests COMMAND nn2_optical_codec_tests)
