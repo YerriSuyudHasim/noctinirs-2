@@ -265,6 +265,11 @@ typedef struct {
     uint32_t sample_clock_edges;
     uint32_t sample_clock_late_commits;
     uint32_t sample_clock_early_commits;
+    /* ON and OFF combined; cumulative within a scan, reset at START. */
+    uint32_t sample_clock_late_1;
+    uint32_t sample_clock_late_2;
+    uint32_t sample_clock_late_3p;
+    uint32_t sample_clock_late_max;
     uint32_t sample_clock_missed_edges;
     uint32_t sample_clock_spurious_alarm;
 } nocti_v4_health_t;

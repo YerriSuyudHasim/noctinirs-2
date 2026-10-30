@@ -566,6 +566,11 @@ static void note_sample_commit(scheduler_runtime_t *runtime, slot_record_t *reco
         return;
     }
     nocti_v4_sample_note_commit(&plan, on_phase, observed);
+    const uint32_t late = on_phase ? plan.on_late_samples : plan.off_late_samples;
+    if (late == 1u) counter_add(&runtime->health->sample_clock_late_1, 1u);
+    else if (late == 2u) counter_add(&runtime->health->sample_clock_late_2, 1u);
+    else if (late >= 3u) counter_add(&runtime->health->sample_clock_late_3p, 1u);
+    update_max(&runtime->health->sample_clock_late_max, late);
     if (on_phase) {
         record->on_commit_known = 1u;
         record->on_commit_sequence = observed;
@@ -897,6 +902,8 @@ static void reset_scheduler_counters(scheduler_runtime_t *runtime)
     RESET_SCAN(raw_rejected_guard); RESET_SCAN(scan_session_faults);
     RESET_SCAN(sample_clock_edges); RESET_SCAN(sample_clock_late_commits);
     RESET_SCAN(sample_clock_early_commits); RESET_SCAN(sample_clock_missed_edges);
+    RESET_SCAN(sample_clock_late_1); RESET_SCAN(sample_clock_late_2);
+    RESET_SCAN(sample_clock_late_3p); RESET_SCAN(sample_clock_late_max);
 #undef RESET_SCAN
     runtime->lateness_sum_us = 0u;
     runtime->lateness_count = 0u;

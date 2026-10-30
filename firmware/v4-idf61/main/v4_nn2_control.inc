@@ -278,6 +278,24 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
                 &s_scheduler, (char *)out + wrote, cap - (size_t)wrote);
         }
     }
+    if (wrote > 0 && (size_t)wrote < cap) {
+        wrote += snprintf((char *)out + wrote, cap - (size_t)wrote,
+            " sample_clock_early_commits=%" PRIu32
+            " late_1=%" PRIu32 " late_2=%" PRIu32
+            " late_3p=%" PRIu32 " late_max=%" PRIu32
+            " async_completion_errors=%" PRIu32 " async_submit_errors=%" PRIu32
+            " async_stale_completion=%" PRIu32
+            " async_callback_core=%" PRId32 " async_led_task_core=%" PRId32
+            " scheduler_task_core=%" PRId32
+            " udp_frames_sent=%" PRIu32 " udp_frames_dropped=%" PRIu32,
+            HLOAD(sample_clock_early_commits),
+            HLOAD(sample_clock_late_1), HLOAD(sample_clock_late_2),
+            HLOAD(sample_clock_late_3p), HLOAD(sample_clock_late_max),
+            HLOAD(async_completion_errors), HLOAD(async_submit_errors),
+            HLOAD(async_stale_completion), HLOAD(async_callback_core),
+            HLOAD(async_led_task_core), HLOAD(scheduler_task_core),
+            HLOAD(udp_frames_sent), HLOAD(udp_frames_dropped));
+    }
     if (wrote < 0 || (size_t)wrote >= cap) return 0u;
     return (size_t)wrote;
 }
@@ -292,7 +310,7 @@ static esp_err_t control_init(void)
     nn2_port_optical_t optical={.start=control_start,.state=control_state,.clear_fault=control_clear,
         .current_limit_ma=30u,.real_samples=true,
         .read_diag=control_read_diag,
-        .policy_info="NoctiNIRS2/0.1.0;wire=ADR0004/1;baseline=V4_IDF61_NN2_CTRL;led=REAL_BRINGUP;short_policy=STRICT;adc=ADS131M04;frames=unsupported;fs_min=2;fs_max=10;diag=health,timing;console=removed"};
+        .policy_info="NoctiNIRS2/0.1.0;wire=ADR0004/1;baseline=V4_IDF61_NN2_CTRL;led=REAL_BRINGUP;short_policy=STRICT;adc=ADS131M04;frames=unsupported;fs_min=2;fs_max=10;fs_allowed=2,4,5,8,10;diag=health,timing;console=removed"};
     if (nn2_app_comm_bind_optical(&s_nn2_app,&optical)!=NN2_OK) return ESP_FAIL;
     if (xTaskCreatePinnedToCore(control_worker,"v4_control",NOCTI_V4_RTOS_STACK_CONTROL_BYTES,NULL,NOCTI_V4_RTOS_PRIO_CONTROL,&s_control_worker,NOCTI_V4_RTOS_CORE_ACQ)!=pdPASS)
         return ESP_ERR_NO_MEM;

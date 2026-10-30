@@ -170,3 +170,32 @@ SPI 8 MHz, ON 7-byte/OFF 2-byte payloads and safety/TWDT policy are unchanged.
 Hardware Specialist, RTOS Specialist and independent review are required before
 human merge approval. Roll back by reverting the PR78 fix commits and rebuilding;
 no partition, bootloader configuration, security or eFuse change is introduced.
+
+## Batch 1 diagnostics (local changes, 2026-10-30)
+
+The supported optical frame rates are exactly **2, 4, 5, 8, 10 Hz**. INFO adds
+`fs_allowed=2,4,5,8,10` and retains `fs_min=2;fs_max=10`. The host rejects other
+rates before opening a client. For START/run and set-fs it also honors
+`fs_allowed` when advertised; older INFO uses the host allowlist (and existing
+BENCH_WARN range checks).
+
+Both health and timing add `sample_clock_early_commits`, `late_1`, `late_2`,
+`late_3p`, `late_max` (samples), `async_completion_errors`, `async_submit_errors`,
+`async_stale_completion`, `async_callback_core`, `async_led_task_core`,
+`scheduler_task_core`, `udp_frames_sent`, and `udp_frames_dropped`. The host
+preserves these keys in `diag`, including signed core IDs (`-1` means unknown).
+The core IDs are observations, not error counts; the three task/callback core
+IDs normally report core 1. UDP counters describe the existing V4 stream, not
+NN2 FRAME support.
+
+The histogram combines ON and OFF and accumulates within one scan; START resets
+it alongside the existing late/early counters. On-time and early commits do not
+enter late buckets. `late_max` is the largest positive first-affected minus
+planned edge delta; `late_1 + late_2 + late_3p` equals
+`sample_clock_late_commits` at a quiescent snapshot. No division, allocation, or
+logging is added to commit handling; ISR, ADS and LED task code is unchanged.
+
+The control diagnostic buffer uses the existing NN2 payload budget (1412 bytes
+of text plus NUL); no wire limit changes. Extreme counter widths or per-slot
+lists may still exceed the single-datagram budget. Firmware build, flash,
+600-second bench, timing performance and hardware qualification: **NOT RUN**.
