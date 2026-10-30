@@ -88,7 +88,7 @@ Semua angka little-endian, serialisasi per byte (tanpa packed struct, tanpa over
 | Offset | Ukuran | Field | Tipe | Isi |
 |---|---|---|---|---|
 | 0 | 1 | `slot_index` | u8 | 0..19 |
-| 1 | 1 | `quality` | u8 | 0 UNVERIFIED, 1 VERIFIED_MIN, 2 VERIFIED_TARGET, 3 WARMUP, 4 ABORTED_BY_STOP |
+| 1 | 1 | `quality` | u8 | 0 INVALID (UNDER_K atau gagal gerbang; lihat `reason`), 1 VALID_MINIMUM (`K_min` ≤ n < `K_target`), 2 VALID_TARGET (n ≥ `K_target`), 3 ABORTED_BY_STOP, 4 STARTUP_WARMUP. Nilai 0–4 sama dengan `nocti_v4_slot_quality_t` di `nocti_v4_optical.h` (koreksi v0.2: draft v0.1 menukar 3 dan 4) |
 | 2 | 2 | `reason` | u16 | bit di bawah |
 | 4 | 1 | `n_on_used` | u8 | |
 | 5 | 1 | `n_off_used` | u8 | |
@@ -109,7 +109,7 @@ Detektor record — 13 B:
 |---|---|---|---|---|
 | 0 | 4 | `sum_on` | i32 | jumlah tepat `n_on_used` kode ADC (mean = sum / n); `INT32_MIN` bila dikosongkan |
 | 4 | 4 | `sum_off` | i32 | idem; `INT32_MIN` bila dikosongkan |
-| 8 | 2 | `sd_on_q4` | u16 | simpangan baku sampel × 16, saturasi; `0xFFFF` bila dikosongkan |
+| 8 | 2 | `sd_on_q4` | u16 | simpangan baku **sampel** (pembagi n−1; butuh n ≥ 2) × 16, dibulatkan ke terdekat; `0xFFFE` = terpotong (sd ≥ 4095,875 count); `0xFFFF` = dikosongkan |
 | 10 | 2 | `sd_off_q4` | u16 | idem |
 | 12 | 1 | `det_flags` | u8 | bit0 SAT_ON, bit1 SAT_OFF, bit2 STEP_Z_PASS, bit3 STABLE_PASS, bit4 FLOOR_PASS, bit5 DIFF_NEGATIVE, bit6–7 reserved |
 
@@ -128,7 +128,7 @@ Bit 0–9 sama dengan `nocti_v4_optical.h` (`UNDER_K_ON`, `UNDER_K_OFF`, `LED_ON
 | 11 | `WITNESS_UNSTABLE` | saksi ada tetapi jendelanya tidak stabil |
 | 12–15 | reserved | 0 |
 
-Aturan: `reason != 0` (kecuali WARMUP) ⇒ `quality = UNVERIFIED` ⇒ `verified_mask = 0` ⇒ semua `sum`/`sd` dikosongkan.
+Aturan: `reason != 0` ⇒ `quality = 0` ⇒ `verified_mask = 0` ⇒ semua `sum`/`sd` dikosongkan. `quality = 3` (ABORTED_BY_STOP) dan `quality = 4` (STARTUP_WARMUP) juga selalu `verified_mask = 0` dan semua `sum`/`sd` dikosongkan (v0.2: v0.1 tidak tegas untuk WARMUP). `quality` 1 dan 2 keduanya data sains bila `verified_mask` bit-nya 1; 1 berarti rata-rata dari n lebih sedikit (derau lebih besar), host memakai `n_*_used`/`sd` untuk pembobotan. `K_min` dan `K_target` datang dari `get_config` dan awal sesi (ADR-0004 N7), tidak ditanam di host.
 
 ### 4.4 `frame_flags`
 
@@ -257,13 +257,13 @@ RAW untuk sesi pendek saja; ukur noise ADC dengan WiFi diam versus mengalir.
 
 | ID | Keputusan | Usulan |
 |---|---|---|
-| D1 | Slot gagal bukti: kirim dengan mask atau buang frame | mask + aturan hentikan (§6.4); **Owner belum memutuskan** |
-| D2 | `lead` 2 atau 3 sampel | ukur histogram keterlambatan dulu; hari ini semua edge terlambat tepat 1 sampel |
-| D3 | Batas arus LED: 30 mA (`control_start` menolak `current_ma > 30`) atau 50 mA (pernyataan Owner) | Owner putuskan sebelum kalibrasi arus |
-| D4 | Jalur dokumen: ADR baru atau amandemen ADR-0004 §3.17.5 | ADR-0009 baru |
-| D5 | Nilai ambang gerbang | dari bench kotak gelap |
-| D6 | Nasib stream V4 lama (port 3334, datagram 1184 B, CRC-16) | tidak diperluas; putuskan hapus/pertahankan terpisah |
-| D7 | Verifikasi identitas panjang gelombang (735 vs 850) | uji filter/spektrometer di luar gerbang |
+| D1 | Slot gagal bukti: kirim dengan mask atau buang frame | **Diputuskan Owner 2026-10-31:** nilai dibuang (tidak pernah keluar sebagai angka); penanda kosong + alasan tetap dikirim agar komputer bisa membedakan lubang dari paket hilang, menjaga garis waktu, dan menjalankan aturan hentikan (§6.4) |
+| D2 | `lead` 2 atau 3 sampel (`NOCTI_V4_SAMPLE_LED_LEAD`: perintah ke LED dikirim sekian sampel sebelum tepi yang diinginkan) | **Diputuskan Owner 2026-10-31:** tetap 2; tinjau ulang setelah tes kotak gelap menunjukkan kapan cahaya benar-benar muncul |
+| D3 | Batas arus LED | **Diputuskan Owner 2026-10-30:** default 30 mA, maksimum 50 mA (sudah diterapkan di Batch 1b; PR #82) |
+| D4 | Jalur dokumen: ADR baru atau amandemen ADR-0004 §3.17.5 | **Diputuskan Owner 2026-10-31:** draft ini diresmikan sebagai ADR setelah tes kotak gelap dan simulator lolos; sampai saat itu berstatus DRAFT |
+| D5 | Nilai ambang gerbang | **Diputuskan Owner 2026-10-31:** ditentukan dari data bench kotak gelap, tidak ditebak |
+| D6 | Nasib stream V4 lama (port 3334, datagram 1184 B, CRC-16) | **Diputuskan Owner 2026-10-31:** tidak diperluas; dihapus dengan catatan setelah jalur baru (OPT2/RAW) berfungsi dan rekaman gelap selesai. Jangan dihapus lebih awal: kemungkinan jalur tercepat untuk rekaman gelap (isinya perlu diaudit dulu) |
+| D7 | Verifikasi identitas panjang gelombang (735 vs 850) | **Diputuskan Owner 2026-10-31:** cek visual per slot (kamera ponsel tanpa filter IR), eksperimen dan timing; indikasi tertukar juga dari respons HbO/HbR (mis. HbR selalu naik); tes tahan napas setelah daftar keselamatan siap |
 
 ## 13. Kriteria penerimaan
 
@@ -280,3 +280,11 @@ RAW untuk sesi pendek saja; ukur noise ADC dengan WiFi diam versus mengalir.
 Lihat `optical_geometry_v1.draft.json`: 10 sumber (L1–L10, kiri/kanan), 4 detektor (PD1→AIN2, PD2→AIN3, PD3→AIN0, PD4→AIN1),
 20 saluran terpilih (CH1–CH16, SC1L, SC2L, SC1R, SC2R). Uji konsistensi: jarak yang tercatat menyiratkan spasi PD1–PD2 11,5–13 mm (dan PD4–PD3 sama);
 ukur dengan kaliper sebagai pengecekan tambahan.
+
+## 14. Klarifikasi v0.2 (jawaban pertanyaan sisi host, 2026-10-31)
+
+1. **Penerima FRAME live = lock owner (ADR-0004 §3.2 butir 4, §3.6).** Host app yang ingin menerima frame live harus menjadi pengirim `start_stream` dan mengirim `heartbeat` tiap `NN2_HOST_HB_PERIOD_MS` (stream berhenti setelah 3 s sunyi). Tidak ada subscriber baca-saja; menambahnya mengubah aturan lock yang menjadi dasar keselamatan, jadi bukan bagian rencana ini. Larangan "host tidak boleh mengirim perintah" di prompt awal hanya berlaku untuk tahap offline (simulator dan berkas). Tahap live memakai registry ADR-0004 apa adanya; `nn2ctl.py` tidak boleh dipakai bersamaan dengan host sebagai owner kedua.
+2. **Parameter gerbang per `gate_config_id`.** Satu berkas sumber di repo firmware (usulan `config/optical_gate_configs.json`: `gate_config_id` → parameter §6.3). Firmware memuat set yang cocok; `get_config` dan SESSION_REPORT mengulang parameter sesi. Host membandingkan parameter yang dilaporkan dengan berkas itu; beda = sesi ditandai tidak sah.
+3. **Pemeriksa kedua dari OPT2.** Host dapat menghitung ulang `STEP_Z` dan `FLOOR` dari `sum`, `sd`, `n`. `STABLE_PASS` dan `SAT` tidak dapat dihitung dari OPT2; pemeriksaan penuh hanya dari RAW (ENGINEERING). **Usulan v0.2 (belum diputuskan):** tambahkan blok 80 B (`stab_q` u8 per detektor per slot; sisa payload layout 2 = 136 B) berisi statistik stabilitas jendela supaya `STABLE_PASS` juga dapat diperiksa ulang; SAT tetap dipercaya dari `det_flags` dan diuji lewat RAW.
+4. **Waktu live sebelum SESSION_REPORT.** Pakai fs nominal 8000 bertanda "estimasi", lalu fs berjalan dari selisih `first_sample_sequence` dibanding selisih `timestamp_us` header antar-frame. Hitung ulang waktu final dari `adc_fs_measured_ppm` di SESSION_REPORT setelah sesi selesai.
+5. **Dua penghitung.** `msg_sequence` (header) menghitung semua pesan perangkat→host dalam sesi dan **bukan** penghitung kehilangan (ADR-0004 §3.4.4, §3.16.b). `frame_sequence` (payload) adalah satu-satunya lapisan deteksi frame hilang; dicocokkan dengan Δ`frames_dropped` di SESSION_REPORT. Selisih di atas itu = kehilangan di jaringan.
