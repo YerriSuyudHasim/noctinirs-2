@@ -199,3 +199,43 @@ The control diagnostic buffer uses the existing NN2 payload budget (1412 bytes
 of text plus NUL); no wire limit changes. Extreme counter widths or per-slot
 lists may still exceed the single-datagram budget. Firmware build, flash,
 600-second bench, timing performance and hardware qualification: **NOT RUN**.
+
+
+## Batch 1b current policy (Owner decision D3)
+
+`components/nn2_core/include/nn2_core_optical.h` is the firmware source of truth:
+`NN2_OPTICAL_DEFAULT_MA=30` and `NN2_OPTICAL_MAX_MA=50`, with a compile-time
+DEFAULT <= MAX assertion. V4 initialization and the communication configuration
+use the 30 mA default. V4 control, LED driver, shared PCA adapter and application
+communication accept 0..50 mA. `NN2_OPTICAL_BRINGUP_MA` remains a compatibility
+alias of DEFAULT for the separate bring-up profile; its advisory mode still
+requires exactly 30 mA and its port limit stays 30 mA.
+
+INFO retains old keys and adds `current_default_ma=30;current_max_ma=50`, derived
+from the shared constants. The host honors these limits when advertised (older
+INFO falls back to 30/50), rejects out-of-range requests before sending a current
+command, and rejects >50 before opening a client. START/run checks configured
+per-channel currents; explicit `--current-ma` configures all channels using the
+existing command. Currents above 30 mA print the requested irradiance warning
+on stderr, without adding an acknowledgement flag or a new gate.
+
+Conversion formulas are unchanged: with Rext=1000 ohm the V4 nearest-integer
+conversion and shared adapter floor conversion both yield IREF codes
+0, 67/66, 133/133, 222/222 for 0, 15, 30, 50 mA respectively. Code 222 fits
+an 8-bit register; tolerances and irradiance require Owner assessment.
+
+The scheduler already recorded its core at task entry, but init could overwrite
+that observation with -1 after task creation. The unknown initialization now
+precedes creation; no scheduling, priority or affinity change is made.
+
+B3 deferred within the requested scope: legacy FNIRS_CFG has only two scalar
+currents (735/850 nm), while NN2 sessions allow 20 independent channel currents.
+The network receives completed frames without session current configuration.
+Its existing hardcoded 15 mA metadata remains inaccurate; representing session
+currents correctly needs a separate data-flow/format decision, not replacement
+with another fixed value. Legacy frame_fs_hz is also fixed at 10 and is outside
+this task. No network format or frame structure is changed.
+
+ESP-IDF build: **NOT RUN**. Flash: **NOT RUN**. On-target bench: **NOT RUN**.
+Owner bench is required before push. Host tests do not validate optical safety
+or real-time hardware performance.

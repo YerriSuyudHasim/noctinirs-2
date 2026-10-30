@@ -5,7 +5,12 @@
 #define NN2_OPTICAL_DEFAULT_FS 5u
 #define NN2_OPTICAL_MIN_FS 2u
 #define NN2_OPTICAL_MAX_FS 10u
-#define NN2_OPTICAL_BRINGUP_MA 30u
+#define NN2_OPTICAL_DEFAULT_MA 30
+#define NN2_OPTICAL_MAX_MA 50
+_Static_assert(NN2_OPTICAL_DEFAULT_MA <= NN2_OPTICAL_MAX_MA,
+               "default optical current must not exceed maximum");
+/* Compatibility for the unchanged 30 mA bring-up/advisory profile. */
+#define NN2_OPTICAL_BRINGUP_MA NN2_OPTICAL_DEFAULT_MA
 /* Fs is a complete 20-slot frame, not the ADC rate or individual edge rate. */
 static inline bool nn2_core_optical_fs_valid(uint8_t fs) {
     return fs >= NN2_OPTICAL_MIN_FS && fs <= NN2_OPTICAL_MAX_FS;

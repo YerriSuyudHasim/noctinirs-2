@@ -57,7 +57,7 @@ nn2_status_t nn2_board_pca_prepare(nn2_board_pca_t *p,
     if (!p || !io || !io->reset || !io->delay_us || !io->read || !io->write || !current)
         return NN2_ERR_INVALID_ARG;
     for (unsigned i = 0; i < 20; ++i)
-        if (current[i] > NN2_OPTICAL_BRINGUP_MA) return NN2_ERR_INVALID_ARG;
+        if (current[i] > NN2_OPTICAL_MAX_MA) return NN2_ERR_INVALID_ARG;
     memset(p, 0, sizeof(*p));
     p->io = *io;
     p->selected = -1;

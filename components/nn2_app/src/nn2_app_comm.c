@@ -134,7 +134,7 @@ nn2_status_t nn2_app_comm_init(nn2_app_comm_storage_t *s, uint64_t boot,
               .fs = NN2_OPTICAL_DEFAULT_FS,
               .state = NN2_COMM_IDLE};
   for (unsigned i = 0; i < NN2_OPTICAL_SLOTS; ++i)
-    c.current_ma[i] = NN2_OPTICAL_BRINGUP_MA;
+    c.current_ma[i] = NN2_OPTICAL_DEFAULT_MA;
   nn2_status_t r = off(&c);
   memset(s, 0, sizeof(*s));
   save(s, &c);
@@ -144,7 +144,7 @@ nn2_status_t nn2_app_comm_bind_optical(nn2_app_comm_storage_t *s,
                                       const nn2_port_optical_t *port) {
   comm_t c;
   if (!port || !port->start || !port->state || !port->clear_fault ||
-      !port->current_limit_ma || port->current_limit_ma > 50 || !load(s, &c))
+      !port->current_limit_ma || port->current_limit_ma > NN2_OPTICAL_MAX_MA || !load(s, &c))
     return NN2_ERR_INVALID_ARG;
   if (c.owner || c.state != NN2_COMM_IDLE || c.optical.state ||
       port->state(port->ctx) != NN2_OPTICAL_IDLE) return NN2_ERR_INVALID_STATE;
@@ -270,7 +270,7 @@ static uint16_t execute(comm_t *c, uint64_t peer, uint64_t now, uint16_t op,
     return NN2_REPLY_OK;
   case NN2_CMD_SET_LED_CURRENT:
     if (arg[0] >= 20 || nn2_core_get_u16(arg + 1) >
-        (c->optical.state ? c->optical.current_limit_ma : 50))
+        (c->optical.state ? c->optical.current_limit_ma : NN2_OPTICAL_MAX_MA))
       return NN2_REPLY_ARGUMENT;
     if (c->state != NN2_COMM_IDLE)
       return NN2_REPLY_STATE;
