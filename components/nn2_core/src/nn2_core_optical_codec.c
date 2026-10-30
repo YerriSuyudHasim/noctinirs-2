@@ -31,9 +31,12 @@ static bool valid_opt2(const nn2_oc_opt2_t *f, bool producer)
         if (engineering) {
             if (s->verified_mask || s->witness_ain!=255u || (s->reason & 0xC00u)) return false;
         } else if ((s->quality==0u || s->quality>=3u || s->reason!=0u) && s->verified_mask) return false;
+        if (s->quality<=4u && (s->reason & 0xFFFu) && s->quality!=
+            ((s->reason & 0x40u) ? 3u : (s->reason & 0x200u) ? 4u : 0u)) return false;
         for (unsigned d=0;d<4u;++d) {
             const nn2_oc_detector_t *v=&s->det[d];
             if ((s->n_on_used<4u || s->n_off_used<4u) && f->stab_q[4u*i+d]!=255u) return false;
+            if (!engineering && !(s->verified_mask & (1u<<d)) && f->stab_q[4u*i+d]!=255u) return false;
             if (producer && (v->det_flags & 0x80u)) return false;
             if (engineering) {
                 if (!(v->det_flags & 0x40u) || (v->det_flags & 0x3Cu)) return false;
@@ -151,6 +154,7 @@ nn2_oc_result_t nn2_oc_decode(const uint8_t *p, size_t len, nn2_oc_opt2_t *opt,
                 s->det[d].sum_on=INT32_MIN; s->det[d].sum_off=INT32_MIN;
                 s->det[d].sd_on_q4=UINT16_MAX; s->det[d].sd_off_q4=UINT16_MAX;
                 s->det[d].det_flags &= 0x3Fu;
+                f.stab_q[4u*i+d]=255;
             }
         }
         if (!engineering) f.frame_flags &= 15u;

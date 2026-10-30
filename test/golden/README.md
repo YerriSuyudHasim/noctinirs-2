@@ -1,6 +1,6 @@
 # Shared optical contract fixtures
 
-These are offline draft-contract v0.4 assets. Nothing binds the codec, geometry or gate
+These are offline draft-contract v0.4.1 assets. Nothing binds the codec, geometry or gate
 configuration to running firmware. No gate calculation is implemented by the C
 codec. The owner clarification below governs future T11 and host implementations.
 
@@ -57,7 +57,7 @@ calculation. These are frozen expected results, not a production gate evaluator.
   all 20 slots. INTERNAL reason records receiver invalidation. Unknown sources
   and layouts are rejected and counted by decoder dispatch. `stab_q` 0xFE and
   0xFF are preserved, including
-  diagnostic entries for masked detectors. Clipped sd 0xFFFE is preserved.
+  engineering diagnostic entries. Gate-on masked detectors require stab_q=0xFF. Clipped sd 0xFFFE is preserved.
 - For gate-on numeric ON/OFF statistics, used counts must be at least two; used
   cannot exceed available. ENGINEERING permits n=0 with empty sum/sd, n=1 with
   numeric sum and empty sd, and n>=2 with numeric sum/sd, even at quality 0/3/4. Gate evaluation and acquisition policy remain future
@@ -125,3 +125,12 @@ Compared with v0.3, it clarifies GATE_OFF/ENGINEERING partial statistics, stabil
 clipping, fixed arithmetic, and OUTSIDE=0xFF. RAW first_affected is derived by
 future analysis from phase tags; early commits require explicit edge notes.
 Session metadata and runtime binding are not implemented here.
+
+The pending document was subsequently updated externally to v0.4.1, SHA-256
+f38755c474b664ab77d28cedb977634c1eeed5f6c16ccd8c3e66fb4284b97ad7.
+This later source remains excluded and unmodified. Gate-on masked detectors
+now always carry stab_q=0xFF. Nonzero producer reason requires quality 3 for
+STOP_ABORT, 4 for STARTUP_WARMUP, otherwise 0; quality 1/2 requires reason zero.
+RAW non-OUTSIDE phases require slot 0..19. STARTING_GATE can carry normally
+gated values but is not scientific data. One-way host second-check logic is
+outside this payload codec and is not a new firmware gate implementation.
