@@ -1,6 +1,6 @@
 # Shared optical contract fixtures
 
-These are offline draft-contract v0.4.1 assets. Nothing binds the codec, geometry or gate
+These are offline draft-contract v0.4.2 assets. Nothing binds the codec, geometry or gate
 configuration to running firmware. No gate calculation is implemented by the C
 codec. The owner clarification below governs future T11 and host implementations.
 
@@ -11,7 +11,7 @@ codec. The owner clarification below governs future T11 and host implementations
 `layout`, complete structured `input`, `expected_result` (`OK`, `INVALID`,
 `TOO_LARGE`, `UNKNOWN_LAYOUT`), `expected_hex` (lowercase payload-only hexadecimal,
 or null when no wire representation applies), and `decode_result` (or null when
-decode does not apply). An optional `encode: false` marks decode-only dispatch
+decode does not apply). An optional `encode: false` marks decode-only
 tests. Optional `decoded_input` gives the field-by-field expected receiver output
 when the v0.4 unknown-bit policy invalidates science slots. Integers are JSON
 integers, not floating-point values. Input object keys
@@ -49,7 +49,7 @@ calculation. These are frozen expected results, not a production gate evaluator.
   sum/sd retained when computable (sum at n>=1, sd at n>=2). Bit 7 remains reserved. No gate is evaluated by this codec.
 - RAW requires ENGINEERING, count 1..100, signed int24 and phase 0..8. OUTSIDE
   requires slot 0xFF; the other phases require slot 0..19. Zero-count RAW is
-  rejected; owner confirmation is requested before allowing empty packets.
+  rejected, as explicitly required by contract v0.4.2.
 - Encoders reject reserved bits, and decoders reject reserved bytes/noncanonical
   lengths. Following v0.4 section 15.8, unknown science quality/reason/flag bits
   cause warning counters and INVALID/empty affected slots, while engineering
@@ -63,6 +63,33 @@ calculation. These are frozen expected results, not a production gate evaluator.
   numeric sum and empty sd, and n>=2 with numeric sum/sd, even at quality 0/3/4. Gate evaluation and acquisition policy remain future
   work. The engineering exception and RAW slot rules follow the owner's explicit
   2026-10-31 clarification, without editing the merged draft document.
+
+## v0.4.2 negative receiver fixtures
+
+Run `python test/golden/generate_negative_vectors.py` to regenerate the 24
+`v042_` vectors (59 frame vectors total). The generator mutates existing frozen
+positive payload bytes and structured inputs, never calls the codec, and keeps
+the original 35 vectors unchanged. Re-running it produces identical JSON bytes.
+Every added vector expects `NN2_OC_INVALID` (`INVALID`) from the decoder:
+
+- Nonzero OPT2 reserved prefix word at offset 22 and RAW word at offset 14.
+  These two are decode-only (`encode: false`): reserved words are not public C
+  struct fields and the encoder always emits zero. Their structured inputs
+  describe the positive source fields, while `expected_hex` carries the bad word.
+- RAW ENGINEERING bit 0 clear, and each reserved flag bit 2 through 15 set
+  separately (15 vectors).
+- RAW sample_count zero with an exact 16-byte prefix-only payload. Existing
+  vectors already cover counts 1 and 100 (`OK`) and 101 (`TOO_LARGE`).
+- Both directions of ENGINEERING_UNGATED versus gate_config_id=0 disagreement.
+- Verified detectors with ON count 0 or 1 and OFF count 0 or 1. Their stability
+  entries are 0xFF so the independent n<4 stability check does not mask n<2.
+
+Except for the two reserved-word decode-only cases, every new structured input
+also expects `NN2_OC_INVALID` from the encoder. `generate_c_vectors.py` checks
+these exact result codes against the unchanged production codec. A mismatch is
+a test failure, not permission to change codec behavior. Contract v0.4.2 makes
+receiver rejection explicit for reserved prefix words, RAW flags/counts,
+ENGINEERING/gate-ID disagreement and verified-detector counts below two.
 
 ## Aritmetika gerbang
 
