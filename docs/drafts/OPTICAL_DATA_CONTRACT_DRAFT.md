@@ -1,4 +1,4 @@
-# NoctiNIRS 2 — Draft Kontrak Data Optik (v0.4.2, DRAFT)
+# NoctiNIRS 2 — Draft Kontrak Data Optik (v0.4.3, DRAFT)
 
 Status: **DRAFT untuk review Owner. Belum normatif.** Belum ada kode yang mengikuti dokumen ini.
 Disusun 2026-10-30 berdasarkan: laporan bench Owner (10 Hz, 60 s, lolos), `docs/adr/0004-host-protocol.md`
@@ -107,6 +107,7 @@ Field reserved u16 pada prefix OPT2 offset 22 dan RAW offset 14 wajib 0; penerim
 | 51 | 13 | `det[3]` | — | AIN3 |
 
 Detektor terverifikasi (`verified_mask` bit = 1) wajib memiliki `n_on_used` dan `n_off_used` ≥ 2; penerima menolak paket bila salah satunya < 2.
+n_on_used <= n_on_available dan n_off_used <= n_off_available; penerima menolak paket yang melanggar.
 
 Detektor record — 13 B:
 

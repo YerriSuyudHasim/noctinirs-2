@@ -1,4 +1,4 @@
-"""Regenerate v0.4.2 rejection fixtures from existing frozen positive wire bytes.
+"""Regenerate v0.4.2/v0.4.3 rejection fixtures from frozen positive wire bytes.
 
 Usage: python test/golden/generate_negative_vectors.py
 No codec or encoder is used to derive expected bytes or rejection results.
@@ -10,10 +10,11 @@ from pathlib import Path
 
 PATH = Path(__file__).with_name('optical_frame_vectors.json')
 PREFIX = 'v042_'
+PREFIXES = (PREFIX, 'v043_')
 
 
 def generate(data):
-    original = [v for v in data['vectors'] if not v['name'].startswith(PREFIX)]
+    original = [v for v in data['vectors'] if not v['name'].startswith(PREFIXES)]
     sources = {v['name']: v for v in original}
     added = []
 
@@ -62,7 +63,21 @@ def generate(data):
             v['expected_hex'] = wire.hex()
             v['expected_result'] = v['decode_result'] = 'INVALID'
             added.append(v)
-    data['contract'] = 'optical-draft-v0.4.2-explicit-receiver-rules'
+    for phase, offset in [('on', 30), ('off', 31)]:
+        v = deepcopy(sources[opt])
+        v['name'] = 'v043_n_' + phase + '_used_exceeds_available'
+        used = v['input']['slot'][0]['n_' + phase + '_used']
+        # Keep used counts, statistics and stability unchanged. Only reduce
+        # available below used to isolate the used<=available invariant.
+        available = used - 1
+        assert used >= 2 and available >= 0
+        v['input']['slot'][0]['n_' + phase + '_available'] = available
+        wire = bytearray.fromhex(v['expected_hex'])
+        wire[offset] = available
+        v['expected_hex'] = wire.hex()
+        v['expected_result'] = v['decode_result'] = 'INVALID'
+        added.append(v)
+    data['contract'] = 'optical-draft-v0.4.3-used-lte-available'
     data['vectors'] = original + added
     return data
 
@@ -70,5 +85,5 @@ def generate(data):
 if __name__ == '__main__':
     data = generate(json.loads(PATH.read_text(encoding='utf-8')))
     PATH.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8', newline='\n')
-    print('Generated', sum(v['name'].startswith(PREFIX) for v in data['vectors']),
+    print('Generated', sum(v['name'].startswith(PREFIXES) for v in data['vectors']),
           'negative vectors;', len(data['vectors']), 'total')

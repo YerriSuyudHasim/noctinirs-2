@@ -1,6 +1,6 @@
 # Shared optical contract fixtures
 
-These are offline draft-contract v0.4.2 assets. Nothing binds the codec, geometry or gate
+These are offline draft-contract v0.4.3 assets. Nothing binds the codec, geometry or gate
 configuration to running firmware. No gate calculation is implemented by the C
 codec. The owner clarification below governs future T11 and host implementations.
 
@@ -64,10 +64,10 @@ calculation. These are frozen expected results, not a production gate evaluator.
   work. The engineering exception and RAW slot rules follow the owner's explicit
   2026-10-31 clarification, without editing the merged draft document.
 
-## v0.4.2 negative receiver fixtures
+## v0.4.2/v0.4.3 negative receiver fixtures
 
 Run `python test/golden/generate_negative_vectors.py` to regenerate the 24
-`v042_` vectors (59 frame vectors total). The generator mutates existing frozen
+`v042_` vectors and two `v043_` vectors (61 frame vectors total). The generator mutates existing frozen
 positive payload bytes and structured inputs, never calls the codec, and keeps
 the original 35 vectors unchanged. Re-running it produces identical JSON bytes.
 Every added vector expects `NN2_OC_INVALID` (`INVALID`) from the decoder:
@@ -90,6 +90,17 @@ these exact result codes against the unchanged production codec. A mismatch is
 a test failure, not permission to change codec behavior. Contract v0.4.2 makes
 receiver rejection explicit for reserved prefix words, RAW flags/counts,
 ENGINEERING/gate-ID disagreement and verified-detector counts below two.
+
+Contract v0.4.3 adds `n_on_used <= n_on_available` and
+`n_off_used <= n_off_available`, with packet rejection on violation. Two new
+vectors expect exactly `NN2_OC_INVALID` from both encoder and decoder:
+
+- `v043_n_on_used_exceeds_available`: slot 0 ON used=10, available=9.
+- `v043_n_off_used_exceeds_available`: slot 0 OFF used=10, available=9.
+
+Only the respective available count changes from the frozen verified positive
+vector; used counts, detector statistics and stability remain unchanged. The
+previous 59 frame vectors are unchanged; regeneration remains byte-identical.
 
 ## Aritmetika gerbang
 

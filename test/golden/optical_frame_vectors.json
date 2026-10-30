@@ -1,6 +1,6 @@
 {
   "schema": "noctinirs.optical_frame_vectors/1",
-  "contract": "optical-draft-v0.4.2-explicit-receiver-rules",
+  "contract": "optical-draft-v0.4.3-used-lte-available",
   "vectors": [
     {
       "name": "full_20_slots_verified_normal",
@@ -40975,6 +40975,1926 @@
       },
       "expected_result": "INVALID",
       "expected_hex": "01020100fffffffff0ffffff200302001404010001000000000200000a010c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c010200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c020200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c030200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c040200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c050200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c060200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c070200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c080200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c090200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0a0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0b0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0c0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0d0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0e0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0f0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c100200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c110200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c120200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c130200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001cffffffff20202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020",
+      "decode_result": "INVALID"
+    },
+    {
+      "name": "v043_n_on_used_exceeds_available",
+      "layout": 2,
+      "input": {
+        "slot_plan_epoch": 1,
+        "frame_sequence": 4294967295,
+        "first_sample_sequence": 4294967280,
+        "sample_count": 800,
+        "frame_flags": 2,
+        "geometry_map_id": 1,
+        "gate_config_id": 1,
+        "slot": [
+          {
+            "slot_index": 0,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 9,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 1,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 2,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 3,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 4,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 5,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 6,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 7,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 8,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 9,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 10,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 11,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 12,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 13,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 14,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 15,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 16,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 17,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 18,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 19,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          }
+        ],
+        "stab_q": [
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32
+        ]
+      },
+      "expected_result": "INVALID",
+      "expected_hex": "01020100fffffffff0ffffff200302001404010001000000000200000a0a090d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c010200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c020200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c030200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c040200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c050200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c060200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c070200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c080200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c090200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0a0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0b0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0c0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0d0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0e0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0f0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c100200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c110200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c120200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c130200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c2020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020",
+      "decode_result": "INVALID"
+    },
+    {
+      "name": "v043_n_off_used_exceeds_available",
+      "layout": 2,
+      "input": {
+        "slot_plan_epoch": 1,
+        "frame_sequence": 4294967295,
+        "first_sample_sequence": 4294967280,
+        "sample_count": 800,
+        "frame_flags": 2,
+        "geometry_map_id": 1,
+        "gate_config_id": 1,
+        "slot": [
+          {
+            "slot_index": 0,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 9,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 1,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 2,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 3,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 4,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 5,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 6,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 7,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 8,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 9,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 10,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 11,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 12,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 13,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 14,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 15,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 16,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 17,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 18,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          },
+          {
+            "slot_index": 19,
+            "quality": 2,
+            "reason": 0,
+            "n_on_used": 10,
+            "n_off_used": 10,
+            "n_on_available": 12,
+            "n_off_available": 13,
+            "on_commit_late": 1,
+            "off_commit_late": 1,
+            "witness_ain": 0,
+            "verified_mask": 15,
+            "det": [
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              },
+              {
+                "sum_on": 1000,
+                "sum_off": -100,
+                "sd_on_q4": 32,
+                "sd_off_q4": 48,
+                "det_flags": 28
+              }
+            ]
+          }
+        ],
+        "stab_q": [
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32,
+          32
+        ]
+      },
+      "expected_result": "INVALID",
+      "expected_hex": "01020100fffffffff0ffffff200302001404010001000000000200000a0a0c090101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c010200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c020200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c030200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c040200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c050200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c060200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c070200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c080200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c090200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0a0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0b0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0c0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0d0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0e0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c0f0200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c100200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c110200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c120200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c130200000a0a0c0d0101000fe80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001ce80300009cffffff200030001c2020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020",
       "decode_result": "INVALID"
     }
   ]
