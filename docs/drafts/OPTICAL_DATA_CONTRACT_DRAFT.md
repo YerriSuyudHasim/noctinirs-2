@@ -113,7 +113,7 @@ Detektor record — 13 B:
 | 10 | 2 | `sd_off_q4` | u16 | idem |
 | 12 | 1 | `det_flags` | u8 | bit0 SAT_ON, bit1 SAT_OFF, bit2 STEP_Z_PASS, bit3 STABLE_PASS, bit4 FLOOR_PASS, bit5 DIFF_NEGATIVE, bit6–7 reserved |
 
-Ukuran: 24 + 20 × 64 = **1304 B** payload; datagram 28 + 1304 + 4 = **1336 B** (sisa 136 B payload).
+Ukuran: 24 + 20 × 64 + 80 (blok `stab_q`, §4.5) = **1384 B** payload; datagram 28 + 1384 + 4 = **1416 B** (sisa 56 B payload).
 `sum` memakai i32 karena K ≤ 255 × 8.388.607 < 2³¹ (`_Static_assert(K_TARGET <= 255)`).
 Mengirim `sum` + `n` (bukan mean) menghindari pembulatan: `latest_contiguous_mean()` saat ini memotong hasil bagi ke integer.
 
@@ -139,6 +139,15 @@ Aturan: `reason != 0` ⇒ `quality = 0` ⇒ `verified_mask = 0` ⇒ semua `sum`/
 | 2 | `ENGINEERING_UNGATED` | gerbang dimatikan: nilai TIDAK dikosongkan, seluruh frame **bukan data ilmiah** |
 | 3 | `STARTING_GATE` | frame dibuat saat gerbang start (§6.5), bukan data ilmiah |
 | 4–15 | reserved | 0 |
+
+### 4.5 Blok `stab_q` — 80 B (diterima Owner 2026-10-31; menggantikan usulan di §14 butir 3)
+
+Mengikuti 20 slot record. 20 slot × 4 detektor, urutan `slot_index` lalu AIN (indeks = `slot_index × 4 + AIN`), 1 B per entri.
+
+- `r_on` = |rata-rata separuh-baru − rata-rata separuh-tua| jendela ON dibagi (`sd_on` × √(2 / n_half)); `r_off` idem untuk OFF.
+- `stab_q` = pembulatan-terdekat(16 × max(`r_on`, `r_off`)), terpotong di `0xFE`; `0xFF` = tidak dihitung (nilai dikosongkan atau n < 4).
+- `STABLE_PASS` ⇔ `stab_q ≤ 16 × stable_k` (selaras dengan `stable_k` di §6.3). Dengan blok ini komputer dapat memeriksa ulang `STABLE_PASS`; `SAT` tetap dipercaya dari `det_flags` dan diuji lewat RAW.
+- Entri untuk detektor yang dikosongkan (`verified_mask` bit 0) tetap dikirim bila dapat dihitung (diagnosis), bukan nilai sains.
 
 ## 5. FRAME layout 3 (RAW) — hanya ENGINEERING
 
@@ -248,7 +257,7 @@ Kehilangan frame = diskontinuitas `frame_sequence`, dicocokkan dengan Δ`frames_
 
 | Aliran | Ukuran datagram | Laju | Throughput |
 |---|---|---|---|
-| OPT2 (layout 2) | 1336 B | 2–10 frame/s | 2,7–13,4 kB/s |
+| OPT2 (layout 2) | 1416 B | 2–10 frame/s | 2,8–14,2 kB/s |
 | RAW (layout 3) | 1448 B | ±80 paket/s | ±116 kB/s (≈0,93 Mbit/s) |
 
 RAW untuk sesi pendek saja; ukur noise ADC dengan WiFi diam versus mengalir.
@@ -268,7 +277,7 @@ RAW untuk sesi pendek saja; ukur noise ADC dengan WiFi diam versus mengalir.
 ## 13. Kriteria penerimaan
 
 - Vektor emas (host test): jendela LED-ON normal, tanpa langkah, jenuh, ramp tidak stabil, saluran jauh lemah, `n < K_min`; hasil gerbang dan pengosongan sesuai tabel yang dibekukan.
-- Pembulat layout: `_Static_assert` ukuran 24 / 64 / 13 / 1304 dan 16 / 14 / 1416; enkode-dekode round-trip identik; CRC-32 dicek; paket uji simulator lewat parser host.
+- Pembulat layout: `_Static_assert` ukuran 24 / 64 / 13 / 1384 dan 16 / 14 / 1416; enkode-dekode round-trip identik; CRC-32 dicek; paket uji simulator lewat parser host.
 - Tidak ada regresi timing (acuan bench Owner, 10 Hz, 60 s): `fault=0`, `edge_miss=0`, `adc_missed=0`, `gap=0`, `crc_bad=0`, `spi_errors=0`,
   `spi_max ≤ ~60 µs`, `service_max ≤ ~100 µs`, `sched_deferred_max` tidak naik berarti, `on_d/off_d` tetap 1 atau lebih baik.
   Kemudian ulangi 10 menit di 10 Hz dan di 2/4/8 Hz.
@@ -285,6 +294,6 @@ ukur dengan kaliper sebagai pengecekan tambahan.
 
 1. **Penerima FRAME live = lock owner (ADR-0004 §3.2 butir 4, §3.6).** Host app yang ingin menerima frame live harus menjadi pengirim `start_stream` dan mengirim `heartbeat` tiap `NN2_HOST_HB_PERIOD_MS` (stream berhenti setelah 3 s sunyi). Tidak ada subscriber baca-saja; menambahnya mengubah aturan lock yang menjadi dasar keselamatan, jadi bukan bagian rencana ini. Larangan "host tidak boleh mengirim perintah" di prompt awal hanya berlaku untuk tahap offline (simulator dan berkas). Tahap live memakai registry ADR-0004 apa adanya; `nn2ctl.py` tidak boleh dipakai bersamaan dengan host sebagai owner kedua.
 2. **Parameter gerbang per `gate_config_id`.** Satu berkas sumber di repo firmware (usulan `config/optical_gate_configs.json`: `gate_config_id` → parameter §6.3). Firmware memuat set yang cocok; `get_config` dan SESSION_REPORT mengulang parameter sesi. Host membandingkan parameter yang dilaporkan dengan berkas itu; beda = sesi ditandai tidak sah.
-3. **Pemeriksa kedua dari OPT2.** Host dapat menghitung ulang `STEP_Z` dan `FLOOR` dari `sum`, `sd`, `n`. `STABLE_PASS` dan `SAT` tidak dapat dihitung dari OPT2; pemeriksaan penuh hanya dari RAW (ENGINEERING). **Usulan v0.2 (belum diputuskan):** tambahkan blok 80 B (`stab_q` u8 per detektor per slot; sisa payload layout 2 = 136 B) berisi statistik stabilitas jendela supaya `STABLE_PASS` juga dapat diperiksa ulang; SAT tetap dipercaya dari `det_flags` dan diuji lewat RAW.
+3. **Pemeriksa kedua dari OPT2.** Host dapat menghitung ulang `STEP_Z` dan `FLOOR` dari `sum`, `sd`, `n`. `STABLE_PASS` dan `SAT` tidak dapat dihitung dari OPT2; pemeriksaan penuh hanya dari RAW (ENGINEERING). **Diputuskan Owner 2026-10-31: diterima** (lihat §4.5). Semula usulan: blok 80 B (`stab_q` u8 per detektor per slot; sisa payload layout 2 = 136 B) berisi statistik stabilitas jendela supaya `STABLE_PASS` juga dapat diperiksa ulang; SAT tetap dipercaya dari `det_flags` dan diuji lewat RAW.
 4. **Waktu live sebelum SESSION_REPORT.** Pakai fs nominal 8000 bertanda "estimasi", lalu fs berjalan dari selisih `first_sample_sequence` dibanding selisih `timestamp_us` header antar-frame. Hitung ulang waktu final dari `adc_fs_measured_ppm` di SESSION_REPORT setelah sesi selesai.
 5. **Dua penghitung.** `msg_sequence` (header) menghitung semua pesan perangkat→host dalam sesi dan **bukan** penghitung kehilangan (ADR-0004 §3.4.4, §3.16.b). `frame_sequence` (payload) adalah satu-satunya lapisan deteksi frame hilang; dicocokkan dengan Δ`frames_dropped` di SESSION_REPORT. Selisih di atas itu = kehilangan di jaringan.

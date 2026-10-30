@@ -89,7 +89,7 @@ Batas regresi yang diterima: `spi_max ≤ ~60`, `service_max ≤ ~100`, `sched_d
 
 ### T8 · Codec FRAME layout 2 dan 3 (C murni) + vektor emas  — M
 > Revisi 2026-10-31: parser dan simulator Python dikerjakan agent di repo `noctinirs-2-host`, bukan di sini.
-- Di `nn2_core`: enkode/dekode byte-serialized sesuai kontrak §4–5; `_Static_assert` ukuran 24 / 64 / 13 / 1304 dan 16 / 14 / 1416; sentinel `INT32_MIN`/`0xFFFF`.
+- Di `nn2_core`: enkode/dekode byte-serialized sesuai kontrak §4–5; `_Static_assert` ukuran 24 / 64 / 13 / 1384 dan 16 / 14 / 1416; sentinel `INT32_MIN`/`0xFFFF`.
 - Hasilkan berkas vektor emas (JSON: masukan terstruktur + byte hex yang diharapkan, termasuk slot gagal bukti, jenuh, paket terlalu besar) yang dipakai bersama oleh tes C dan tes parser Python di repo host.
 - **Terima bila:** tes C memakai vektor emas, CRC-32 diperiksa, paket terlalu besar ditolak dan dihitung (tidak pernah difragmentasi), tes host lolos.
 
