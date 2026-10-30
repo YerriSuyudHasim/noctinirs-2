@@ -1,0 +1,107 @@
+# Shared optical contract fixtures
+
+These are offline draft-contract assets. Nothing binds the codec, geometry or gate
+configuration to running firmware. No gate calculation is implemented by the C
+codec. The owner clarification below governs future T11 and host implementations.
+
+## Stable JSON interchange
+
+`optical_frame_vectors.json` has `schema = noctinirs.optical_frame_vectors/1`,
+`contract`, and an ordered `vectors` array. Each vector has a unique `name`, numeric
+`layout`, complete structured `input`, `expected_result` (`OK`, `INVALID`,
+`TOO_LARGE`, `UNKNOWN_LAYOUT`), `expected_hex` (lowercase payload-only hexadecimal,
+or null when no wire representation applies), and `decode_result` (or null when
+decode does not apply). An optional `encode: false` marks decode-only dispatch
+tests. Integers are JSON integers, not floating-point values. Input object keys
+follow public C field order; `generate_c_vectors.py` translates them to typed C
+fixtures and never calculates expected wire bytes. Do not reorder field keys
+without updating the generator. Arrays contain all 20 slots/80 stability entries
+or all RAW samples: there are no implicit defaults. A rejected count of 101 is
+represented with 101 structured samples; the C test supplies the first 100 in
+fixed storage and verifies rejection before access.
+
+The C host test checks encode against frozen hex and decode against every
+structured field, including signed int24 boundaries. The same JSON is intended
+for the Python parser tests in `noctinirs-2-host`. No CRC is included: CRC-32 is
+owned by the existing NN2 envelope. Generate/build via `test/host/CMakeLists.txt`
+and run `ctest --test-dir <build> --output-on-failure`; the architecture suite
+also compiles and runs the C fixtures using `NN2_TEST_CC` or native cc/gcc.
+
+`optical_gate_vectors.json` is separate: `schema = noctinirs.optical_gate_vectors/1`
+and `vectors`. Each vector contains `wire` inputs, integer-scaled `parameters`,
+and `expected` booleans plus `diff_f64_hex` and `thr_f64_hex`. Hex is the canonical
+16-digit IEEE-754 binary64 bit pattern (most significant digit first), independent
+of host byte order. Null doubles indicate the mandatory early exit with no
+calculation. These are frozen expected results, not a production gate evaluator.
+
+## Codec decisions and limits
+
+- Byte-wise little-endian serialization; public structs are value types and never
+  wire overlays. Rejection leaves output and length unchanged. Stats are required,
+  caller-owned and saturate at UINT32_MAX; oversized payloads are never fragmented.
+- Gate-on quality 0/3/4 or nonzero reason requires mask zero and empty sum/sd.
+  Every other unverified detector also requires empty sum/sd. Invalid input is
+  rejected, never silently repaired. Quality 3/4 and their reason are preserved.
+- ENGINEERING_UNGATED is the explicit exception: mask zero, witness 0xFF,
+  reason bits 10/11 clear, detector bits 2–5 clear, GATE_OFF bit 6 set, real
+  sum/sd retained. Bit 7 remains reserved. No gate is evaluated by this codec.
+- RAW requires ENGINEERING, count 1..100, signed int24 and phase 0..8. OUTSIDE
+  requires slot 0xFF; the other phases require slot 0..19. Zero-count RAW is
+  rejected; owner confirmation is requested before allowing empty packets.
+- Reserved bits/bytes and noncanonical lengths are rejected. Unknown layouts
+  are rejected by decoder dispatch. `stab_q` 0xFE and 0xFF are preserved, including
+  diagnostic entries for masked detectors. Clipped sd 0xFFFE is preserved.
+- For a numeric ON/OFF statistic, both used counts must be at least two; used
+  cannot exceed available. Gate evaluation and acquisition policy remain future
+  work. The engineering exception and RAW slot rules follow the owner's explicit
+  2026-10-31 clarification, without editing the merged draft document.
+
+## Aritmetika gerbang
+
+ARITMETIKA GERBANG (klarifikasi v0.4, salin persis ke test/golden/README.md bagian "Aritmetika gerbang")
+
+Prinsip: gerbang memutuskan dari NILAI YANG DIKIRIM di paket, bukan dari nilai eksak internal. Firmware dan host harus menghasilkan hasil identik sampai bit terakhir. Tidak ada toleransi; selisih antara host dan firmware = bug.
+
+Masukan per (slot, detektor d), semuanya dari kawat:
+  n_on = n_on_used, n_off = n_off_used  (u8)
+  sum_on, sum_off (i32; INT32_MIN = dikosongkan)
+  sd_on_q4, sd_off_q4 (u16; 0xFFFF = dikosongkan; 0xFFFE = terpotong, dipakai apa adanya sebagai 4095,875)
+  stab_q (u8; 0xFF = tidak dihitung)
+Parameter dari gate_config_id: z_x10 (z_witness_x10 atau z_channel_x10), stable_k_x10, floor_counts, se_floor_x100.
+
+Aturan awal: bila n_on = 0, n_off = 0, sum_on atau sum_off = INT32_MIN, atau sd_on_q4 atau sd_off_q4 = 0xFFFF, maka STEP_Z_PASS = FLOOR_PASS = STABLE_PASS = 0 dan tidak ada perhitungan lain.
+
+Aritmetika: binary64 (double), urutan operasi tetap persis seperti di bawah, tanpa fused multiply-add dan tanpa fast-math. Di C pakai -ffp-contract=off dan tidak mengaktifkan -ffast-math. Operasi + - * / dan sqrt dibulatkan tepat menurut IEEE-754, jadi hasil C dan Python float identik. Tulis tiap langkah sebagai pernyataan terpisah (jangan digabung dalam satu ekspresi yang bisa diatur ulang compiler).
+  a      = (double)sum_on  / (double)n_on
+  b      = (double)sum_off / (double)n_off
+  diff   = a - b
+  s_on   = (double)sd_on_q4  / 16.0
+  s_off  = (double)sd_off_q4 / 16.0
+  v_on   = s_on  * s_on  / (double)n_on
+  v_off  = s_off * s_off / (double)n_off
+  se     = sqrt(v_on + v_off)
+  floor_se = (double)se_floor_x100 / 100.0
+  se_eff = (se > floor_se) ? se : floor_se
+  z      = (double)z_x10 / 10.0
+  thr    = z * se_eff
+  STEP_Z_PASS = (diff >= thr)
+  FLOOR_PASS  = (diff >= (double)floor_counts)
+  STABLE_PASS = (stab_q != 0xFF) && (10 * (int)stab_q <= 16 * (int)stable_k_x10)     (integer murni, tanpa pecahan)
+Contoh stable_k = 2,3 (stable_k_x10 = 23): 10*stab_q <= 368, jadi stab_q <= 36.
+
+DEFINISI stab_q (dihitung firmware dari data eksak internal, lalu dikuantisasi; host tidak dapat menghitung ulang, hanya memeriksa ambangnya):
+  n_half = floor(n / 2). Separuh tua = n_half sampel pertama jendela; separuh baru = n_half sampel terakhir. Bila n ganjil, sampel tengah dikeluarkan dari keduanya.
+  sd = simpangan baku sampel SELURUH jendela (n sampel, pembagi n-1), bukan per separuh.
+  r = | mean_separuh_baru - mean_separuh_tua | / max( sd * sqrt(2 / n_half), floor_se )     (floor_se sama dengan di atas)
+  Dihitung untuk jendela ON dan jendela OFF; stab_q = round-to-nearest(16 * max(r_on, r_off)), terpotong di 0xFE.
+  stab_q = 0xFF bila n < 4 pada salah satu jendela, atau nilai dikosongkan.
+
+Vektor emas bagian "gerbang": masukan dari kawat + parameter -> keluaran (STEP_Z_PASS, FLOOR_PASS, STABLE_PASS), dengan kasus:
+  - jauh di atas ambang; jauh di bawah ambang;
+  - tepat di ambang (diff == thr, harus lulus karena >=) dan satu LSB sd_q4 di bawah/atas ambang yang membalik hasil;
+  - se jatuh ke floor_se (sd_q4 = 0, 0 < sd_q4 kecil);
+  - sd terpotong 0xFFFE;
+  - stab_q = 0xFF, stab_q tepat di batas 16*stable_k, satu di atasnya;
+  - kosong (sentinel) di salah satu fase;
+  - n_on != n_off.
+Setiap vektor memuat nilai double yang diharapkan untuk diff dan thr (hex IEEE-754 64-bit) agar kedua sisi dapat dibandingkan bit-per-bit.
