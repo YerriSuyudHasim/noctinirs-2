@@ -11,24 +11,24 @@ Base is `feat/35-v4-idf61-restart` at `6da5e00` (PR #77, squash-merged).
 ## Clock
 
 DRDY sample index `n` (`uint32`, wraps) is the only LED and classification clock.
-`fs = 8000` (`T = 125 µs`). The 1 MHz GPTimer stays for lateness, backlog age, and
+`fs = 8000` (`T = 125 Âµs`). The 1 MHz GPTimer stays for lateness, backlog age, and
 the existing DRDY-stall path. It does not arm LED edges.
 
-At 10 Hz a slot is 40 samples and a frame is 800. The 2200 µs OFF phase rounds to
+At 10 Hz a slot is 40 samples and a frame is 800. The 2200 Âµs OFF phase rounds to
 18 samples. Settle is 4 samples (3 sinc3 periods from TI SBAS890D plus the
 unmeasured 1-sample front-end placeholder in ADR-0004 N9). Guard is 1 sample
-because 100 µs is shorter than one sample. ON stable is 14 and OFF stable is 17
+because 100 Âµs is shorter than one sample. ON stable is 14 and OFF stable is 17
 when the commit is on time, both above `K` 10/8.
 
 The session origin is the first DRDY the scheduler sees after START, plus
 `lead = 2` samples. The scheduler is notified from the DRDY ISR and queues the
-existing 7-byte ON or 2-byte OFF to the LED task. I2C is not inside the 125 µs
+existing 7-byte ON or 2-byte OFF to the LED task. I2C is not inside the 125 Âµs
 ADS loop. A late commit moves the stable window later and is counted. It is not
 relabeled as stable. Task priorities are unchanged (ADS 23, LED 22, sched 15 on
 core 1).
 
 The frame timestamp is the GPTimer reading of the DRDY whose index is that
-frame's slot-0 edge (ADR-0004 §3.16.c). Host time is `anchor / 8000` plus the
+frame's slot-0 edge (ADR-0004 Â§3.16.c). Host time is `anchor / 8000` plus the
 session epoch. Group delay is not subtracted.
 
 ## Timing report
@@ -57,16 +57,15 @@ INFO/health still say `frames=unsupported`. That socket does not emit ACQ1.
 - Binding optical frames onto UDP 3333 as NN2 `FRAME` messages.
 - Any TWDT, watchdog, brownout, D6, current-cap, or pin change.
 
-## Flash and look (Owner runs this; the agent does not)
+## Authorized bench procedure
 
-Build from `firmware/v4-idf61` with ESP-IDF 6.1, target ESP32-S3. Do not flash
-from the repository root.
+Use ESP-IDF 6.1, target ESP32-S3. Select the V4 project explicitly when
+invoking IDF from the repository root. Flashing requires owner authorization;
+the owner authorized the PR78 COM11 bench session on 2026-10-30.
 
 ```text
-cd firmware/v4-idf61
-idf.py set-target esp32s3
-idf.py build
-idf.py -p PORT flash monitor
+idf.py -C firmware/v4-idf61 build
+idf.py -C firmware/v4-idf61 -p PORT flash monitor
 ```
 
 On the bench, no human subject, emitters only if the approved procedure allows
@@ -83,3 +82,91 @@ Read `sync`. `frame_delta` should match `slot_samples * 20`. `on_d`/`off_d`
 should be 0 or a small late count, not a walk that grows over the run.
 `missed` and `catchup` should stay at the pre-run value. Watch one LED against
 DRDY if a logic analyzer is already on the bench. Stop with `nn2ctl stop`.
+
+
+## PR78 bench fixes, 2026-10-30
+
+Author validation by Codex, session 01a18b70-d855-73f3-a7bd-4f9e8ffd8705,
+under the owner's explicit task request. Independent review remains pending.
+Runtime source tested: commit `95deb67` (the subsequent documentation/manifest
+commit does not change runtime source). ESP-IDF v6.1
+`fff9895c82d744c7237be8847347bdd1b07c6643`, Xtensa GCC 15.2.0,
+ESP32-S3 revision 0.1, 16 MB flash, COM11; board PCB revision unknown.
+Local configuration uses DEBUG optimization, 240 MHz, and TWDT panic disabled.
+
+### Cause and implementation
+
+Fault 267 is protocol `0x010B FAULT_OPTICAL`; it is not an ESP-IDF error code.
+The scheduler's underlying timeout was caused by excessive software pipeline
+latency. ISR-safe driver configuration alone did not place the application
+LED/ADS/scheduler tasks or task-context I2C submit code in RAM. Controlled
+instrumented trials still faulted with compiler optimization and one-shot
+wakes; changing linker placement of those objects plus I2C master/HAL to
+`noflash` produced the first passing run. This supports flash/cache-sensitive
+execution as the bottleneck; cache-miss counts and physical bus waveforms
+were not measured. The cleaned DEBUG build also passes, without the temporary
+CRC, batching, optimization or profiling experiments.
+
+Separately, the old timing report read the current DRDY index when the
+scheduler consumed a completion, including task-delivery delay in the edge
+index. The I2C completion ISR now freezes sample index and generation before
+publishing the completion. Generation checks reject stale data. DRDY updates
+continue every sample, while the scheduler receives one wake per armed target.
+A small state snapshot replaces full diagnostic status copies in deadline
+handling. Legacy detailed submit histograms remain available for diagnostic
+calls; scheduled edges retain cheap submit/completion timestamps.
+
+`critical_paths.lf` trades SRAM for bounded execution residency. The final
+image loads 147304 bytes of IRAM code; review the linker map and SRAM budget
+when adding code. CI checks the required task/handoff/submit symbols in the
+ELF. Placement checks establish residency, not physical timing guarantees.
+
+The owner SPI fix uses `portMAX_DELAY` as required by IDF 6.1. Audit of the
+installed SDK found SPI acquire and polling-start require this value;
+remaining active calls already comply. Polling-end and I2C finite waits are
+supported and retained. No SDK patches are required.
+
+### Diagnostics and regression coverage
+
+Health exposes `async_latency_min_us`, `async_latency_max_us`,
+`async_latency_avg_us`, `async_on_pending_at_submit`,
+`async_off_pending_at_submit`, `sample_clock_late_commits`,
+`led_completion_timeout`, `sched_error` and `adc_error`.
+`i2c_on_us`/`i2c_off_us` contain the last accepted submit-to-completion duration
+for each of 20 slots; unknown values are `x`. Formatting happens on query.
+`nn2ctl` prints numeric fault plus `fault_name`, and expands these durations
+into `async_i2c`. Durations include software overhead, not just wire time.
+
+Host validation: 136 tests pass, including real production sample-edge code
+with SDK mocks, delayed completion delivery, one-shot wake, generation reset,
+anchor latching and sequence wrap. Assertion-failure and zero-test controls
+both fail as intended. Thirteen Python diagnostic/placement regression tests
+pass. Migration/provenance checks and all 319 historical reference hashes pass.
+Local full architecture testing uses legacy MinGW GCC 5.1; its C17 compiler
+fixtures cannot establish the modern Linux CI result. CI is reported separately
+on the exact pushed revision.
+
+### Final on-target result
+
+After root-level `idf.py -C firmware/v4-idf61 -p COM11 flash`, run
+`python tools/nn2ctl.py run --rate 10 --seconds 10 --led` completed STREAMING
+and STOPPED with fault 0 (boot 131). Health/timing after stop recorded:
+
+- 8000 samples/s, 40 samples/slot, OFF at sample 18, frame_delta 800.
+- All 20 ON and OFF deltas +1 sample.
+- Missed, catchup, sequence gap, edge_miss, CRC and SPI errors: 0.
+- Async latency min/max/avg: 66/223/177 us; pending-at-submit and completion
+  timeout: 0. `sample_clock_late_commits=3864` counts positive quantized
+  commits, including the accepted +1 sample edges; it is not an edge-miss count.
+- ADC OK 77276. Serial boot after monitor reset (boot 132) confirms project
+  `NoctiNIRSv4_IDF61` and `BOOT_STAGE stage=ready ... ads=1 runtime=1 network=1`.
+- Existing boot warning: SPI GPIO7 conflict/overwrite; electrical implications
+  require Hardware Specialist review. It did not prevent this bench run.
+
+This is one-board author bench evidence, not independent HIL or waveform
+qualification. No logic analyzer, long-duration run, physical optical timing,
+fault injection, or human-subject testing was performed. Runtime I2C 800 kHz,
+SPI 8 MHz, ON 7-byte/OFF 2-byte payloads and safety/TWDT policy are unchanged.
+Hardware Specialist, RTOS Specialist and independent review are required before
+human merge approval. Roll back by reverting the PR78 fix commits and rebuilding;
+no partition, bootloader configuration, security or eFuse change is introduced.
