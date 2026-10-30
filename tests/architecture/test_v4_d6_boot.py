@@ -55,7 +55,11 @@ class V4D6Boot(unittest.TestCase):
         self.assertLess(d6_call, iref_zero)
         self.assertLess(iref_zero, ledout_check)
         self.assertLess(ledout_check, operating)
-        self.assertIn("#define PCA_MAX_CURRENT_MA          30u", source)
+        self.assertIn("#define PCA_MAX_CURRENT_MA          NN2_OPTICAL_MAX_MA", source)
+        self.assertIn("#define PCA_DEFAULT_CURRENT_MA      NN2_OPTICAL_DEFAULT_MA", source)
+        optical = (ROOT / "components/nn2_core/include/nn2_core_optical.h").read_text()
+        self.assertRegex(optical, r"(?m)^#define NN2_OPTICAL_MAX_MA 50$")
+        self.assertRegex(optical, r"(?m)^#define NN2_OPTICAL_DEFAULT_MA 30$")
         self.assertIn("#define PCA_IREFALL     0x40u", source)
 
     def test_runtime_off_uses_d6_write_order(self):
