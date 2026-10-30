@@ -599,10 +599,10 @@ static esp_err_t transport_acquire(ads_transport_t *transport)
     if (transport->bus_acquired) {
         return ESP_OK;
     }
-    /* One owner of this bus. A missed release must fault instead of waiting
-     * forever. Three seconds is inside the 8 s init wait and the 5 s TWDT. */
+    /* ESP-IDF 6.1 rejects finite waits for bus acquisition. This dedicated
+     * bus has one owner; the control/init waits remain bounded by callers. */
     const esp_err_t err = spi_device_acquire_bus(
-        transport->device, pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS));
+        transport->device, portMAX_DELAY);
     if (err == ESP_OK) {
         transport->bus_acquired = true;
     }
