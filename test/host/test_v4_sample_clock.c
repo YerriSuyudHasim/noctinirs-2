@@ -25,6 +25,27 @@ static void delayed_task_delivery_cannot_move_the_physical_commit(void)
     TEST_ASSERT_EQUAL_UINT32(0u, count.off_stable);
 }
 
+static void commit_lateness_covers_zero_one_two_and_three_plus(void)
+{
+    nocti_v4_sample_geometry_t geo;
+    nocti_v4_sample_slot_plan_t plan;
+    const uint32_t delays[] = {0u, 1u, 2u, 3u, 9u};
+    TEST_ASSERT_TRUE(nocti_v4_sample_geometry_for(10u, 2200u, &geo));
+    for (uint32_t i = 0u; i < sizeof(delays) / sizeof(delays[0]); ++i) {
+        for (uint32_t phase = 0u; phase < 2u; ++phase) {
+            /* Include serial wrap and both LED phases. */
+            TEST_ASSERT_TRUE(nocti_v4_sample_slot_plan(&geo, UINT32_MAX - 5u,
+                                                       0u, 0u, &plan));
+            const uint32_t edge = phase ? plan.on_edge : plan.off_edge;
+            nocti_v4_sample_note_commit(&plan, (int)phase, edge - 1u + delays[i]);
+            TEST_ASSERT_EQUAL_UINT32(delays[i], phase ? plan.on_late_samples :
+                                                       plan.off_late_samples);
+            TEST_ASSERT_EQUAL_UINT8(delays[i] != 0u, phase ? plan.on_commit_late :
+                                                           plan.off_commit_late);
+        }
+    }
+}
+
 static void geometry_matches_the_ten_hertz_grid(void)
 {
     nocti_v4_sample_geometry_t geo;
@@ -274,6 +295,7 @@ static void time64_is_little_endian(void)
 void test_v4_sample_clock_suite(void)
 {
     RUN_TEST(delayed_task_delivery_cannot_move_the_physical_commit);
+    RUN_TEST(commit_lateness_covers_zero_one_two_and_three_plus);
     RUN_TEST(geometry_matches_the_ten_hertz_grid);
     RUN_TEST(every_allowed_rate_holds_k_target);
     RUN_TEST(rejected_rates_do_not_produce_a_plan);

@@ -13,6 +13,11 @@
 #include "nocti_v4_common.h"
 #include "nocti_v4_rtos.h"
 
+/* Both tail helpers use the ON capacity for indexing. Reject unequal targets
+ * at compile time rather than changing the validated 10/10 averaging path. */
+_Static_assert(NOCTI_V4_K_ON_TARGET == NOCTI_V4_K_OFF_TARGET,
+               "ON/OFF tail helpers require equal target capacities");
+
 #define OPTICAL_HISTORY_FRAMES NOCTI_V4_SCHEDULER_HISTORY_FRAMES
 #define OPTICAL_TASK_PRIORITY  NOCTI_V4_RTOS_PRIO_OPTICAL
 #define OPTICAL_TASK_CORE      NOCTI_V4_RTOS_CORE_SOFT

@@ -409,7 +409,8 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
       reply.length += 21;
     }
   } else if (!error && (op == NN2_CMD_GET_HEALTH || op == NN2_CMD_GET_TIMING)) {
-    uint8_t diag[1200];
+    /* Existing 28-byte reply prefix; reserve one local NUL outside wire text. */
+    uint8_t diag[NN2_CORE_PAYLOAD_MAX - 28u + 1u];
     const char *fallback = op == NN2_CMD_GET_HEALTH ? "v4health=0 reason=unavailable"
                                                     : "v4timing=0 reason=unavailable";
     size_t n = 0;
