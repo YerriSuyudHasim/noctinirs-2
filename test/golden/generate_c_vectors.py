@@ -30,11 +30,15 @@ def generate(path):
         h=v['expected_hex']
         if h is not None:
             b=bytes.fromhex(h);out.append('static const uint8_t expected[]={'+','.join(map(str,b))+'};\n')
-        if layout in (2,3):
+        if layout in (2,3) and v.get('encode', True):
             # Oversized input only carries first 100 samples into fixed C storage;
             # the declared count must be rejected before any sample is inspected.
             f=dict(v['input'])
-            if layout==3:f['sample']=f['sample'][:100]
+            if layout==3:
+                # Count zero is invalid, but the fixed C array still needs a
+                # standard C initializer; JSON correctly carries no samples.
+                f['sample']=f['sample'][:100] or [
+                    {'ain':[0,0,0,0], 'phase_class':0, 'slot_index':255}]
             out.append(typ+' input='+initializer(f)+';\n')
             out.append('memset(wire,0xA5,sizeof(wire)); written=999;\n')
             out.append('CHECK(nn2_oc_encode_'+kind+'(&input,wire,sizeof(wire),&written,&stats)=='+results[v['expected_result']]+');\n')

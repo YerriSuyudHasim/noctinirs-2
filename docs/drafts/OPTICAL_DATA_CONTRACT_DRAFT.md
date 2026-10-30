@@ -1,4 +1,4 @@
-# NoctiNIRS 2 — Draft Kontrak Data Optik (v0.4, DRAFT)
+# NoctiNIRS 2 — Draft Kontrak Data Optik (v0.4.2, DRAFT)
 
 Status: **DRAFT untuk review Owner. Belum normatif.** Belum ada kode yang mengikuti dokumen ini.
 Disusun 2026-10-30 berdasarkan: laporan bench Owner (10 Hz, 60 s, lolos), `docs/adr/0004-host-protocol.md`
@@ -83,6 +83,9 @@ Semua angka little-endian, serialisasi per byte (tanpa packed struct, tanpa over
 | 20 | 2 | `gate_config_id` | u16 | versi set ambang yang aktif; 0 = gerbang nonaktif (ENGINEERING) |
 | 22 | 2 | reserved | u16 | 0 |
 
+Field reserved u16 pada prefix OPT2 offset 22 dan RAW offset 14 wajib 0; penerima menolak paket bila bukan 0.
+`ENGINEERING_UNGATED` wajib sepakat dengan `gate_config_id = 0`; bila tidak sepakat, penerima menolak paket dan tidak memprosesnya sebagai sains.
+
 ### 4.2 Slot record — 64 B (20 buah, indeks = `slot_index`)
 
 | Offset | Ukuran | Field | Tipe | Isi |
@@ -103,6 +106,8 @@ Semua angka little-endian, serialisasi per byte (tanpa packed struct, tanpa over
 | 38 | 13 | `det[2]` | — | AIN2 |
 | 51 | 13 | `det[3]` | — | AIN3 |
 
+Detektor terverifikasi (`verified_mask` bit = 1) wajib memiliki `n_on_used` dan `n_off_used` ≥ 2; penerima menolak paket bila salah satunya < 2.
+
 Detektor record — 13 B:
 
 | Offset | Ukuran | Field | Tipe | Isi |
@@ -119,14 +124,25 @@ Mengirim `sum` + `n` (bukan mean) menghindari pembulatan: `latest_contiguous_mea
 
 ### 4.3 `reason` (u16)
 
-Bit 0–9 sama dengan `nocti_v4_optical.h` (`UNDER_K_ON`, `UNDER_K_OFF`, `LED_ON_MISSING`, `LED_OFF_MISSING`,
-`RUNTIME_TIMING`, `ADS_INTEGRITY`, `STOP_ABORT`, `STALE_EPOCH`, `INTERNAL`, `STARTUP_WARMUP`). Tambahan:
+Bit 0–9 sama dengan `nocti_v4_optical.h`:
 
 | Bit | Nama | Arti |
 |---|---|---|
+| 0 | `UNDER_K_ON` | |
+| 1 | `UNDER_K_OFF` | |
+| 2 | `LED_ON_MISSING` | |
+| 3 | `LED_OFF_MISSING` | |
+| 4 | `RUNTIME_TIMING` | |
+| 5 | `ADS_INTEGRITY` | |
+| 6 | `STOP_ABORT` | |
+| 7 | `STALE_EPOCH` | |
+| 8 | `INTERNAL` | |
+| 9 | `STARTUP_WARMUP` | |
 | 10 | `NO_WITNESS` | tidak ada detektor yang lolos sebagai saksi untuk slot ini |
 | 11 | `WITNESS_UNSTABLE` | saksi ada tetapi jendelanya tidak stabil |
 | 12–15 | reserved | 0 |
+
+`quality` 1 atau 2 mensyaratkan `reason = 0` untuk SEMUA bit.
 
 Aturan (v0.4.1): `reason != 0` ⇒ `quality ∈ {0, 3, 4}`: bit 6 `STOP_ABORT` ⇒ `quality = 3`; bit 9 `STARTUP_WARMUP` ⇒ `quality = 4`; selain itu `quality = 0`. Dalam ketiganya `verified_mask = 0` ⇒ semua `sum`/`sd` dikosongkan (kecuali frame ENGINEERING, di bawah). `quality` 1 dan 2 selalu `reason = 0`; `BELOW_TARGET` diwakili oleh `quality = 1` sendiri (ADR-0004 §3.17 menyebut bit `BELOW_TARGET`, tetapi kode firmware tidak memilikinya; ikuti kode). Pada `quality` 1 atau 2, `verified_mask` boleh himpunan bagian detektor mana pun (detektor yang gagal gerbang dikosongkan).
 
@@ -160,6 +176,9 @@ Tujuan: validasi independen di komputer (cari tepi langkah LED di data, ukur set
 Prefix 16 B: `adc_source:u8`, `frame_layout:u8 (=3)`, `slot_plan_epoch:u16`, `first_sample_sequence:u32`, `sample_count:u16`,
 `raw_flags:u16` (bit0 `ENGINEERING` selalu 1; bit1 `GAP_BEFORE` bila ada data terbuang sebelum paket ini),
 `geometry_map_id:u16`, reserved `u16`.
+
+`raw_flags` bit 0 wajib 1, bit 1 adalah `GAP_BEFORE`, dan bit 2–15 wajib 0; penerima menolak paket bila melanggar.
+`sample_count` wajib 1–100; penerima menolak 0 dan > 100.
 
 Sampel 14 B, berurutan (`indeks DRDY = first_sample_sequence + i`):
 `ain0..ain3` masing-masing int24 LE (urutan AIN, 12 B), `phase_class:u8`, `slot_index:u8`.
