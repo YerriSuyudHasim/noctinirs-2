@@ -87,15 +87,14 @@ Batas regresi yang diterima: `spi_max ≤ ~60`, `service_max ≤ ~100`, `sched_d
 - **Terima bila:** tes membuktikan 20 saluran unik, tiap sumber tepat 2 saluran, `slot_to_pca = [0..9,14..23]`, tiap saluran satu sisi dengan sumbernya,
   dan hanya satu fungsi konversi AIN→PD yang ada di repo (uji grep otomatis).
 
-### T8 · Codec FRAME layout 2 dan 3 (C murni) + parser/simulator host  — M
-- Di `nn2_core`: enkode/dekode byte-serialized sesuai kontrak §4–5; `_Static_assert` ukuran 24 / 64 / 13 / 1304 dan 16 / 14 / 1416; sentinel `INT32_MIN`/`0xFFFF`.
-- Di host: parser Python yang sama dan simulator yang menghasilkan frame sintetis (termasuk slot gagal bukti); vektor emas bersama.
-- **Terima bila:** round-trip identik antara C dan Python, CRC-32 diperiksa, paket terlalu besar ditolak dan dihitung (tidak pernah difragmentasi), tes host lolos.
+### T8 · Codec FRAME layout 2 dan 3 (C murni) + vektor emas  — M
+> Revisi 2026-10-31: parser dan simulator Python dikerjakan agent di repo `noctinirs-2-host`, bukan di sini.
+- Di `nn2_core`: enkode/dekode byte-serialized sesuai kontrak §4–5; `_Static_assert` ukuran 24 / 64 / 13 / 1384 dan 16 / 14 / 1416; sentinel `INT32_MIN`/`0xFFFF`.
+- Hasilkan berkas vektor emas (JSON: masukan terstruktur + byte hex yang diharapkan, termasuk slot gagal bukti, jenuh, paket terlalu besar) yang dipakai bersama oleh tes C dan tes parser Python di repo host.
+- **Terima bila:** tes C memakai vektor emas, CRC-32 diperiksa, paket terlalu besar ditolak dan dihitung (tidak pernah difragmentasi), tes host lolos.
 
-### T9 · `nn2ctl record` dan `parse`  — M
-- `record` menerima FRAME, menulis berkas biner mentah + CSV berlabel (nama saluran dari geometri; kolom `verified`, `reason`), mencatat hash geometri, `gate_config_id`,
-  deteksi diskontinuitas `frame_sequence`. `parse` memproses ulang berkas.
-- **Terima bila:** diuji dengan simulator T8, tidak ada konversi AIN→PD ganda, kehilangan paket dilaporkan.
+### T9 · (DIPINDAH) perekaman dan parse
+- Revisi 2026-10-31: perekam (biner mentah + CSV berlabel) dan pemutar ulang dikerjakan agent di repo `noctinirs-2-host` (Langkah 3). `nn2ctl.py` tetap hanya untuk kontrol. Tidak ada pekerjaan Codex di T9.
 
 ---
 
@@ -150,3 +149,11 @@ Batas regresi yang diterima: `spi_max ≤ ~60`, `service_max ≤ ~100`, `sched_d
 | Cek I2C 800 kHz dengan osiloskop (rise time, bus bersama MAX17048/BQ24295) | |
 | Uji LED macet menyala | hentikan task LED sengaja di bench dan lihat apakah LED tetap menyala |
 | Checklist keselamatan sebelum menempel di dahi | arus rendah, iradiansi, pemutus cepat, aturan lab/IRB |
+
+## Tambahan 2026-10-31 — T0 · Audit stream lama port 3334 (baca saja)  — S
+- **Tujuan:** tahu apakah stream V4 lama (1184 B, CRC-16) bisa dipakai merekam intensitas untuk tes kotak gelap sebelum jalur OPT2/RAW siap. Keputusan D6: stream ini dihapus dengan catatan *setelah* jalur baru berfungsi; jangan hapus sekarang.
+- **Kerjakan (tanpa mengubah kode):** jelaskan isi tiap datagram (field, satuan, apakah per sampel atau per slot, apakah memuat I_ON dan I_dark/OFF per detektor, penanda fase, nomor sampel), apakah masih diaktifkan di firmware V4-IDF61 saat ini, dan cara menerimanya dari komputer. Beri kesimpulan jelas: bisa dipakai merekam atau tidak, dan apa kekurangannya.
+- **Terima bila:** laporan berupa tabel field dan kesimpulan; tidak ada perubahan berkas.
+
+## Usulan urutan baru (menunggu persetujuan Owner)
+Rekaman kotak gelap menentukan ambang gerbang (D5), tetapi butuh jalur data keluar dari perangkat. Usulan: T0 -> T7 -> T8 (codec C + vektor emas) -> pengirim FRAME dan mode ENGINEERING tanpa gerbang (bagian T12 + T14 + T15, semua frame berflag `ENGINEERING_UNGATED`, hanya lewat perintah eksplisit saat STOP, hanya untuk bench tanpa kulit) -> rekaman kotak gelap -> tentukan ambang -> T10/T11 (statistik dan gerbang) -> T13/T16.
