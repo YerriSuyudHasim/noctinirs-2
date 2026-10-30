@@ -4,6 +4,9 @@
  * blocking I2C. There is no USB command console. */
 #if CONFIG_NOCTI_V4_NN2_COMMUNICATION
 #include "nn2_app_comm.h"
+#include "nn2_core_optical.h"
+#define NN2_CURRENT_TEXT_(value) #value
+#define NN2_CURRENT_TEXT(value) NN2_CURRENT_TEXT_(value)
 #include "nn2_net.h"
 #include "nn2_wifi.h"
 #include "nn2_config.h"
@@ -75,7 +78,7 @@ static nn2_status_t control_start(void *ctx,const nn2_port_optical_config_t *cfg
     (void)ctx;
     if (!cfg || !(cfg->fs==2 || cfg->fs==4 || cfg->fs==5 || cfg->fs==8 || cfg->fs==10))
         return NN2_ERR_INVALID_ARG;
-    for (unsigned i=0u;i<20u;++i) if (cfg->current_ma[i]>30u) return NN2_ERR_INVALID_ARG;
+    for (unsigned i=0u;i<20u;++i) if (cfg->current_ma[i]>NN2_OPTICAL_MAX_MA) return NN2_ERR_INVALID_ARG;
     portENTER_CRITICAL(&s_control_lock);
     bool ok=s_control_state==NN2_OPTICAL_IDLE && !s_control_working && !s_control_stop;
     if (ok) {
@@ -308,9 +311,9 @@ static esp_err_t control_init(void)
     nn2_port_safety_t safety={.hold_off=control_off};
     if (nn2_app_comm_init(&s_nn2_app,boot,&safety,esp_random())!=NN2_OK) return ESP_FAIL;
     nn2_port_optical_t optical={.start=control_start,.state=control_state,.clear_fault=control_clear,
-        .current_limit_ma=30u,.real_samples=true,
+        .current_limit_ma=NN2_OPTICAL_MAX_MA,.real_samples=true,
         .read_diag=control_read_diag,
-        .policy_info="NoctiNIRS2/0.1.0;wire=ADR0004/1;baseline=V4_IDF61_NN2_CTRL;led=REAL_BRINGUP;short_policy=STRICT;adc=ADS131M04;frames=unsupported;fs_min=2;fs_max=10;fs_allowed=2,4,5,8,10;diag=health,timing;console=removed"};
+        .policy_info="NoctiNIRS2/0.1.0;wire=ADR0004/1;baseline=V4_IDF61_NN2_CTRL;led=REAL_BRINGUP;short_policy=STRICT;adc=ADS131M04;frames=unsupported;fs_min=2;fs_max=10;fs_allowed=2,4,5,8,10;current_default_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_DEFAULT_MA) ";current_max_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_MAX_MA) ";diag=health,timing;console=removed"};
     if (nn2_app_comm_bind_optical(&s_nn2_app,&optical)!=NN2_OK) return ESP_FAIL;
     if (xTaskCreatePinnedToCore(control_worker,"v4_control",NOCTI_V4_RTOS_STACK_CONTROL_BYTES,NULL,NOCTI_V4_RTOS_PRIO_CONTROL,&s_control_worker,NOCTI_V4_RTOS_CORE_ACQ)!=pdPASS)
         return ESP_ERR_NO_MEM;

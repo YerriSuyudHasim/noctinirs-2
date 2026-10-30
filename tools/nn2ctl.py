@@ -241,6 +241,28 @@ def validate_rate(rate, info=None):
         raise ValueError("rate must be one of " + ",".join(map(str, allowed)) + " Hz")
 
 
+def current_limits(info=None):
+    # Fallback for older firmware; INFO can narrow the supported maximum.
+    capabilities = dict(item.split("=", 1) for item in (info or "").split(";") if "=" in item)
+    default = int(capabilities.get("current_default_ma", "30"))
+    maximum = min(50, int(capabilities.get("current_max_ma", "50")))
+    if not 0 <= default <= maximum:
+        raise ValueError("invalid firmware current limits")
+    return default, maximum
+
+
+def validate_current(current, info=None):
+    _, maximum = current_limits(info)
+    if not 0 <= current <= maximum:
+        raise ValueError(f"current must be 0..{maximum} mA")
+
+
+def warn_current(currents):
+    if any(current > 30 for current in currents):
+        print("PERINGATAN: arus di atas default 30 mA; pastikan irradiansi sudah dihitung dan aman untuk kulit",
+              file=sys.stderr)
+
+
 def provision_line(ssid,password):
     # Legacy encoding helper only; SoftAP firmware rejects provisioning commands.
     s,p=ssid.encode("utf8"),password.encode("ascii")
@@ -413,7 +435,7 @@ def main():
     parser.add_argument("--rate",type=int,default=None,
                         help="Frame rate for set-fs, or optional configuration before start/run; one of 2,4,5,8,10 Hz; boot default is5 Hz")
     parser.add_argument("--channel",type=int,default=0)
-    parser.add_argument("--current-ma",type=int,default=0)
+    parser.add_argument("--current-ma",type=int,default=None)
     parser.add_argument("--seconds",type=float,default=10)
     parser.add_argument("--led",action="store_true",
                         help="Explicitly start real LEDs in the opt-in bring-up profile; requires an approved bench procedure")
@@ -426,9 +448,15 @@ def main():
         if not 1<=args.port<=65535: raise ValueError("UDP port")
         if args.command=="set-fs" and args.rate is None: args.rate=5
         if args.rate is not None: validate_rate(args.rate)
-        if args.command=="set-led-current" and not (0<=args.channel<20 and 0<=args.current_ma<=50): raise ValueError("channel/current")
+        if args.command == "set-led-current" and args.current_ma is None: args.current_ma = 0
+        if args.current_ma is not None: validate_current(args.current_ma)
+        if args.command == "set-led-current" and not 0 <= args.channel < 20: raise ValueError("channel")
         if args.command=="run" and (not math.isfinite(args.seconds) or args.seconds <= 0): raise ValueError("duration must be positive and finite")
         client=Client(args.host,args.port,args.timeout,args.retries)
+        if args.command == "set-led-current":
+            info = require_ok(client.request("info"))
+            validate_current(args.current_ma, info["info"])
+            warn_current([args.current_ma])
         if args.command == "set-fs":
             info = require_ok(client.request("info"))
             validate_rate(args.rate, info["info"])
@@ -457,6 +485,19 @@ def main():
                     raise ValueError("SHORT advisory firmware has no valid duration capability")
                 if args.command == "run" and limit_s and args.seconds > limit_s:
                     raise ValueError(f"Running firmware advertises limit_s={limit_s}; Owner build required for host-controlled duration")
+            # Inspect the configured per-channel values before START. An explicit
+            # --current-ma uses the existing channel command for all 20 channels.
+            if real_led or args.current_ma is not None:
+                if args.current_ma is not None:
+                    validate_current(args.current_ma, info["info"])
+                    currents = [args.current_ma] * 20
+                else:
+                    currents = require_ok(client.request("get-config"))["current_ma"]
+                for current in currents: validate_current(current, info["info"])
+                warn_current(currents)
+                if args.current_ma is not None:
+                    for channel, current in enumerate(currents):
+                        require_ok(client.request("set-led-current", struct.pack("<BH", channel, current)))
             if args.rate is not None:
                 require_ok(client.request("set-fs", bytes([args.rate])))
         if args.command=="run":

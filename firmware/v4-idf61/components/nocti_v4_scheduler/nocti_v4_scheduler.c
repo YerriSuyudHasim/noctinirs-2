@@ -1247,6 +1247,7 @@ esp_err_t nocti_v4_scheduler_init(nocti_v4_scheduler_t *scheduler,
     runtime->last_history_index = -1;
     runtime->last_slot_index = -1;
     runtime->task_core = -1;
+    __atomic_store_n(&health->scheduler_task_core, -1, __ATOMIC_RELEASE);
     runtime->gptimer_callback_core = -1;
     runtime->lifecycle = NOCTI_V4_SCAN_STOPPED;
     runtime->configured_off_phase_us = NOCTI_V4_OFF_PHASE_DEFAULT_US;
@@ -1296,7 +1297,6 @@ esp_err_t nocti_v4_scheduler_init(nocti_v4_scheduler_t *scheduler,
         s_runtime_claimed = false;
         return bind_result;
     }
-    __atomic_store_n(&health->scheduler_task_core, -1, __ATOMIC_RELEASE);
     __atomic_store_n(&health->scheduler_gptimer_callback_core, -1, __ATOMIC_RELEASE);
     scheduler->runtime = runtime;
     scheduler->initialized = true;
