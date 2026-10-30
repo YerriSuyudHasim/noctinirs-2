@@ -30,7 +30,7 @@ class OpticalGateVectors(unittest.TestCase):
     self.assertEqual(struct.pack('>d',thr).hex(),e['thr_f64_hex'])
     self.assertEqual(diff>=thr,e['STEP_Z_PASS'])
     self.assertEqual(diff>=float(p['floor_counts']),e['FLOOR_PASS'])
-    self.assertEqual(w['stab_q']!=255 and 10*w['stab_q']<=16*p['stable_k_x10'],e['STABLE_PASS'])
+    self.assertEqual(w['stab_q']<254 and 10*w['stab_q']<=16*p['stable_k_x10'],e['STABLE_PASS'])
  def test_threshold_triplet_is_sensitive(self):
   vectors={v['name']:v for v in json.loads((ROOT/'test/golden/optical_gate_vectors.json').read_text())['vectors']}
   exact=vectors['exact_step_threshold']['expected']

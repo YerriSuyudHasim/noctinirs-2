@@ -1,6 +1,6 @@
 # Shared optical contract fixtures
 
-These are offline draft-contract assets. Nothing binds the codec, geometry or gate
+These are offline draft-contract v0.4 assets. Nothing binds the codec, geometry or gate
 configuration to running firmware. No gate calculation is implemented by the C
 codec. The owner clarification below governs future T11 and host implementations.
 
@@ -12,7 +12,9 @@ codec. The owner clarification below governs future T11 and host implementations
 `TOO_LARGE`, `UNKNOWN_LAYOUT`), `expected_hex` (lowercase payload-only hexadecimal,
 or null when no wire representation applies), and `decode_result` (or null when
 decode does not apply). An optional `encode: false` marks decode-only dispatch
-tests. Integers are JSON integers, not floating-point values. Input object keys
+tests. Optional `decoded_input` gives the field-by-field expected receiver output
+when the v0.4 unknown-bit policy invalidates science slots. Integers are JSON
+integers, not floating-point values. Input object keys
 follow public C field order; `generate_c_vectors.py` translates them to typed C
 fixtures and never calculates expected wire bytes. Do not reorder field keys
 without updating the generator. Arrays contain all 20 slots/80 stability entries
@@ -44,15 +46,21 @@ calculation. These are frozen expected results, not a production gate evaluator.
   rejected, never silently repaired. Quality 3/4 and their reason are preserved.
 - ENGINEERING_UNGATED is the explicit exception: mask zero, witness 0xFF,
   reason bits 10/11 clear, detector bits 2–5 clear, GATE_OFF bit 6 set, real
-  sum/sd retained. Bit 7 remains reserved. No gate is evaluated by this codec.
+  sum/sd retained when computable (sum at n>=1, sd at n>=2). Bit 7 remains reserved. No gate is evaluated by this codec.
 - RAW requires ENGINEERING, count 1..100, signed int24 and phase 0..8. OUTSIDE
   requires slot 0xFF; the other phases require slot 0..19. Zero-count RAW is
   rejected; owner confirmation is requested before allowing empty packets.
-- Reserved bits/bytes and noncanonical lengths are rejected. Unknown layouts
-  are rejected by decoder dispatch. `stab_q` 0xFE and 0xFF are preserved, including
+- Encoders reject reserved bits, and decoders reject reserved bytes/noncanonical
+  lengths. Following v0.4 section 15.8, unknown science quality/reason/flag bits
+  cause warning counters and INVALID/empty affected slots, while engineering
+  values are retained as diagnostics with warnings. Unknown frame flags affect
+  all 20 slots. INTERNAL reason records receiver invalidation. Unknown sources
+  and layouts are rejected and counted by decoder dispatch. `stab_q` 0xFE and
+  0xFF are preserved, including
   diagnostic entries for masked detectors. Clipped sd 0xFFFE is preserved.
-- For a numeric ON/OFF statistic, both used counts must be at least two; used
-  cannot exceed available. Gate evaluation and acquisition policy remain future
+- For gate-on numeric ON/OFF statistics, used counts must be at least two; used
+  cannot exceed available. ENGINEERING permits n=0 with empty sum/sd, n=1 with
+  numeric sum and empty sd, and n>=2 with numeric sum/sd, even at quality 0/3/4. Gate evaluation and acquisition policy remain future
   work. The engineering exception and RAW slot rules follow the owner's explicit
   2026-10-31 clarification, without editing the merged draft document.
 
@@ -86,7 +94,7 @@ Aritmetika: binary64 (double), urutan operasi tetap persis seperti di bawah, tan
   thr    = z * se_eff
   STEP_Z_PASS = (diff >= thr)
   FLOOR_PASS  = (diff >= (double)floor_counts)
-  STABLE_PASS = (stab_q != 0xFF) && (10 * (int)stab_q <= 16 * (int)stable_k_x10)     (integer murni, tanpa pecahan)
+  STABLE_PASS = (stab_q < 0xFE) && (10 * (int)stab_q <= 16 * (int)stable_k_x10)     (integer murni, tanpa pecahan)
 Contoh stable_k = 2,3 (stable_k_x10 = 23): 10*stab_q <= 368, jadi stab_q <= 36.
 
 DEFINISI stab_q (dihitung firmware dari data eksak internal, lalu dikuantisasi; host tidak dapat menghitung ulang, hanya memeriksa ambangnya):
@@ -105,3 +113,15 @@ Vektor emas bagian "gerbang": masukan dari kawat + parameter -> keluaran (STEP_Z
   - kosong (sentinel) di salah satu fase;
   - n_on != n_off.
 Setiap vektor memuat nilai double yang diharapkan untuk diff dan thr (hex IEEE-754 64-bit) agar kedua sisi dapat dibandingkan bit-per-bit.
+
+### Subsequent owner corrections (2026-10-31)
+
+The STABLE_PASS line above incorporates the owner's later correction: 0xFE and
+0xFF always fail, even when stable_k_x10 is 159 or 200. See the dedicated FE/FD
+boundary fixtures. The pending v0.4 source is read-only and excluded from this
+PR: docs/drafts/OPTICAL_DATA_CONTRACT_DRAFT_v0.4_PENDING.md, SHA-256
+9f4f5b68116b6824814a83250b010229d13e196bfa27e38f6d612101794fa4cf.
+Compared with v0.3, it clarifies GATE_OFF/ENGINEERING partial statistics, stability
+clipping, fixed arithmetic, and OUTSIDE=0xFF. RAW first_affected is derived by
+future analysis from phase tags; early commits require explicit edge notes.
+Session metadata and runtime binding are not implemented here.

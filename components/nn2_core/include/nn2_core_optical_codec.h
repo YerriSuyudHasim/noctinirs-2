@@ -21,7 +21,8 @@ typedef enum { NN2_OC_OK=0, NN2_OC_INVALID, NN2_OC_TOO_LARGE,
 typedef enum { NN2_OC_INVALID_QUALITY=0, NN2_OC_VALID_MINIMUM=1,
     NN2_OC_VALID_TARGET=2, NN2_OC_ABORTED_BY_STOP=3,
     NN2_OC_STARTUP_WARMUP=4 } nn2_oc_quality_t;
-typedef struct { uint32_t oversized_payloads; } nn2_oc_stats_t;
+typedef struct { uint32_t oversized_payloads, unsupported_sources,
+    unsupported_layouts, warning_slots; } nn2_oc_stats_t;
 typedef struct { int32_t sum_on, sum_off; uint16_t sd_on_q4, sd_off_q4;
     uint8_t det_flags; } nn2_oc_detector_t;
 typedef struct {

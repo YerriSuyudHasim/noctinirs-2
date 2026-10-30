@@ -17,14 +17,15 @@ static int32_t signed_word(uint32_t v, unsigned bits)
 { uint32_t top=UINT32_C(1) << (bits-1u); return (v & top) ? -1-(int32_t)((top-1u) & ~v) : (int32_t)v; }
 static nn2_oc_result_t large(nn2_oc_stats_t *s)
 { if (s->oversized_payloads != UINT32_MAX) ++s->oversized_payloads; return NN2_OC_TOO_LARGE; }
-static bool valid_opt2(const nn2_oc_opt2_t *f)
+static void increment(uint32_t *v) { if (*v!=UINT32_MAX) ++*v; }
+static bool valid_opt2(const nn2_oc_opt2_t *f, bool producer)
 {
     const bool engineering=(f->frame_flags & 4u)!=0u;
-    if ((f->frame_flags & ~15u) || !f->sample_count ||
-        (f->gate_config_id==0u && !(f->frame_flags & 4u))) return false;
+    if ((producer && (f->frame_flags & ~15u)) || !f->sample_count ||
+        (engineering != (f->gate_config_id==0u))) return false;
     for (unsigned i=0;i<20u;++i) {
         const nn2_oc_slot_t *s=&f->slot[i];
-        if (s->slot_index!=i || s->quality>4u || (s->reason & 0xF000u) ||
+        if (s->slot_index!=i || (producer && (s->quality>4u || (s->reason & 0xF000u))) ||
             (s->verified_mask & 0xF0u) || (s->witness_ain>3u && s->witness_ain!=255u) ||
             s->n_on_used>s->n_on_available || s->n_off_used>s->n_off_available) return false;
         if (engineering) {
@@ -32,12 +33,14 @@ static bool valid_opt2(const nn2_oc_opt2_t *f)
         } else if ((s->quality==0u || s->quality>=3u || s->reason!=0u) && s->verified_mask) return false;
         for (unsigned d=0;d<4u;++d) {
             const nn2_oc_detector_t *v=&s->det[d];
-            if (v->det_flags & 0x80u) return false;
+            if ((s->n_on_used<4u || s->n_off_used<4u) && f->stab_q[4u*i+d]!=255u) return false;
+            if (producer && (v->det_flags & 0x80u)) return false;
             if (engineering) {
-                if (!(v->det_flags & 0x40u) || (v->det_flags & 0x3Cu) ||
-                    s->n_on_used<2u || s->n_off_used<2u ||
-                    v->sum_on==INT32_MIN || v->sum_off==INT32_MIN ||
-                    v->sd_on_q4==UINT16_MAX || v->sd_off_q4==UINT16_MAX) return false;
+                if (!(v->det_flags & 0x40u) || (v->det_flags & 0x3Cu)) return false;
+                if ((s->n_on_used==0u) != (v->sum_on==INT32_MIN) ||
+                    (s->n_off_used==0u) != (v->sum_off==INT32_MIN) ||
+                    (s->n_on_used<2u) != (v->sd_on_q4==UINT16_MAX) ||
+                    (s->n_off_used<2u) != (v->sd_off_q4==UINT16_MAX)) return false;
             } else if (v->det_flags & 0x40u) return false;
             else if (!(s->verified_mask & (1u<<d))) {
                 if (v->sum_on!=INT32_MIN || v->sum_off!=INT32_MIN ||
@@ -65,7 +68,7 @@ nn2_oc_result_t nn2_oc_encode_opt2(const nn2_oc_opt2_t *f, uint8_t *p,
     size_t cap, size_t *written, nn2_oc_stats_t *stats)
 {
     if (!f || !p || !written || !stats) return NN2_OC_INVALID;
-    if (!valid_opt2(f)) return NN2_OC_INVALID;
+    if (!valid_opt2(f, true)) return NN2_OC_INVALID;
     if (cap<NN2_OPT2_PAYLOAD_BYTES) return NN2_OC_TRUNCATED;
     p[0]=1; p[1]=2; put(p+2,f->slot_plan_epoch,2); put(p+4,f->frame_sequence,4);
     put(p+8,f->first_sample_sequence,4); put(p+12,f->sample_count,2);
@@ -108,7 +111,7 @@ nn2_oc_result_t nn2_oc_decode(const uint8_t *p, size_t len, nn2_oc_opt2_t *opt,
     if (!p || !stats) return NN2_OC_INVALID;
     if (len>NN2_RAW_PAYLOAD_MAX) return large(stats);
     if (len<2u) return NN2_OC_TRUNCATED;
-    if (p[0]!=1u) return NN2_OC_INVALID;
+    if (p[0]!=1u) { increment(&stats->unsupported_sources); return NN2_OC_INVALID; }
     if (p[1]==2u) {
         nn2_oc_opt2_t f={0};
         if (!opt) return NN2_OC_INVALID;
@@ -131,7 +134,27 @@ nn2_oc_result_t nn2_oc_decode(const uint8_t *p, size_t len, nn2_oc_opt2_t *opt,
             }
         }
         for (unsigned i=0;i<80u;++i) f.stab_q[i]=p[1304u+i];
-        if (!valid_opt2(&f)) return NN2_OC_INVALID;
+        /* v0.4 receiver policy: unknown science bits invalidate the affected
+         * slot, not the other slots. Engineering values remain diagnostic. */
+        bool engineering=(f.frame_flags & 4u)!=0u;
+        bool frame_unknown=(f.frame_flags & ~15u)!=0u;
+        for (unsigned i=0;i<20u;++i) {
+            nn2_oc_slot_t *s=&f.slot[i];
+            bool unknown=frame_unknown || s->quality>4u || (s->reason & 0xF000u)!=0u;
+            for (unsigned d=0;d<4u;++d) if (s->det[d].det_flags & 0x80u) unknown=true;
+            if (!unknown) continue;
+            increment(&stats->warning_slots);
+            if (engineering) continue;
+            s->quality=0; s->verified_mask=0; s->witness_ain=255;
+            s->reason=(uint16_t)((s->reason & 0xFFFu) | 0x100u);
+            for (unsigned d=0;d<4u;++d) {
+                s->det[d].sum_on=INT32_MIN; s->det[d].sum_off=INT32_MIN;
+                s->det[d].sd_on_q4=UINT16_MAX; s->det[d].sd_off_q4=UINT16_MAX;
+                s->det[d].det_flags &= 0x3Fu;
+            }
+        }
+        if (!engineering) f.frame_flags &= 15u;
+        if (!valid_opt2(&f, false)) return NN2_OC_INVALID;
         *opt=f; return NN2_OC_OK;
     }
     if (p[1]==3u) {
@@ -152,5 +175,5 @@ nn2_oc_result_t nn2_oc_decode(const uint8_t *p, size_t len, nn2_oc_opt2_t *opt,
         if (!valid_raw(&f)) return NN2_OC_INVALID;
         *raw=f; return NN2_OC_OK;
     }
-    return NN2_OC_UNKNOWN_LAYOUT;
+    increment(&stats->unsupported_layouts); return NN2_OC_UNKNOWN_LAYOUT;
 }

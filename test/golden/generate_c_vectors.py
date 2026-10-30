@@ -46,10 +46,10 @@ def generate(path):
             out.append('nn2_oc_opt2_t opt={0}; nn2_oc_raw_t raw={0};\n')
             out.append('CHECK(nn2_oc_decode(expected,sizeof(expected),&opt,&raw,&stats)=='+results[v['decode_result']]+');\n')
             if v['decode_result']=='OK':
-                out.append(checks(v['input'],'opt' if layout==2 else 'raw'))
+                out.append(checks(v.get('decoded_input',v['input']),'opt' if layout==2 else 'raw'))
                 out.append('CHECK(nn2_oc_decode(expected,sizeof(expected)-1,&opt,&raw,&stats)!=NN2_OC_OK);\n')
         out.append('}\n')
-    out.append('CHECK(stats.oversized_payloads==2); stats.oversized_payloads=UINT32_MAX; CHECK(nn2_oc_decode(wire,sizeof(wire),0,0,&stats)==NN2_OC_TOO_LARGE); CHECK(stats.oversized_payloads==UINT32_MAX);\n')
+    out.append('CHECK(stats.oversized_payloads==2); CHECK(stats.unsupported_sources==1); CHECK(stats.unsupported_layouts==2); CHECK(stats.warning_slots==24); stats.oversized_payloads=UINT32_MAX; CHECK(nn2_oc_decode(wire,sizeof(wire),0,0,&stats)==NN2_OC_TOO_LARGE); CHECK(stats.oversized_payloads==UINT32_MAX);\n')
     out.append('printf("PASS: '+str(len(data['vectors']))+' shared golden codec vectors, field comparisons and rejection checks\\n"); return 0; }\n')
     return ''.join(out)
 
