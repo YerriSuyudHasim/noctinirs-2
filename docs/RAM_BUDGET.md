@@ -25,10 +25,9 @@ recorded in `docs/BATCH3_RAW_RAM_FIX.md`).
 | `main` `s_raw` (pointer only) | 4 | `[sumber]` | RAW buffer is no longer static (see section 2) |
 | Other `.bss` (not registered) | 16 776 | `[hitung]` | Remainder of `.bss` after the registered items above |
 
-Limits in `config/ram_budget.json` are the bench figures above. Batch 4a changes
-`.bss` by about +20 B, so the gate is expected to report `OVER` until the Owner
-either approves that delta (and the limit is raised with that approval) or the
-baseline total is confirmed.
+Limits in `config/ram_budget.json`: symbol limits are the bench figures above, and `nn2_net.s_status`
+is 48 B (Owner approval, 2026-10-31). The `.dram0.bss` total is **not set**. It is taken from the
+Owner's linker map at the first bench build, and `check_ram_budget.py` reports it as `UNSET`.
 
 ## 2. Dynamic RAW buffer (heap, only while ENGINEERING and STOPPED)
 
