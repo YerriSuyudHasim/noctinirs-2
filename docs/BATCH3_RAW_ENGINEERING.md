@@ -38,6 +38,15 @@ legacy port 3334 change is included.
 - R5: the bench receiver owns START/heartbeat/STOP on one control endpoint,
   checks envelope CRC/length and RAW structure, and saves original NN2 datagrams
   plus CSV. It never produces a science interpretation.
+  R5 bench follow-up (parent 57976b3): STOP confirmation accepts an owner heartbeat
+  INVALID_STATE only with state STOPPED; other errors stay errors and the
+  confirmation deadline remains five seconds. The summary is flushed before
+  reporting errors, including failed STOP confirmation; exit 0 requires confirmed
+  STOP. `gap` counts firmware GAP_BEFORE flags, while `breaks` counts sample-index
+  discontinuities and `lost_in_breaks` sums forward missing positions (u32 wrap
+  is contiguous). UDP loss can cause breaks without a firmware gap. Loss before
+  the first or after the last accepted sample is not inferred; duplicate/backward
+  breaks add no lost positions. No firmware/codec validation or file layout changes.
 - R6: host coverage includes byte-identical ACQ1 envelopes, frame versus message
   sequencing, RAW N=1/N=100 and empty, rejection of N=0/N=101, STOP-only mode,
   overflow/gap/highwater/drop counts, signed int24, sample wrap and RAW received

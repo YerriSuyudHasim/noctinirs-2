@@ -3,12 +3,18 @@
 UDP 3333 endpoint. Run set-mode --mode ENGINEERING while stopped first.
 Binary output: repeated u16-LE datagram length followed by original NN2 bytes.
 CSV output: sample_index, ain0..ain3, phase_class, slot_index.
+Summary gap counts firmware GAP_BEFORE packets. breaks counts discontinuities
+between consecutive accepted sample indices, including lost UDP packets;
+lost_in_breaks sums forward missing positions across those breaks (u32 wrap
+is contiguous). Duplicate/backward breaks add no missing positions. These are
+between-sample observations, not a count of loss before/after the capture.
 """
 import argparse
 import csv
 import math
 import socket
 import struct
+import sys
 import time
 import nn2ctl
 
@@ -38,6 +44,7 @@ class Capture:
         self.csv = csv.writer(csv_file)
         self.csv.writerow(('sample_index', 'ain0', 'ain1', 'ain2', 'ain3', 'phase_class', 'slot_index'))
         self.packets = self.samples = self.gaps = self.invalid = 0
+        self.breaks = self.lost_in_breaks = 0
         self.last = None
         self.session = None
 
@@ -49,13 +56,41 @@ class Capture:
         except (ValueError, struct.error):
             self.invalid += 1
             return
-        discontinuity = self.last is not None and rows[0][0] != ((self.last+1) & 0xffffffff)
-        self.gaps += bool(flags & 2 or discontinuity)
+        self.gaps += bool(flags & 2)
+        if self.last is not None:
+            missing = (rows[0][0] - self.last - 1) & 0xffffffff
+            if missing:
+                self.breaks += 1
+                if missing < 0x80000000:
+                    self.lost_in_breaks += missing
         self.last = rows[-1][0]
         self.binary.write(struct.pack('<H', len(wire)) + wire)
         self.csv.writerows(rows)
         self.packets += 1
         self.samples += len(rows)
+
+    def summary(self):
+        return (f'ENGINEERING only: packets={self.packets} samples={self.samples} '
+                f'gap={self.gaps} breaks={self.breaks} lost_in_breaks={self.lost_in_breaks} '
+                f'invalid={self.invalid}')
+
+
+def confirm_stop(client):
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            reply = client.request('heartbeat')
+        except TimeoutError:
+            time.sleep(0.05)
+            continue
+        # Session release is successful STOP evidence only in this exact state.
+        if reply['error'] == 'INVALID_STATE' and reply['state'] == 'STOPPED':
+            return
+        nn2ctl.require_ok(reply)
+        if reply['state'] == 'STOPPED':
+            return
+        time.sleep(0.05)
+    raise RuntimeError('STOP confirmation timed out')
 
 
 def main():
@@ -76,43 +111,43 @@ def main():
         nn2ctl.require_ok(client.request('set-fs', bytes([args.rate])))
         with open(args.output+'.bin', 'wb') as binary, open(args.output+'.csv', 'w', newline='') as csv_file:
             capture = Capture(binary, csv_file)
-            nn2ctl.require_ok(client.request('start'))
-            started = True
-            capture.session = client.session_id
-            client.packet_sink = capture.accept
-            end = time.monotonic() + args.seconds
-            heartbeat = 0.0
-            while time.monotonic() < end:
-                now = time.monotonic()
-                if now >= heartbeat:
-                    reply = nn2ctl.require_ok(client.request('heartbeat'))
-                    if reply['state'] not in ('STARTING', 'STREAMING') or client.session_id != capture.session:
-                        raise RuntimeError('session ended during capture')
-                    heartbeat = now + 0.5  # NN2_APP_HEARTBEAT_PERIOD_US = 500000.
-                client.sock.settimeout(min(0.05, max(0.001, end-time.monotonic())))
-                try:
-                    wire = client.sock.recv(nn2ctl.MAX_PACKET+1)
-                except socket.timeout:
-                    continue
-                capture.accept(wire)
-            nn2ctl.require_ok(client.request('stop'))
-            started = False
-            deadline = time.monotonic()+5
-            while time.monotonic() < deadline:
-                reply = nn2ctl.require_ok(client.request('heartbeat'))
-                if reply['state'] == 'STOPPED':
-                    break
-                time.sleep(0.05)
-            else:
-                raise RuntimeError('STOP confirmation timed out')
-            print(f'ENGINEERING only: packets={capture.packets} samples={capture.samples} gap={capture.gaps} invalid={capture.invalid}')
-    finally:
-        try:
-            if started:
+            try:
+                nn2ctl.require_ok(client.request('start'))
+                started = True
+                capture.session = client.session_id
+                client.packet_sink = capture.accept
+                end = time.monotonic() + args.seconds
+                heartbeat = 0.0
+                while time.monotonic() < end:
+                    now = time.monotonic()
+                    if now >= heartbeat:
+                        reply = nn2ctl.require_ok(client.request('heartbeat'))
+                        if reply['state'] not in ('STARTING', 'STREAMING') or client.session_id != capture.session:
+                            raise RuntimeError('session ended during capture')
+                        heartbeat = now + 0.5  # NN2_APP_HEARTBEAT_PERIOD_US = 500000.
+                    client.sock.settimeout(min(0.05, max(0.001, end-time.monotonic())))
+                    try:
+                        wire = client.sock.recv(nn2ctl.MAX_PACKET+1)
+                    except socket.timeout:
+                        continue
+                    capture.accept(wire)
                 nn2ctl.require_ok(client.request('stop'))
-        finally:
-            client.close()
+                started = False
+                confirm_stop(client)
+            finally:
+                try:
+                    if started:
+                        nn2ctl.require_ok(client.request('stop'))
+                finally:
+                    # Keep files open through cleanup so late accepted RAW is counted.
+                    print(capture.summary(), flush=True)
+        return 0
+    except (OSError, RuntimeError, ValueError) as error:
+        print('ERROR: '+str(error), file=sys.stderr, flush=True)
+        return 1
+    finally:
+        client.close()
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())
