@@ -109,6 +109,33 @@ are in section 6. Build and bench are **NOT RUN**.
 - `tools/verify-v4-idf61.py`: PASS after updating the three manifest hashes.
 - Full CI command list: see section 6.
 
-## 6. Results
+## 6. Results (this environment: Ubuntu, gcc 13.3, cmake 3.28, Python 3.13; not Owner's Windows)
 
-Filled in from the logs below after the final run (`scratchpad` logs in the session).
+Same four commands on basis `02034ef` (worktree) and on the branch. Exit codes:
+
+| Command | Basis 02034ef | Branch | New failures |
+|---|---|---|---|
+| `python tools/run_host_tests.py --build <tmp> --evidence <tmp> --failure-controls` | exit 0; 143 tests, 0 failures (plus the deliberate failure-control run: 1 failure, expected) | exit 0; same | none |
+| `python tools/verify-v4-idf61.py` | exit 0 (PASS) | exit 0 (PASS, after the three manifest hashes) | none |
+| `python -m unittest discover -s tests/architecture -v` | exit 0; 127 tests OK | exit 0; 152 tests OK (+25: 13 RAM budget, 9 Batch 4a, 3 nn2ctl) | none |
+| `ctest --test-dir <tmp> --output-on-failure` | exit 0; 2/2 passed | exit 0; 2/2 passed (includes the 61 golden vectors) | none |
+
+Note: the Batch 3 record on Owner's Windows machine had four architecture failures
+from an old GCC (C11 options). This environment has a newer GCC, so the basis had
+no such failures. The comparison above is basis vs branch in the same environment.
+
+Golden vectors: 61 in `test/golden/optical_frame_vectors.json`, unchanged, and
+`nn2_optical_codec_tests` passed on both sides.
+
+Extra local checks:
+
+- Frame counter path: the FRAME loop of `nn2_net_poll` was extracted and compiled
+  with stubs (`gcc -Wall -Wextra -Werror -pedantic`, clean). With an ENOBUFS stub
+  it set `frame_last_errno=105` (ENOBUFS). The loop structure is unchanged.
+- Health and timing reply lengths (harness values): 1 278 / 1 259 B, both under the
+  1 349 B buffer limit. Baseline health 1 209 B.
+
+CI on the branch (GitHub Actions): see the final report. Not verified in this file.
+
+NOT RUN: ESP-IDF build of `firmware/v4-idf61`, flash, bench, `check_ram_budget.py`
+against a real map, and any on-target timing or heap measurement.
