@@ -9,7 +9,7 @@ import tempfile
 import unittest
 ROOT=Path(__file__).resolve().parents[2]
 class OpticalCodec(unittest.TestCase):
- def test_quality_abi_and_no_runtime_binding(self):
+ def test_quality_abi_and_raw_only_runtime_binding(self):
   header=(ROOT/'firmware/v4-idf61/components/nocti_v4_optical/include/nocti_v4_optical.h').read_text()
   body=re.search(r'typedef enum \{([^}]+)\} nocti_v4_slot_quality_t;',header,re.S).group(1)
   self.assertEqual(re.findall(r'NOCTI_V4_SLOT_QUALITY_(\w+)',body),['INVALID_UNDER_K','MINIMUM_VALID','TARGET_VALID','ABORTED_BY_STOP','STARTUP_WARMUP'])
@@ -19,6 +19,7 @@ class OpticalCodec(unittest.TestCase):
   for directory in ['main','firmware/v4-idf61','components']:
    for path in (ROOT/directory).rglob('*'):
     if path.suffix not in ('.c','.h') or any(p in path.parts for p in ('build','managed_components')) or path.name in ('nn2_core_optical_codec.c','nn2_core_optical_codec.h'):continue
+    if path.relative_to(ROOT).as_posix() in ('components/nn2_core/include/nn2_core_raw_buffer.h','components/nn2_core/src/nn2_core_raw_buffer.c'):continue
     self.assertNotIn('nn2_oc_',path.read_text(encoding='utf-8'),str(path))
  def test_shared_vectors_in_c(self):
   cc=os.environ.get('NN2_TEST_CC') or shutil.which('cc') or shutil.which('gcc')

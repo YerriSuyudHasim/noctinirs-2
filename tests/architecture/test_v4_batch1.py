@@ -179,6 +179,7 @@ int main(void) {
 #define __atomic_store_n(p, n, order) (*(p) = (n))
 #define HLOAD(field) (s_health.field)
 static nocti_v4_health_t s_health;
+static struct { uint32_t packets_sent, dropped, highwater; } raw_storage, *s_raw=&raw_storage;
 static int s_ads, s_async_led, s_scheduler, s_optical;
 static int s_control_worker = 1, s_control_network = 1;
 static unsigned uxTaskGetStackHighWaterMark(int handle) { (void)handle; return 500; }
@@ -207,7 +208,11 @@ static const char *control_boot_stage(void) { return "ready"; }
             code += 'static size_t ' + name + '(int *p, char *out, size_t cap) { (void)p; int n = snprintf(out, cap, "' + text + '"); return n > 0 && (size_t)n < cap ? (size_t)n : 0; }\n'
         code += formatter + """
 int main(void) {
- uint8_t out[1440u - 28u + 1u];
+ uint8_t out[1440u - 28u + 1u - 64u];
+ s_raw->packets_sent = 48000; s_raw->dropped = 4800000; s_raw->highwater = 128;
+ s_health.free_heap_before_wifi = 120000;
+ s_health.free_heap_after_wifi = 42000;
+ s_health.largest_free_block = 24000;
  s_health.adc_ok = 4800000;
  s_health.sample_clock_late_commits = 240000;
  s_health.sample_clock_late_1 = 240000;
@@ -230,10 +235,14 @@ int main(void) {
             for key in ("sample_clock_early_commits", "late_1", "late_2", "late_3p", "late_max",
                         "async_completion_errors", "async_submit_errors", "async_stale_completion",
                         "async_callback_core", "async_led_task_core", "scheduler_task_core",
-                        "udp_frames_sent", "udp_frames_dropped"):
+                        "udp_frames_sent", "udp_frames_dropped", "raw_packets_sent",
+                        "raw_dropped_samples", "raw_buffer_highwater"):
                 self.assertIn(key, fields)
             self.assertEqual(fields["late_1"], "240000")
             self.assertEqual(fields["late_max"], "1")
+        self.assertIn("free_heap_before_wifi=120000", reports[0])
+        self.assertIn("free_heap_after_wifi=42000", reports[0])
+        self.assertIn("largest_free_block=24000", reports[0])
         self.assertIn("i2c_on_us=", reports[0])
         self.assertIn("on_d=", reports[1])
 

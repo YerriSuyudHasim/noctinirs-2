@@ -13,4 +13,5 @@ void test_ads131_transport_suite(void);
 void test_v4_rtos_suite(void);
 void test_v4_sample_clock_suite(void);
 void test_v4_sample_edge_suite(void);
+void test_raw_engineering_suite(void);
 #endif

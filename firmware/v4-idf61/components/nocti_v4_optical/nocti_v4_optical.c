@@ -178,6 +178,7 @@ typedef struct {
     uint32_t raw_stage_head;
     uint32_t raw_stage_tail;
     uint32_t raw_stage_depth_max;
+    nn2_raw_buffer_t *engineering_raw; /* Stopped-only binding; no ADS ownership. */
     bool staging_integrity_fault;
     bool timing_backlog_integrity_fault;
     nocti_v4_slot_timing_t finalized_timing[FINALIZED_TIMING_CAPACITY];
@@ -671,10 +672,11 @@ static bool timing_is_complete(const nocti_v4_slot_timing_t *t)
  * counters and V4-6 representatives are both generated from this result;
  * no mutable scheduler snapshot is accepted here. */
 static sample_class_t canonical_classify(const nocti_v4_slot_timing_t *t,
-                                         uint32_t sequence)
+                                         uint32_t sequence, uint8_t *raw_class)
 {
     nocti_v4_sample_geometry_t geo;
     nocti_v4_sample_slot_plan_t plan;
+    *raw_class = NOCTI_V4_SAMPLE_CLASS_OUTSIDE;
     if (!timing_is_complete(t) || t->sample_plan_valid == 0u) {
         return SAMPLE_CLASS_TIMING_GAP;
     }
@@ -692,7 +694,8 @@ static sample_class_t canonical_classify(const nocti_v4_slot_timing_t *t,
     plan.off_first_affected = t->off_first_affected;
     plan.on_commit_late = t->on_commit_late;
     plan.off_commit_late = t->off_commit_late;
-    switch (nocti_v4_sample_classify(&geo, &plan, sequence)) {
+    *raw_class = (uint8_t)nocti_v4_sample_classify(&geo, &plan, sequence);
+    switch (*raw_class) {
     case NOCTI_V4_SAMPLE_CLASS_PRECOMMIT:
         return SAMPLE_CLASS_PRECOMMIT;
     case NOCTI_V4_SAMPLE_CLASS_COMMIT_LATE:
@@ -815,7 +818,13 @@ static void classify_complete_sample(optical_runtime_t *r, slot_work_t *work,
      * Only the measured OFF transition/commit boundaries are translated; the
      * active session GPTimer deadline is never changed by the model. */
     record_phase_sample(r, work, timing, ts);
-    switch (canonical_classify(timing, sample->drdy_sequence)) {
+    uint8_t raw_class;
+    sample_class_t category = canonical_classify(timing, sample->drdy_sequence, &raw_class);
+    if (r->engineering_raw)
+        nn2_raw_buffer_push(r->engineering_raw, sample->channel, sample->drdy_sequence,
+            sample->drdy_timestamp_us, (uint16_t)timing->session_epoch, raw_class,
+            raw_class == NOCTI_V4_SAMPLE_CLASS_OUTSIDE ? 0xFFu : timing->slot_index);
+    switch (category) {
     case SAMPLE_CLASS_PRECOMMIT:
         count_category(r, &r->health->optical_raw_precommit);
         add(&r->health->raw_rejected_precommit, 1u);
@@ -934,6 +943,7 @@ static void classify_ready_timings(optical_runtime_t *r, bool force)
                 if (is_startup_warmup_frame(timing)) {
                     add(&r->health->raw_samples_startup_warmup, 1u);
                 }
+                bool raw_outside = true;
                 /* ADS and scheduler carry independently owned session epochs.
                  * The sample must match the captured ADS epoch; the immutable
                  * timing record was separately checked against the scheduler
@@ -952,7 +962,11 @@ static void classify_ready_timings(optical_runtime_t *r, bool force)
                     r->staging_integrity_fault = true;
                 } else {
                     classify_complete_sample(r, work, timing, sample);
+                    raw_outside = false;
                 }
+                if (raw_outside && r->engineering_raw)
+                    nn2_raw_buffer_push(r->engineering_raw, sample->channel, sample->drdy_sequence,
+                        sample->drdy_timestamp_us, (uint16_t)timing->session_epoch, 0u, 0xFFu);
             }
             work->finalization_due = true;
             if (r->staging_integrity_fault || r->timing_backlog_integrity_fault) {
@@ -977,7 +991,11 @@ static void stage_raw(optical_runtime_t *r, const nocti_v4_raw_sample_t *sample)
         count_category(r, &r->health->optical_raw_startup_discard);
     } else {
         (void)raw_stage_push(r, sample);
+        return;
     }
+    if (r->engineering_raw)
+        nn2_raw_buffer_push(r->engineering_raw, sample->channel, sample->drdy_sequence,
+            sample->drdy_timestamp_us, (uint16_t)r->scheduler_session_epoch, 0u, 0xFFu);
 }
 
 static void abort_pending(optical_runtime_t *r)
@@ -985,6 +1003,10 @@ static void abort_pending(optical_runtime_t *r)
     pull_finalized_timings(r);
     classify_ready_timings(r, true);
     while (r->raw_stage_tail != r->raw_stage_head) {
+        const nocti_v4_raw_sample_t *sample = &r->raw_stage[r->raw_stage_tail & RAW_STAGE_MASK];
+        if (r->engineering_raw)
+            nn2_raw_buffer_push(r->engineering_raw, sample->channel, sample->drdy_sequence,
+                sample->drdy_timestamp_us, (uint16_t)r->scheduler_session_epoch, 0u, 0xFFu);
         ++r->raw_stage_tail;
         count_category(r, &r->health->optical_raw_stop_boundary);
     }
@@ -1571,4 +1593,13 @@ void nocti_v4_optical_sample_stack_watermarks(nocti_v4_optical_t *optical)
           uxTaskGetStackHighWaterMark(r->optical_task));
     store(&r->health->frame_consumer_task_stack_watermark_bytes,
           uxTaskGetStackHighWaterMark(r->frame_task));
+}
+
+esp_err_t nocti_v4_optical_bind_raw(nocti_v4_optical_t *optical, nn2_raw_buffer_t *buffer)
+{
+    if (!optical || !optical->initialized) return ESP_ERR_INVALID_STATE;
+    optical_runtime_t *r = optical->runtime;
+    if (r->running || r->stopping || r->session_prepared) return ESP_ERR_INVALID_STATE;
+    r->engineering_raw = buffer;
+    return ESP_OK;
 }

@@ -129,6 +129,7 @@ nn2_status_t nn2_net_poll(bool link_up, uint32_t epoch)
             .sin_addr.s_addr=(uint32_t)(peer>>16),.sin_port=(uint16_t)peer};
         int sent=sendto(s_socket,output,count,MSG_DONTWAIT,
             (struct sockaddr *)&target,sizeof(target));
+        nn2_app_comm_frame_tx_result(s_app, sent==(int)count);
         if (sent!=(int)count) {
             s_status.last_errno=sent<0?errno:EIO; ++s_status.send_errors;
         }

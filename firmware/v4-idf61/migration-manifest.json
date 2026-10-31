@@ -241,28 +241,31 @@
     {
       "path": "components/nocti_v4_optical/CMakeLists.txt",
       "historical_sha256": "2e2255bbb6fbf19b816212b07df3f9c3a81b0022d45e47b927c31a4ff6531ad3",
-      "active_sha256": "2e2255bbb6fbf19b816212b07df3f9c3a81b0022d45e47b927c31a4ff6531ad3",
+      "active_sha256": "f4ba063bad02e7b12b3a92389f10a7c0f1866dd8dcf1f62b4e347522e75eb1b7",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "Batch 3: bounded ENGINEERING RAW tap and existing UDP control binding; no timing configuration changes"
       ]
     },
     {
       "path": "components/nocti_v4_optical/include/nocti_v4_optical.h",
       "historical_sha256": "ac693aba8ae46c6c02101b54fe166425010ff581968abee051b9b34202bbce77",
-      "active_sha256": "9220f84340402689737fdc423f373a9dfea335734b3c80e1d97b31a952780369",
+      "active_sha256": "70489fcd1b5f22a94ed81df9b8f64c942d1f953857ab2488d40fe666121a0ce0",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "Sample-index master clock"
+        "Sample-index master clock",
+        "Batch 3: bounded ENGINEERING RAW tap and existing UDP control binding; no timing configuration changes"
       ]
     },
     {
       "path": "components/nocti_v4_optical/nocti_v4_optical.c",
       "historical_sha256": "88027b1d4dcfa4fa2d45289c65145592a36a06b6ee9939131fd17f71c10dbdf9",
-      "active_sha256": "c1e67e91e4f98469d26c4685f1fbe28e87e12eba53fb0e46116e5888c0330bf8",
+      "active_sha256": "22a0b457bc215420c8be35ea6f2587d2aab3ae2af94de99735bc3abdb4aed69e",
       "changes": [
         "Fs2 extension: raw staging 128 to 256 records, allowing 200-sample slot plus ingest batch",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
-        "Sample-index master clock"
+        "Sample-index master clock",
+        "Batch 3: bounded ENGINEERING RAW tap and existing UDP control binding; no timing configuration changes"
       ]
     },
     {
@@ -363,7 +366,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "54ccaeffe13edafdd2634b35a0a08d3ed46d5cf45debc274025d9f47e2e1cfd2"
+      "sha256": "b3477be56c7972216a5f9e51c5bcce18babc21578856c32e16213cf57ada5248"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -385,7 +388,7 @@
   "shared_communication": [
     {
       "path": "components/nn2_core/CMakeLists.txt",
-      "sha256": "d1f7d2ade55481ea4df2d6c76429a09b27f3998e0d9ad7c1f9f78135b22f3ff7"
+      "sha256": "43bce948702e8d59abf57fe221133b6600bbb797d162bc012b8dbcefacce8e6d"
     },
     {
       "path": "components/nn2_core/include/nn2_core_acquisition.h",
@@ -401,7 +404,7 @@
     },
     {
       "path": "components/nn2_core/include/nn2_core_protocol.h",
-      "sha256": "deaee72ada89d84e5b269bc241d9e4682c7aa675f36085226f375f69cd9f7bea"
+      "sha256": "37980c64dfd2f38c605db41198016a01a9159fcd1c2289b19b8ec8299ea08264"
     },
     {
       "path": "components/nn2_core/include/nn2_core_ring.h",
@@ -417,7 +420,7 @@
     },
     {
       "path": "components/nn2_core/src/nn2_core_protocol.c",
-      "sha256": "c49591c6b25d7b34f8d8130fe050f80127f571abadf73733a34ce69d69dc6154"
+      "sha256": "3eba106123c2622111cacc39c6b508bff929f2b07ad2bf69e65e59e1cfebfe24"
     },
     {
       "path": "components/nn2_core/src/nn2_core_ring.c",
@@ -465,7 +468,7 @@
     },
     {
       "path": "components/nn2_ports/include/nn2_port_optical.h",
-      "sha256": "a017751fe30f56822c268dc582c754891f37249aec5bae90ec002e65f122da7f"
+      "sha256": "3954129f7e76b64a7edba0744ba91a53cecd48efab83d02422787ac3cc6c9b24"
     },
     {
       "path": "components/nn2_ports/include/nn2_port_safety.h",
@@ -473,7 +476,7 @@
     },
     {
       "path": "components/nn2_app/CMakeLists.txt",
-      "sha256": "7e57f2313a96f0a62e84a573791ecacf2f1f62054b2f4866f9c4078146459777"
+      "sha256": "c6e9a9cf02653145f782b19ac14beb3dcb8f4fd45b32978e5e99c9eca7708fc2"
     },
     {
       "path": "components/nn2_app/include/nn2_app_adc_diagnostic.h",
@@ -485,7 +488,7 @@
     },
     {
       "path": "components/nn2_app/include/nn2_app_comm.h",
-      "sha256": "2fd06e656717a3f6443f1c1f63b63abb65f3abc62274c9ee346432b7db3a6eab"
+      "sha256": "5fe573e73cefc7af240b7a756e052240ec033c97d62697dc49e59c402c32ef1c"
     },
     {
       "path": "components/nn2_app/include/nn2_app_provision.h",
@@ -505,7 +508,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "aca5f65c4b628ff428ee1bd280487ee5ff54ecc22f91c4e7e3cca5aabd19893b"
+      "sha256": "b4ad566e3d383b233136d320a7a56dae2e0781b91fb9cf945307b05f78e148bf"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",
@@ -541,7 +544,7 @@
     },
     {
       "path": "components/nn2_net/nn2_net.c",
-      "sha256": "d71afcb32ea9f96be0679880f9adb8e598543587cfff6c8055fc9740208170e7"
+      "sha256": "573edb228ce955cb70e80c405436b2c59acd2fbaed16886d3113ebbe454d7695"
     },
     {
       "path": "components/nn2_config/CMakeLists.txt",
@@ -554,6 +557,34 @@
     {
       "path": "components/nn2_config/nn2_config.c",
       "sha256": "fa53f57638b7d07f0cdcca6a1b889303e560a911bbe9fb52cd7c926a10813c17"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_raw_buffer.h",
+      "sha256": "20277bd92ae41f6cbdc8234fc83a783eba4c659fb4b65c4e4bbdcbac233fdd46"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_raw_buffer.c",
+      "sha256": "7428f8a1d156df35443f6cbdd484f513dfc6fbe729f7877fdd3121b0a233bbf5"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_optical_codec.h",
+      "sha256": "58436af6fc3a09d138e93c24ce02f33b3befe30781b2add93e09d8c90b4da6cd"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_optical_codec.c",
+      "sha256": "4ee92545d62877cd2deb43ec209a257bb9c513cb8680c232b5840c857023daad"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_raw_mode.h",
+      "sha256": "1c27a3adf4bc59a2c8dd876f1019cd8fa2d9d9e896376689e1369500db2458bd"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_raw_mode.c",
+      "sha256": "abd957a2d82fecfb86220812b1d474330da6b0616477c5f5265cad329b6911de"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_raw_memory.h",
+      "sha256": "dcccb459d6e158df8eced25f202470617d0f4f2b57a8738abf6f2c33fd9fc2d9"
     }
   ]
 }

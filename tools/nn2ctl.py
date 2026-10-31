@@ -18,7 +18,7 @@ import zlib
 COMMANDS = {"heartbeat": 1, "info": 2, "status": 3, "get-config": 4, "get-time": 5,
             "start": 0x10, "stop": 0x11, "safe-off": 0x20, "clear-fault": 0x21,
             "health": 0x30, "timing": 0x31,
-            "set-fs": 0x100, "set-led-current": 0x101}
+            "set-fs": 0x100, "set-led-current": 0x101, "set-mode": 0x102}
 ERRORS = ("OK", "INVALID_STATE", "INVALID_ARG", "UNKNOWN_COMMAND", "HW_FAULT", "BUSY",
           "BAD_FRAME", "PRECONDITION_FAILED", "RESERVED_FLAGS")
 STATES = ("BOOT", "STOPPED", "STARTING", "STREAMING", "STOPPING", "RECOVERING", "FAULTED", "SAFE_OFF")
@@ -89,6 +89,8 @@ def describe_reply(packet, request_id=None, opcode=None):
                   session_id=packet.session_id, msg_sequence=packet.sequence, received_us=rx)
     if error:
         if extra: raise ValueError("unexpected error extension")
+        if op == COMMANDS["set-mode"] and error == 7:
+            result["message"] = "RAW buffer: not enough internal memory"
     elif op == COMMANDS["info"]:
         result["info"] = extra.decode("ascii")
     elif op in (COMMANDS["health"], COMMANDS["timing"]):
@@ -174,6 +176,7 @@ class Client:
         self.session_id = 0
         self.sequence = 0
         self.frame_sink = None
+        self.packet_sink = None
     def close(self): self.sock.close()
     def request(self, command, payload=None):
         op = COMMANDS[command]
@@ -198,6 +201,9 @@ class Client:
                 try:
                     packet = decode(received)
                     if packet.msg_type == FRAME:
+                        if self.session_id and packet.session_id == self.session_id and self.packet_sink:
+                            self.packet_sink(received)
+                            continue
                         if self.session_id and packet.session_id == self.session_id and self.frame_sink:
                             self.frame_sink(describe_frame(packet))
                         continue
@@ -225,6 +231,7 @@ class Client:
 
 def require_ok(result):
     if result["error"] != "OK":
+        if result.get("message"): raise RuntimeError(result["message"])
         raise RuntimeError("device returned "+result["error"]+
                            f" (state={result.get('state', 'unknown')}, fault={result.get('fault', 'unknown')}"
                            f" {result.get('fault_name', 'UNKNOWN')})")
@@ -427,6 +434,7 @@ def usb_status(serial_port):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command",choices=list(COMMANDS)+["run"])
+    parser.add_argument("--mode", choices=("ACQ", "ENGINEERING"), help="set-mode; only while STOPPED")
     parser.add_argument("--serial-port")
     parser.add_argument("--host",default="192.168.4.1")
     parser.add_argument("--port",type=int,default=3333)
@@ -446,6 +454,7 @@ def main():
     client=None
     try:
         if not 1<=args.port<=65535: raise ValueError("UDP port")
+        if args.command=="set-mode" and args.mode is None: raise ValueError("set-mode requires --mode ACQ or ENGINEERING (STOPPED only)")
         if args.command=="set-fs" and args.rate is None: args.rate=5
         if args.rate is not None: validate_rate(args.rate)
         if args.command == "set-led-current" and args.current_ma is None: args.current_ma = 0
@@ -529,8 +538,11 @@ def main():
                 if result["state"] != "STOPPED": raise RuntimeError("stop ended in "+result["state"])
         else:
             payload=bytes([args.rate]) if args.command=="set-fs" else (
-                struct.pack("<BH",args.channel,args.current_ma) if args.command=="set-led-current" else None)
-            print(json.dumps(require_ok(client.request(args.command,payload))))
+                struct.pack("<BH",args.channel,args.current_ma) if args.command=="set-led-current" else (bytes([args.mode == "ENGINEERING"]) if args.command=="set-mode" else None))
+            result=client.request(args.command,payload)
+            if args.command=="set-mode" and result["error"]=="INVALID_STATE":
+                raise RuntimeError("set-mode rejected: session must be STOPPED; stop the running session first")
+            print(json.dumps(require_ok(result)))
         return 0
     except (OSError,RuntimeError,ValueError) as error:
         print("ERROR: "+str(error),file=sys.stderr);return 1
