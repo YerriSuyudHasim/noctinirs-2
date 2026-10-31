@@ -210,6 +210,9 @@ static const char *control_boot_stage(void) { return "ready"; }
 int main(void) {
  uint8_t out[1440u - 28u + 1u - 64u];
  s_raw.packets_sent = 48000; s_raw.dropped = 4800000; s_raw.highwater = 256;
+ s_health.free_heap_before_wifi = 120000;
+ s_health.free_heap_after_wifi = 42000;
+ s_health.largest_free_block = 24000;
  s_health.adc_ok = 4800000;
  s_health.sample_clock_late_commits = 240000;
  s_health.sample_clock_late_1 = 240000;
@@ -237,6 +240,9 @@ int main(void) {
                 self.assertIn(key, fields)
             self.assertEqual(fields["late_1"], "240000")
             self.assertEqual(fields["late_max"], "1")
+        self.assertIn("free_heap_before_wifi=120000", reports[0])
+        self.assertIn("free_heap_after_wifi=42000", reports[0])
+        self.assertIn("largest_free_block=24000", reports[0])
         self.assertIn("i2c_on_us=", reports[0])
         self.assertIn("on_d=", reports[1])
 

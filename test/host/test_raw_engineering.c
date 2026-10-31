@@ -144,11 +144,17 @@ static void full_buffer_gap_and_codec_limits(void)
     TEST_ASSERT_EQUAL(1416,n);
     TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
     TEST_ASSERT_EQUAL(100,raw.sample_count); TEST_ASSERT_EQUAL(1,raw.raw_flags);
-    while (nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp)) { }
-    nn2_raw_buffer_push(&buffer,ain,263,32875,1,0,255);
+    /* Publish after the overflow while older pre-gap entries remain queued. */
+    uint32_t after_drop=NN2_RAW_BUFFER_CAPACITY+7u;
+    nn2_raw_buffer_push(&buffer,ain,after_drop,(uint64_t)after_drop*125u,1,0,255);
     n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
     TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
-    TEST_ASSERT_EQUAL(3,raw.raw_flags); TEST_ASSERT_EQUAL(263,raw.first_sample_sequence);
+    TEST_ASSERT_EQUAL(NN2_RAW_BUFFER_CAPACITY-100u,raw.sample_count);
+    TEST_ASSERT_EQUAL(1,raw.raw_flags);
+    TEST_ASSERT_EQUAL(100,raw.first_sample_sequence);
+    n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+    TEST_ASSERT_EQUAL(3,raw.raw_flags); TEST_ASSERT_EQUAL(after_drop,raw.first_sample_sequence);
     TEST_ASSERT_EQUAL(7,buffer.dropped);
     size_t untouched=123;
     raw.sample_count=0;
@@ -158,9 +164,36 @@ static void full_buffer_gap_and_codec_limits(void)
     TEST_ASSERT_EQUAL(NN2_OC_TOO_LARGE,nn2_oc_encode_raw(&raw,wire,sizeof(wire),&untouched,&stats));
     TEST_ASSERT_EQUAL(123,untouched);
 }
+static void metadata_survives_ring_reuse(void)
+{
+    nn2_raw_buffer_reset(&buffer);
+    nn2_oc_raw_t raw; nn2_oc_stats_t stats={0};
+    const uint32_t origin=UINT32_MAX-64u;
+    for (uint32_t i=0;i<2u*NN2_RAW_BUFFER_CAPACITY+5u;++i) {
+        int32_t ain[4]={-8388608+(int32_t)i,-1,0,8388607-(int32_t)i};
+        uint64_t expected_ts=UINT64_C(0x10000000000)+(uint64_t)i*127u+(i%3u);
+        uint16_t epoch=(uint16_t)(UINT16_MAX-1u+i/11u);
+        uint8_t phase=(uint8_t)(i%9u), slot=phase ? (uint8_t)(i%20u) : 255u;
+        nn2_raw_buffer_push(&buffer,ain,origin+i,expected_ts,epoch,phase,slot);
+        uint64_t timestamp=0;
+        size_t n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+        TEST_ASSERT_EQUAL(30,n);
+        TEST_ASSERT_EQUAL_UINT64(expected_ts,timestamp);
+        TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+        TEST_ASSERT_EQUAL(origin+i,raw.first_sample_sequence);
+        TEST_ASSERT_EQUAL(epoch,raw.slot_plan_epoch);
+        TEST_ASSERT_EQUAL(1,raw.raw_flags);
+        TEST_ASSERT_EQUAL(phase,raw.sample[0].phase_class);
+        TEST_ASSERT_EQUAL(slot,raw.sample[0].slot_index);
+        TEST_ASSERT_EQUAL_MEMORY(ain,raw.sample[0].ain,sizeof(ain));
+    }
+    TEST_ASSERT_EQUAL(0,buffer.dropped);
+    TEST_ASSERT_EQUAL(1,buffer.highwater);
+}
 void test_raw_engineering_suite(void)
 {
     RUN_TEST(acq1_bytes_unchanged);
     RUN_TEST(mode_and_raw_sequence);
     RUN_TEST(full_buffer_gap_and_codec_limits);
+    RUN_TEST(metadata_survives_ring_reuse);
 }

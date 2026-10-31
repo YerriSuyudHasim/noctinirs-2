@@ -12,6 +12,7 @@
 #include "nn2_config.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 static nn2_app_comm_storage_t s_nn2_app;
 static nn2_raw_buffer_t s_raw;
 static bool s_raw_enabled;
@@ -314,6 +315,12 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             HLOAD(async_led_task_core), HLOAD(scheduler_task_core),
             HLOAD(udp_frames_sent), HLOAD(udp_frames_dropped));
     }
+    if (wrote > 0 && (size_t)wrote < cap && kind == 0u) {
+        wrote += snprintf((char *)out+wrote,cap-(size_t)wrote,
+            " free_heap_before_wifi=%" PRIu32 " free_heap_after_wifi=%" PRIu32
+            " largest_free_block=%" PRIu32,
+            HLOAD(free_heap_before_wifi),HLOAD(free_heap_after_wifi),HLOAD(largest_free_block));
+    }
     if (wrote < 0 || (size_t)wrote >= cap) return 0u;
     size_t used=(size_t)wrote;
     int extra=snprintf((char *)out+used,cap-used,
@@ -353,11 +360,20 @@ static esp_err_t control_init(void)
     if (nn2_app_comm_bind_optical(&s_nn2_app,&optical)!=NN2_OK) return ESP_FAIL;
     if (xTaskCreatePinnedToCore(control_worker,"v4_control",NOCTI_V4_RTOS_STACK_CONTROL_BYTES,NULL,NOCTI_V4_RTOS_PRIO_CONTROL,&s_control_worker,NOCTI_V4_RTOS_CORE_ACQ)!=pdPASS)
         return ESP_ERR_NO_MEM;
+    const uint32_t heap_caps=MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    __atomic_store_n(&s_health.free_heap_before_wifi,
+        (uint32_t)heap_caps_get_free_size(heap_caps),__ATOMIC_RELAXED);
     result=nn2_wifi_init();
     static nn2_port_clock_t clock={.now_us=control_now};
     if (result==ESP_OK) result=nn2_net_init(&s_nn2_app,&clock,3333u);
     if (result==ESP_OK) result=nn2_wifi_start();
     if (result!=ESP_OK) { (void)control_off(NULL); return result; }
+    /* Snapshot the internal 8-bit heap immediately before the net task request.
+     * Existing health storage only: no new task, allocation or data-path work. */
+    __atomic_store_n(&s_health.free_heap_after_wifi,
+        (uint32_t)heap_caps_get_free_size(heap_caps),__ATOMIC_RELAXED);
+    __atomic_store_n(&s_health.largest_free_block,
+        (uint32_t)heap_caps_get_largest_free_block(heap_caps),__ATOMIC_RELAXED);
     if (!s_control_fault) control_set_boot_stage(nocti_v4_boot_stage_name(NOCTI_V4_BOOT_READY));
     if (xTaskCreatePinnedToCore(control_network,"v4_nn2_net",NOCTI_V4_RTOS_STACK_NET_BYTES,NULL,NOCTI_V4_RTOS_PRIO_NET,&s_control_network,NOCTI_V4_RTOS_CORE_SOFT)!=pdPASS) {
         (void)control_off(NULL); (void)nn2_wifi_stop(); return ESP_ERR_NO_MEM;

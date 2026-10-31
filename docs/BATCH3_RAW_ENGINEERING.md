@@ -1,5 +1,9 @@
 # Batch 3: bounded engineering RAW integration
 
+Historical report for commit `3abe610`. The RAM follow-up changes capacity to
+128 entries and total buffer size to 6272 bytes; see
+[BATCH3_RAW_RAM_FIX.md](BATCH3_RAW_RAM_FIX.md) for current sizes and verification.
+
 Base: `e42f2bc9` (merge #87), branch `feat/n3-batch3-raw-engineering`.
 The initial repository root, branch, HEAD and clean status were checked before
 creating the work branch. Contract v0.4.3 SHA-256 was checked against the Owner's

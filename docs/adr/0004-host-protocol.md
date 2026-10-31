@@ -1203,12 +1203,16 @@ RAW is never science. RAW has no `frame_flags`, `gate_config_id` or
 `frame_flags=4` (ENGINEERING_UNGATED) and `gate_config_id=0` describe the mode in
 info/health/timing, rather than introducing OPT2 into this batch.
 
-The sole bound ADS consumer copies finalized samples to a fixed 256-entry SPSC
+The sole bound ADS consumer copies finalized samples to a fixed 128-entry SPSC
 RAW buffer, after the existing sample-clock classification. No extra ADS ring
 consumer, ISR work, allocation, logging or division is introduced. Unclassifiable
 startup/stop records use OUTSIDE/0xFF. Overflow drops newest, counts lost samples,
 and marks the first subsequently accepted record. Encoding splits at sequence
 holes, epoch changes and that marker; older buffered records are not mislabeled.
+The RAM follow-up reduces the buffer from 256 to 128 entries (16 ms at 8 kSPS)
+without changing RAW encoding. Entries retain full timestamps and epochs;
+separate gap bytes avoid per-entry padding. A 6272-byte static RAM budget is
+compile-time enforced. RAW overflow is still drop-newest with explicit accounting.
 The measured timestamp belongs to the first sample, not transmit time.
 `slot_plan_epoch` carries the low 16 bits of the immutable scheduler session epoch;
 `geometry_map_id=1` refers to config/optical_geometry_v1.json.

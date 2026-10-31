@@ -366,7 +366,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "6f6f374066950b663e9c10a8038604f4c1a5f8e58a224b7b411ec99dd5765f83"
+      "sha256": "e37b66fda1c42a6971e9776a70a9519cbef6d549c5ea3b9c7222a0af48c69edd"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -560,11 +560,11 @@
     },
     {
       "path": "components/nn2_core/include/nn2_core_raw_buffer.h",
-      "sha256": "7de2d0c106d763618f8974b2a254e77ed638f9df9ab88243b023548306b0d61d"
+      "sha256": "20277bd92ae41f6cbdc8234fc83a783eba4c659fb4b65c4e4bbdcbac233fdd46"
     },
     {
       "path": "components/nn2_core/src/nn2_core_raw_buffer.c",
-      "sha256": "4d59aad730006f7a7b21d700470eb23114a61260965a1a4c2ca654b0e731a486"
+      "sha256": "7428f8a1d156df35443f6cbdd484f513dfc6fbe729f7877fdd3121b0a233bbf5"
     },
     {
       "path": "components/nn2_core/include/nn2_core_optical_codec.h",
