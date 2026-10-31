@@ -170,6 +170,7 @@ typedef struct {
     uint32_t optical_raw_off_settle;
     uint32_t optical_raw_off_stable;
     uint32_t optical_raw_end_guard;
+    uint32_t optical_raw_commit_late;
     uint32_t optical_raw_startup_discard;
     uint32_t optical_raw_session_boundary;
     uint32_t optical_raw_stop_boundary;
@@ -260,6 +261,17 @@ typedef struct {
     /* Lifetime TWDT subscribe/kick failures. Not cleared with a scan session. */
     uint32_t task_wdt_subscribe_errors;
     uint32_t task_wdt_kick_errors;
+    /* Sample-index LED master. GPTimer alarms are not edges. */
+    uint32_t sample_clock_edges;
+    uint32_t sample_clock_late_commits;
+    uint32_t sample_clock_early_commits;
+    /* ON and OFF combined; cumulative within a scan, reset at START. */
+    uint32_t sample_clock_late_1;
+    uint32_t sample_clock_late_2;
+    uint32_t sample_clock_late_3p;
+    uint32_t sample_clock_late_max;
+    uint32_t sample_clock_missed_edges;
+    uint32_t sample_clock_spurious_alarm;
 } nocti_v4_health_t;
 
 void nocti_v4_health_reset(nocti_v4_health_t *health);

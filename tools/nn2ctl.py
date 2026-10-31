@@ -18,7 +18,7 @@ import zlib
 COMMANDS = {"heartbeat": 1, "info": 2, "status": 3, "get-config": 4, "get-time": 5,
             "start": 0x10, "stop": 0x11, "safe-off": 0x20, "clear-fault": 0x21,
             "health": 0x30, "timing": 0x31,
-            "set-fs": 0x100, "set-led-current": 0x101}
+            "set-fs": 0x100, "set-led-current": 0x101, "set-mode": 0x102}
 ERRORS = ("OK", "INVALID_STATE", "INVALID_ARG", "UNKNOWN_COMMAND", "HW_FAULT", "BUSY",
           "BAD_FRAME", "PRECONDITION_FAILED", "RESERVED_FLAGS")
 STATES = ("BOOT", "STOPPED", "STARTING", "STREAMING", "STOPPING", "RECOVERING", "FAULTED", "SAFE_OFF")
@@ -27,6 +27,7 @@ MAX_PACKET = 1472
 MAX_PAYLOAD = 1440
 REQUEST, REPLY, FRAME, SESSION_REPORT, EVENT = range(5)
 SIMULATED, TS_ESTIMATED = 1, 2
+FS_ALLOWED = (2, 4, 5, 8, 10)
 
 @dataclasses.dataclass(frozen=True)
 class Envelope:
@@ -64,6 +65,12 @@ def decode(data):
         raise ValueError("CRC32")
     return Envelope(kind, protocol, flags, session, sequence, stamp, data[28:-4])
 
+def fault_name(code):
+    """NN2 application fault namespace, not esp_err_t (0x010B is optical)."""
+    return {0: "NONE", 0x0102: "FAULT_OFF", 0x010A: "FAULT_CLOCK",
+            0x010B: "FAULT_OPTICAL"}.get(code, f"UNKNOWN_0x{code:04X}")
+
+
 def describe_reply(packet, request_id=None, opcode=None):
     if packet.msg_type != REPLY or len(packet.payload) < 28:
         raise ValueError("short/non-reply packet")
@@ -77,14 +84,22 @@ def describe_reply(packet, request_id=None, opcode=None):
         raise ValueError("simulation provenance")
     extra = packet.payload[28:]
     result = dict(request_id=rid, opcode=op, error=ERRORS[error], state=STATES[state],
-                  simulated=bool(simulated), fault=fault, boot_id=boot, device_us=packet.timestamp_us,
+                  simulated=bool(simulated), fault=fault, fault_name=fault_name(fault),
+                  boot_id=boot, device_us=packet.timestamp_us,
                   session_id=packet.session_id, msg_sequence=packet.sequence, received_us=rx)
     if error:
         if extra: raise ValueError("unexpected error extension")
+        if op == COMMANDS["set-mode"] and error == 7:
+            result["message"] = "RAW buffer: not enough internal memory"
     elif op == COMMANDS["info"]:
         result["info"] = extra.decode("ascii")
     elif op in (COMMANDS["health"], COMMANDS["timing"]):
-        result["diag"] = parse_diag(extra.decode("ascii"))
+        text = extra.decode("ascii")
+        result["diag"] = parse_diag(text)
+        if "i2c_on_us" in result["diag"] or "i2c_off_us" in result["diag"]:
+            result["async_i2c"] = parse_async_i2c(result["diag"])
+        if op == COMMANDS["timing"] and "on_d" in result["diag"]:
+            result["sync"] = parse_sync(result["diag"])
     elif op == COMMANDS["get-config"]:
         if len(extra) != 42 or extra[1] != 20: raise ValueError("config length")
         result.update(rate_hz=extra[0], slots=extra[1], current_ma=list(struct.unpack_from("<20H", extra, 2)))
@@ -161,6 +176,7 @@ class Client:
         self.session_id = 0
         self.sequence = 0
         self.frame_sink = None
+        self.packet_sink = None
     def close(self): self.sock.close()
     def request(self, command, payload=None):
         op = COMMANDS[command]
@@ -185,6 +201,9 @@ class Client:
                 try:
                     packet = decode(received)
                     if packet.msg_type == FRAME:
+                        if self.session_id and packet.session_id == self.session_id and self.packet_sink:
+                            self.packet_sink(received)
+                            continue
                         if self.session_id and packet.session_id == self.session_id and self.frame_sink:
                             self.frame_sink(describe_frame(packet))
                         continue
@@ -212,9 +231,44 @@ class Client:
 
 def require_ok(result):
     if result["error"] != "OK":
+        if result.get("message"): raise RuntimeError(result["message"])
         raise RuntimeError("device returned "+result["error"]+
-                           f" (state={result.get('state', 'unknown')}, fault={result.get('fault', 'unknown')})")
+                           f" (state={result.get('state', 'unknown')}, fault={result.get('fault', 'unknown')}"
+                           f" {result.get('fault_name', 'UNKNOWN')})")
     return result
+
+def validate_rate(rate, info=None):
+    allowed = FS_ALLOWED
+    if info is not None:
+        capabilities = dict(item.split("=", 1) for item in info.split(";") if "=" in item)
+        if "fs_allowed" in capabilities:
+            advertised = tuple(int(value) for value in capabilities["fs_allowed"].split(","))
+            allowed = tuple(value for value in FS_ALLOWED if value in advertised)
+    if rate not in allowed:
+        raise ValueError("rate must be one of " + ",".join(map(str, allowed)) + " Hz")
+
+
+def current_limits(info=None):
+    # Fallback for older firmware; INFO can narrow the supported maximum.
+    capabilities = dict(item.split("=", 1) for item in (info or "").split(";") if "=" in item)
+    default = int(capabilities.get("current_default_ma", "30"))
+    maximum = min(50, int(capabilities.get("current_max_ma", "50")))
+    if not 0 <= default <= maximum:
+        raise ValueError("invalid firmware current limits")
+    return default, maximum
+
+
+def validate_current(current, info=None):
+    _, maximum = current_limits(info)
+    if not 0 <= current <= maximum:
+        raise ValueError(f"current must be 0..{maximum} mA")
+
+
+def warn_current(currents):
+    if any(current > 30 for current in currents):
+        print("PERINGATAN: arus di atas default 30 mA; pastikan irradiansi sudah dihitung dan aman untuk kulit",
+              file=sys.stderr)
+
 
 def provision_line(ssid,password):
     # Legacy encoding helper only; SoftAP firmware rejects provisioning commands.
@@ -222,6 +276,83 @@ def provision_line(ssid,password):
     if not 1<=len(s)<=32 or b"\0" in s or not 8<=len(p)<=63 or any(c<32 or c>126 for c in p):
         raise ValueError("credential encoding")
     return b"WIFI "+s.hex().encode()+b" "+p.hex().encode()+b"\n"
+
+def parse_v4_optical_time(payload):
+    """Version-2 V4 optical frame time words. This is not an ACQ1 frame.
+
+    Offset 16 is the measured slot-0 DRDY latch (u64 LE). Offset 1176 is
+    first_sample_sequence and adc_fs_hz. The legacy relative header is not
+    read here. frames=unsupported stays on the control socket until a NN2
+    FRAME binder exists.
+    """
+    if not isinstance(payload, (bytes, bytearray)) or len(payload) != 1184 or payload[0] != 2:
+        raise ValueError("v4 optical time")
+    anchor = struct.unpack_from("<Q", payload, 16)[0]
+    first, rate = struct.unpack_from("<II", payload, 1176)
+    if rate != 8000:
+        raise ValueError("adc rate")
+    return dict(version=2, anchor_us=anchor, first_sample_sequence=first, adc_fs_hz=rate)
+
+def parse_async_i2c(fields):
+    """Latest per-slot submit-to-ISR-completion durations; x means unknown."""
+    values = []
+    for key in ("i2c_on_us", "i2c_off_us"):
+        parts = fields.get(key, "").split(",")
+        if len(parts) != 20:
+            raise ValueError("async I2C slot list")
+        row = [None if value == "x" else int(value, 10) for value in parts]
+        if any(value is not None and not 0 <= value <= 0xffffffff for value in row):
+            raise ValueError("async I2C duration")
+        values.append(row)
+    return [dict(slot=slot, on_submit_complete_us=values[0][slot],
+                 off_submit_complete_us=values[1][slot]) for slot in range(20)]
+
+
+def parse_sync(fields):
+    """Expand a timing report into planned and actual LED-edge sample indices.
+
+    on_d/off_d are signed sample deltas from the planned edge, or x when that
+    slot's commit has not been seen. Planned ON for slot s is
+    anchor + s * slot_samples. Planned OFF adds off_samples.
+    """
+    required = ("fs", "anchor", "frame_delta", "slot_samples", "off_samples",
+                "missed", "catchup", "gap", "edge_miss", "on_d", "off_d")
+    missing = [name for name in required if name not in fields]
+    if missing:
+        raise ValueError("sync missing " + ",".join(missing))
+    numbers = {name: int(fields[name], 10) for name in required if name not in ("on_d", "off_d")}
+    if numbers["fs"] != 8000 or not 0 <= numbers["anchor"] <= 0xffffffff:
+        raise ValueError("sync sample clock")
+    if numbers["slot_samples"] < 0 or numbers["off_samples"] < 0:
+        raise ValueError("sync geometry")
+
+    def edges(text, planned_of):
+        parts = text.split(",")
+        if len(parts) != 20:
+            raise ValueError("sync slot list")
+        rows = []
+        for slot, item in enumerate(parts):
+            planned = None if numbers["slot_samples"] == 0 else (
+                (numbers["anchor"] + planned_of(slot)) & 0xffffffff)
+            if item == "x":
+                rows.append(dict(planned=planned, actual=None, known=False, delta=None))
+            else:
+                delta = int(item, 10)
+                actual = None if planned is None else (planned + delta) & 0xffffffff
+                rows.append(dict(planned=planned, actual=actual, known=True, delta=delta))
+        return rows
+
+    on = edges(fields["on_d"], lambda slot: slot * numbers["slot_samples"])
+    off = edges(fields["off_d"], lambda slot: slot * numbers["slot_samples"] + numbers["off_samples"])
+    return dict(fs=numbers["fs"], anchor=numbers["anchor"], frame_delta=numbers["frame_delta"],
+                slot_samples=numbers["slot_samples"], off_samples=numbers["off_samples"],
+                missed=numbers["missed"], catchup=numbers["catchup"], gap=numbers["gap"],
+                edge_miss=numbers["edge_miss"],
+                slots=[dict(slot=slot, on_planned=on[slot]["planned"], on_actual=on[slot]["actual"],
+                            on_known=on[slot]["known"], off_planned=off[slot]["planned"],
+                            off_actual=off[slot]["actual"], off_known=off[slot]["known"],
+                            on_delta=on[slot]["delta"], off_delta=off[slot]["delta"])
+                       for slot in range(20)])
 
 def parse_diag(text):
     """Parse a V4 health or timing report. This is not an ACQ1 frame."""
@@ -303,15 +434,16 @@ def usb_status(serial_port):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command",choices=list(COMMANDS)+["run"])
+    parser.add_argument("--mode", choices=("ACQ", "ENGINEERING"), help="set-mode; only while STOPPED")
     parser.add_argument("--serial-port")
     parser.add_argument("--host",default="192.168.4.1")
     parser.add_argument("--port",type=int,default=3333)
     parser.add_argument("--timeout",type=float,default=0.5)
     parser.add_argument("--retries",type=int,default=2)
     parser.add_argument("--rate",type=int,default=None,
-                        help="Frame rate for set-fs, or optional configuration before start/run; integer 2..10 Hz; boot default is5 Hz")
+                        help="Frame rate for set-fs, or optional configuration before start/run; one of 2,4,5,8,10 Hz; boot default is5 Hz")
     parser.add_argument("--channel",type=int,default=0)
-    parser.add_argument("--current-ma",type=int,default=0)
+    parser.add_argument("--current-ma",type=int,default=None)
     parser.add_argument("--seconds",type=float,default=10)
     parser.add_argument("--led",action="store_true",
                         help="Explicitly start real LEDs in the opt-in bring-up profile; requires an approved bench procedure")
@@ -322,14 +454,25 @@ def main():
     client=None
     try:
         if not 1<=args.port<=65535: raise ValueError("UDP port")
+        if args.command=="set-mode" and args.mode is None: raise ValueError("set-mode requires --mode ACQ or ENGINEERING (STOPPED only)")
         if args.command=="set-fs" and args.rate is None: args.rate=5
-        if args.rate is not None and not 2 <= args.rate <= 10: raise ValueError("rate must be an integer from2 to10 Hz")
-        if args.command=="set-led-current" and not (0<=args.channel<20 and 0<=args.current_ma<=50): raise ValueError("channel/current")
+        if args.rate is not None: validate_rate(args.rate)
+        if args.command == "set-led-current" and args.current_ma is None: args.current_ma = 0
+        if args.current_ma is not None: validate_current(args.current_ma)
+        if args.command == "set-led-current" and not 0 <= args.channel < 20: raise ValueError("channel")
         if args.command=="run" and (not math.isfinite(args.seconds) or args.seconds <= 0): raise ValueError("duration must be positive and finite")
         client=Client(args.host,args.port,args.timeout,args.retries)
+        if args.command == "set-led-current":
+            info = require_ok(client.request("info"))
+            validate_current(args.current_ma, info["info"])
+            warn_current([args.current_ma])
+        if args.command == "set-fs":
+            info = require_ok(client.request("info"))
+            validate_rate(args.rate, info["info"])
         if args.command in ("start", "run"):
             info = require_ok(client.request("info"))
             print(json.dumps(info), flush=True)  # One cached preflight reply, before START.
+            if args.rate is not None: validate_rate(args.rate, info["info"])
             if args.acquisition and "frames=ACQ1" not in info["info"]:
                 raise RuntimeError("ACQ1 acquisition is not enabled")
             real_led = "led=REAL_BRINGUP" in info["info"]
@@ -351,6 +494,19 @@ def main():
                     raise ValueError("SHORT advisory firmware has no valid duration capability")
                 if args.command == "run" and limit_s and args.seconds > limit_s:
                     raise ValueError(f"Running firmware advertises limit_s={limit_s}; Owner build required for host-controlled duration")
+            # Inspect the configured per-channel values before START. An explicit
+            # --current-ma uses the existing channel command for all 20 channels.
+            if real_led or args.current_ma is not None:
+                if args.current_ma is not None:
+                    validate_current(args.current_ma, info["info"])
+                    currents = [args.current_ma] * 20
+                else:
+                    currents = require_ok(client.request("get-config"))["current_ma"]
+                for current in currents: validate_current(current, info["info"])
+                warn_current(currents)
+                if args.current_ma is not None:
+                    for channel, current in enumerate(currents):
+                        require_ok(client.request("set-led-current", struct.pack("<BH", channel, current)))
             if args.rate is not None:
                 require_ok(client.request("set-fs", bytes([args.rate])))
         if args.command=="run":
@@ -382,8 +538,11 @@ def main():
                 if result["state"] != "STOPPED": raise RuntimeError("stop ended in "+result["state"])
         else:
             payload=bytes([args.rate]) if args.command=="set-fs" else (
-                struct.pack("<BH",args.channel,args.current_ma) if args.command=="set-led-current" else None)
-            print(json.dumps(require_ok(client.request(args.command,payload))))
+                struct.pack("<BH",args.channel,args.current_ma) if args.command=="set-led-current" else (bytes([args.mode == "ENGINEERING"]) if args.command=="set-mode" else None))
+            result=client.request(args.command,payload)
+            if args.command=="set-mode" and result["error"]=="INVALID_STATE":
+                raise RuntimeError("set-mode rejected: session must be STOPPED; stop the running session first")
+            print(json.dumps(require_ok(result)))
         return 0
     except (OSError,RuntimeError,ValueError) as error:
         print("ERROR: "+str(error),file=sys.stderr);return 1

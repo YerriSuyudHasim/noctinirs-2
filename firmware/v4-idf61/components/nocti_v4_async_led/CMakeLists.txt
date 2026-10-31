@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS "nocti_v4_async_led.c"
     INCLUDE_DIRS "include"
+    LDFRAGMENTS "critical_paths.lf"
     REQUIRES
         freertos
         esp_common

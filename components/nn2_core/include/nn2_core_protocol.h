@@ -30,6 +30,7 @@ enum {
   NN2_CMD_CLEAR_FAULT = 0x0021,
   NN2_CMD_SET_FS = 0x0100,
   NN2_CMD_SET_LED_CURRENT = 0x0101,
+  NN2_CMD_SET_MODE = 0x0102, /* 0 ACQ normal, 1 ENGINEERING; stopped only */
   /* Read-only V4 diagnostics. Existing reply layouts are unchanged. */
   NN2_CMD_GET_HEALTH = 0x0030,
   NN2_CMD_GET_TIMING = 0x0031

@@ -25,7 +25,7 @@ typedef struct {
   nn2_port_optical_t optical;
   uint16_t fault, current_ma[20];
   uint8_t state, fs, next, next_watermark;
-  bool grace;
+  bool grace, engineering;
   cache_t cache[NN2_APP_REPLY_CACHE_SIZE];
   watermark_t watermark[4];
 } comm_t;
@@ -134,7 +134,7 @@ nn2_status_t nn2_app_comm_init(nn2_app_comm_storage_t *s, uint64_t boot,
               .fs = NN2_OPTICAL_DEFAULT_FS,
               .state = NN2_COMM_IDLE};
   for (unsigned i = 0; i < NN2_OPTICAL_SLOTS; ++i)
-    c.current_ma[i] = NN2_OPTICAL_BRINGUP_MA;
+    c.current_ma[i] = NN2_OPTICAL_DEFAULT_MA;
   nn2_status_t r = off(&c);
   memset(s, 0, sizeof(*s));
   save(s, &c);
@@ -144,7 +144,7 @@ nn2_status_t nn2_app_comm_bind_optical(nn2_app_comm_storage_t *s,
                                       const nn2_port_optical_t *port) {
   comm_t c;
   if (!port || !port->start || !port->state || !port->clear_fault ||
-      !port->current_limit_ma || port->current_limit_ma > 50 || !load(s, &c))
+      !port->current_limit_ma || port->current_limit_ma > NN2_OPTICAL_MAX_MA || !load(s, &c))
     return NN2_ERR_INVALID_ARG;
   if (c.owner || c.state != NN2_COMM_IDLE || c.optical.state ||
       port->state(port->ctx) != NN2_OPTICAL_IDLE) return NN2_ERR_INVALID_STATE;
@@ -209,7 +209,7 @@ static uint16_t execute(comm_t *c, uint64_t peer, uint64_t now, uint16_t op,
     if (off(c) != NN2_OK)
       return NN2_REPLY_SAFETY;
     if (c->optical.start) {
-      nn2_port_optical_config_t config = {.fs = c->fs};
+      nn2_port_optical_config_t config = {.fs = c->fs, .engineering = c->engineering};
       memcpy(config.current_ma, c->current_ma, sizeof(config.current_ma));
       nn2_status_t result = c->optical.start(c->optical.ctx, &config);
       if (result != NN2_OK)
@@ -260,6 +260,16 @@ static uint16_t execute(comm_t *c, uint64_t peer, uint64_t now, uint16_t op,
     c->fault = 0;
     end_session(c, NN2_COMM_IDLE);
     return NN2_REPLY_OK;
+  case NN2_CMD_SET_MODE:
+    if (c->state != NN2_COMM_IDLE) return NN2_REPLY_STATE;
+    if (arg[0] > 1u) return NN2_REPLY_ARGUMENT;
+    if (c->engineering != (arg[0] != 0) && c->optical.set_mode) {
+      nn2_status_t result = c->optical.set_mode(c->optical.ctx, arg[0] != 0);
+      if (result != NN2_OK)
+        return result == NN2_ERR_FULL ? NN2_REPLY_PRECONDITION : NN2_REPLY_BUSY;
+    }
+    c->engineering = arg[0] != 0;
+    return NN2_REPLY_OK;
   case NN2_CMD_SET_FS:
     if (!nn2_core_optical_fs_valid(arg[0]) || (c->optical.real_samples &&
         !(arg[0]==2 || arg[0]==4 || arg[0]==5 || arg[0]==8 || arg[0]==10)))
@@ -270,7 +280,7 @@ static uint16_t execute(comm_t *c, uint64_t peer, uint64_t now, uint16_t op,
     return NN2_REPLY_OK;
   case NN2_CMD_SET_LED_CURRENT:
     if (arg[0] >= 20 || nn2_core_get_u16(arg + 1) >
-        (c->optical.state ? c->optical.current_limit_ma : 50))
+        (c->optical.state ? c->optical.current_limit_ma : NN2_OPTICAL_MAX_MA))
       return NN2_REPLY_ARGUMENT;
     if (c->state != NN2_COMM_IDLE)
       return NN2_REPLY_STATE;
@@ -387,6 +397,17 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
     size_t n = strlen(info);
     memcpy(body + 20, info, n);
     reply.length += (uint16_t)n;
+    const char *mode = c.engineering ? ";mode=ENGINEERING;gate_config_id=0;frame_flags=4" : ";mode=ACQ";
+    n = strlen(mode);
+    memcpy(reply.payload + reply.length, mode, n);
+    reply.length += (uint16_t)n;
+    if (c.optical.read_raw_info) {
+      uint8_t diag[128];
+      n = c.optical.read_raw_info(c.optical.ctx, diag, sizeof(diag));
+      if (n < sizeof(diag) && reply.length + n <= sizeof(reply.payload)) {
+        memcpy(reply.payload + reply.length, diag, n); reply.length += (uint16_t)n;
+      }
+    }
   } else if (!error && op == NN2_CMD_GET_CONFIG) {
     body[20] = c.fs;
     body[21] = 20;
@@ -409,19 +430,25 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
       reply.length += 21;
     }
   } else if (!error && (op == NN2_CMD_GET_HEALTH || op == NN2_CMD_GET_TIMING)) {
-    uint8_t diag[1200];
+    /* Existing 28-byte reply prefix; reserve one local NUL outside wire text. */
+    uint8_t diag[NN2_CORE_PAYLOAD_MAX - 28u + 1u];
     const char *fallback = op == NN2_CMD_GET_HEALTH ? "v4health=0 reason=unavailable"
                                                     : "v4timing=0 reason=unavailable";
     size_t n = 0;
     if (c.optical.read_diag)
       n = c.optical.read_diag(c.optical.ctx, (uint8_t)(op == NN2_CMD_GET_HEALTH ? 0 : 1),
-                              diag, sizeof(diag));
+                              diag, sizeof(diag) - 64u);
     if (n == 0 || n >= sizeof(diag)) {
       n = strlen(fallback);
       memcpy(body + 20, fallback, n);
     } else
       memcpy(body + 20, diag, n);
     reply.length = (uint16_t)(reply.length + n);
+    const char *mode = c.engineering ? " mode=ENGINEERING gate_config_id=0 frame_flags=4" : " mode=ACQ";
+    size_t m = strlen(mode);
+    if (reply.length + m <= sizeof(reply.payload)) {
+      memcpy(reply.payload + reply.length, mode, m); reply.length += (uint16_t)m;
+    }
   }
   size_t count = nn2_core_packet_encode(&reply, output, capacity);
   if (!conflict && cacheable && argc <= 3 && count <= REPLY_MAX) {
@@ -460,13 +487,25 @@ size_t nn2_app_comm_frame(nn2_app_comm_storage_t *s, uint64_t *peer,
     comm_t c; nn2_core_packet_t packet={.type=NN2_MSG_FRAME,
         .protocol_version=1,.flags=NN2_FLAG_TS_ESTIMATED};
     if (!peer || !output || capacity<NN2_CORE_PACKET_MAX || !load(s,&c) ||
-        c.state!=NN2_COMM_STREAMING || !c.owner || !c.optical.read_frame)
+        c.state!=NN2_COMM_STREAMING || !c.owner ||
+        (c.engineering ? !c.optical.read_frame_ex : !c.optical.read_frame))
         return 0;
-    if (c.optical.read_frame(c.optical.ctx,packet.payload,sizeof(packet.payload),
+    size_t length = NN2_ACQ_PAYLOAD_SIZE;
+    if (c.engineering) {
+        if (c.optical.read_frame_ex(c.optical.ctx,packet.payload,sizeof(packet.payload),
+            &packet.timestamp_us,&length)!=NN2_OK || !length) return 0;
+    } else if (c.optical.read_frame(c.optical.ctx,packet.payload,sizeof(packet.payload),
         &packet.timestamp_us)!=NN2_OK) return 0;
-    packet.length=NN2_ACQ_PAYLOAD_SIZE; /* ACQ1: versioned local binding. */
+    packet.length=(uint16_t)length;
     packet.session_id=c.session; packet.sequence=++c.sequence;
     *peer=c.owner;
     size_t count=nn2_core_packet_encode(&packet,output,capacity);
     save(s,&c); return count;
+}
+
+void nn2_app_comm_frame_tx_result(nn2_app_comm_storage_t *s, bool sent)
+{
+    comm_t c;
+    if (load(s, &c) && c.optical.frame_tx_result)
+        c.optical.frame_tx_result(c.optical.ctx, sent);
 }

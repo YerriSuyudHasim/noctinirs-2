@@ -31,8 +31,13 @@ target_compile_options(nn2_behavior PRIVATE -Wall -Wextra -Werror -pedantic)
 nn2_require_c11(nn2_behavior)
 add_library(unity STATIC unity/unity.c)
 target_include_directories(unity PUBLIC unity)
+# The product and its tests use uint64_t even on a 32-bit host compiler.
+target_compile_definitions(unity PUBLIC UNITY_SUPPORT_64)
 nn2_require_c11(unity)
-add_executable(nn2_host_tests test_main.c test_acquisition.c test_ring.c test_sequencer.c test_contract.c test_storage.c test_ads131.c test_ads131_control.c test_ads131_transport.c test_v4_rtos.c)
+add_executable(nn2_host_tests test_main.c test_raw_engineering.c test_acquisition.c test_ring.c test_sequencer.c test_contract.c test_storage.c test_ads131.c test_ads131_control.c test_ads131_transport.c test_v4_rtos.c test_v4_sample_clock.c)
+target_sources(nn2_host_tests PRIVATE test_v4_sample_edge.c
+    "${ROOT}/firmware/v4-idf61/components/nocti_v4_common/nocti_v4_common.c")
+target_include_directories(nn2_host_tests PRIVATE v4_sdk_mocks)
 target_include_directories(nn2_host_tests PRIVATE "${ROOT}/firmware/v4-idf61/components/nocti_v4_common/include")
 target_link_libraries(nn2_host_tests PRIVATE nn2_behavior unity)
 target_compile_options(nn2_host_tests PRIVATE -Wall -Wextra -Werror -pedantic)
@@ -69,3 +74,16 @@ foreach(order IN ITEMS forward reverse)
 endforeach()
 enable_testing()
 add_test(NAME nn2_host_tests COMMAND nn2_host_tests)
+
+# Shared wire fixtures are generated as typed C inputs, not recalculated hex.
+set(optical_vectors "${CMAKE_BINARY_DIR}/optical_vectors.c")
+add_custom_command(OUTPUT "${optical_vectors}"
+    COMMAND "${Python3_EXECUTABLE}" "${ROOT}/test/golden/generate_c_vectors.py"
+        "${ROOT}/test/golden/optical_frame_vectors.json" "${optical_vectors}"
+    DEPENDS "${ROOT}/test/golden/generate_c_vectors.py"
+        "${ROOT}/test/golden/optical_frame_vectors.json" VERBATIM)
+add_executable(nn2_optical_codec_tests "${optical_vectors}")
+target_link_libraries(nn2_optical_codec_tests PRIVATE nn2_behavior)
+target_compile_options(nn2_optical_codec_tests PRIVATE -Wall -Wextra -Werror -pedantic)
+nn2_require_c11(nn2_optical_codec_tests)
+add_test(NAME nn2_optical_codec_tests COMMAND nn2_optical_codec_tests)

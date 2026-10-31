@@ -2,7 +2,7 @@
   "schema": 1,
   "source": "reference/v4",
   "target_sdk": "ESP-IDF 6.1",
-  "status": "local source candidate; NN2 communication bridge not compiled/linked or target-validated",
+  "status": "Built with ESP-IDF 6.1; bench evidence and remaining qualification limits are recorded in docs/V4_IDF61_SINGLE_CLOCK.md",
   "files": [
     {
       "path": "components/nocti_v4_ads/CMakeLists.txt",
@@ -23,41 +23,46 @@
     {
       "path": "components/nocti_v4_ads/nocti_v4_ads.c",
       "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
-      "active_sha256": "ba15ee6e93cc9b201d816a0d4cda49e970efe66778d1ae3c4082fe52d853bb2a",
+      "active_sha256": "1920e6a43401427bc0569b660eb249583e2b9f4b15fa562eff2d02d95199bad2",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
         "Dark consumer subscribes to the task watchdog and waits at most one second",
-        "Failed ADS init removes the DRDY handler and SPI bus, then the tasks exit; SPI acquire waits at most 3 s",
-        "Backlog fault comment matches NOCTI_V4_BACKLOG_FAULT_DEPTH 8"
+        "Failed ADS init removes the DRDY handler and SPI bus, then the tasks exit; SPI acquire uses the IDF 6.1 required portMAX_DELAY",
+        "Backlog fault comment matches NOCTI_V4_BACKLOG_FAULT_DEPTH 8",
+        "Sample-index master clock",
+        "PR78 bench fixes: supported SPI wait, ISR sample capture, bounded wakeups, IRAM runtime and diagnostic handoffs as applicable"
       ]
     },
     {
       "path": "components/nocti_v4_async_led/CMakeLists.txt",
       "historical_sha256": "5a9cb48e54114d2fef920576c2409404b8b0fc9faa01c79c4c77a3dd18ace542",
-      "active_sha256": "5a9cb48e54114d2fef920576c2409404b8b0fc9faa01c79c4c77a3dd18ace542",
+      "active_sha256": "9f27ff575c32fff813649ef1a7b8db9a6515b039f4e17c073cef09519db94c70",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "PR78 bench fixes: supported SPI wait, ISR sample capture, bounded wakeups, IRAM runtime and diagnostic handoffs as applicable"
       ]
     },
     {
       "path": "components/nocti_v4_async_led/include/nocti_v4_async_led.h",
       "historical_sha256": "f1bb6ff473c281a26792706bb1baa3126e79f2073f42bf4660aab8590bb3f383",
-      "active_sha256": "e77907687bcb17fc30f31a43049117fef2890672b5509a0403f4376cb97f59b3",
+      "active_sha256": "989221e1b20e0212e709ca7cc5f78ee0f372d51cba07f85ee856a4d8850b9942",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
+        "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
+        "PR78 bench fixes: supported SPI wait, ISR sample capture, bounded wakeups, IRAM runtime and diagnostic handoffs as applicable"
       ]
     },
     {
       "path": "components/nocti_v4_async_led/nocti_v4_async_led.c",
       "historical_sha256": "bd05bb16f584acd1b6da718820f575fc1cfa3b11eefb9fdc5eba769c7cea991b",
-      "active_sha256": "122abd96778e2f85f6ef354c007db4e9dd41a02c34dd0d78ca1e42d91e2df55a",
+      "active_sha256": "af9cae8f59cff0aeeea4d328ca7a8435b1b4fa346257c55e46a9964d94ee49c2",
       "changes": [
         "Configuration-bus status labels follow the approved 100 kHz overlay",
         "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
         "IDF6.1 compatibility: explicit ISR yield and direct-transaction completion proof before callback detach",
-        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
+        "PR78 bench fixes: supported SPI wait, ISR sample capture, bounded wakeups, IRAM runtime and diagnostic handoffs as applicable"
       ]
     },
     {
@@ -93,9 +98,10 @@
     {
       "path": "components/nocti_v4_common/CMakeLists.txt",
       "historical_sha256": "dd7c7842ee7df851305c1dc9ba532267bf5a1b5dba849cff26519854890a833f",
-      "active_sha256": "e7a8b4750ac6218dd3f63eb49e227285241a27c7f60ef2a982af299e622c1ef9",
+      "active_sha256": "7489d987133813e6c21d34f31905cce8b141a97a6b7b48df3a3bf9f1eb626aac",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "Sample-index master clock"
       ]
     },
     {
@@ -118,9 +124,11 @@
     {
       "path": "components/nocti_v4_common/nocti_v4_common.c",
       "historical_sha256": "6a9e08453e7d0450dffa95889a287603f26f816e0aa5aea5ebcdeeaff5425df2",
-      "active_sha256": "ac99bf71282bffafc1f38be57a5a586d9aec657f8bfb7c7a5d4a516d4a29faf4",
+      "active_sha256": "5e6fd756fb5e2a8ad4b3043b2e54026f79effc887c5fed87752e42cb247ddeb1",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "Sample-index master clock",
+        "PR78 bench fixes: supported SPI wait, ISR sample capture, bounded wakeups, IRAM runtime and diagnostic handoffs as applicable"
       ]
     },
     {
@@ -134,10 +142,11 @@
     {
       "path": "components/nocti_v4_health/include/nocti_v4_health.h",
       "historical_sha256": "cd4f7afa786aa90b5de8e8a8befcb2756036700375dd983df59ad6b5e53f5477",
-      "active_sha256": "24208bf972d6590cc3f40d3cfe4ba82c1a40da531efcb45ebf7d983978d214fc",
+      "active_sha256": "df440680ac40e838b580bdf69f12397349b97b1c326984353c43afa4fe88dbc9",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
+        "Sample-index master clock"
       ]
     },
     {
@@ -176,7 +185,7 @@
     {
       "path": "components/nocti_v4_led/CMakeLists.txt",
       "historical_sha256": "b1e69507c9fbc9fbcabb2d5b1576c2ea6cebbd1b0cec4f8475e949ff178c142c",
-      "active_sha256": "b1e69507c9fbc9fbcabb2d5b1576c2ea6cebbd1b0cec4f8475e949ff178c142c",
+      "active_sha256": "e1449c3170750c7c56c18d68d2ca21855d8cb9db490eaf980d9be5a480782e6f",
       "changes": [
         "Line ending normalization only; runtime source retained"
       ]
@@ -193,7 +202,7 @@
     {
       "path": "components/nocti_v4_led/nocti_v4_led.c",
       "historical_sha256": "377f207398d1fb3618303c321b28a6d51c95e61fcf3f95a8fdf6f2c89a0aac46",
-      "active_sha256": "bef6d7e14d82e924b2a394ec7452ecb140853023c94215487924dd54043a3df5",
+      "active_sha256": "ec4791be70bfcfe8223f113c5f1e87c7f5223f7d6cad62b50182fb89318d8f39",
       "changes": [
         "Retain active NN2 30 mA bring-up ceiling instead of historical 50 mA command ceiling",
         "Configuration-bus status labels follow the approved 100 kHz overlay",
@@ -221,36 +230,42 @@
     {
       "path": "components/nocti_v4_network/nocti_v4_network.c",
       "historical_sha256": "139efda5b6b16e2892f75a28a360b2831ce379120e07b3eef60191a3cada3efd",
-      "active_sha256": "2a526a3e997b2ffa54d1cf7489e767bc2f0e86482d5085dc951ab8ec7afe6696",
+      "active_sha256": "24e0e80754d1859b37b1a4aef96838be6311f088fdffc719da8b1bd4012f0312",
       "changes": [
         "Reject missing local WPA2 configuration before starting the network",
         "Remove automatic NVS erase fallback; preserve current provisioning",
-        "Use actual NETWORK_ERROR enum"
+        "Use actual NETWORK_ERROR enum",
+        "Sample-index master clock"
       ]
     },
     {
       "path": "components/nocti_v4_optical/CMakeLists.txt",
       "historical_sha256": "2e2255bbb6fbf19b816212b07df3f9c3a81b0022d45e47b927c31a4ff6531ad3",
-      "active_sha256": "2e2255bbb6fbf19b816212b07df3f9c3a81b0022d45e47b927c31a4ff6531ad3",
+      "active_sha256": "f4ba063bad02e7b12b3a92389f10a7c0f1866dd8dcf1f62b4e347522e75eb1b7",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "Batch 3: bounded ENGINEERING RAW tap and existing UDP control binding; no timing configuration changes"
       ]
     },
     {
       "path": "components/nocti_v4_optical/include/nocti_v4_optical.h",
       "historical_sha256": "ac693aba8ae46c6c02101b54fe166425010ff581968abee051b9b34202bbce77",
-      "active_sha256": "ac693aba8ae46c6c02101b54fe166425010ff581968abee051b9b34202bbce77",
+      "active_sha256": "70489fcd1b5f22a94ed81df9b8f64c942d1f953857ab2488d40fe666121a0ce0",
       "changes": [
-        "Line ending normalization only; runtime source retained"
+        "Line ending normalization only; runtime source retained",
+        "Sample-index master clock",
+        "Batch 3: bounded ENGINEERING RAW tap and existing UDP control binding; no timing configuration changes"
       ]
     },
     {
       "path": "components/nocti_v4_optical/nocti_v4_optical.c",
       "historical_sha256": "88027b1d4dcfa4fa2d45289c65145592a36a06b6ee9939131fd17f71c10dbdf9",
-      "active_sha256": "11ce92c5901cb1a4a38ff02eb7740249a4cc98f27dcf5cb028181c1081351c22",
+      "active_sha256": "22a0b457bc215420c8be35ea6f2587d2aab3ae2af94de99735bc3abdb4aed69e",
       "changes": [
         "Fs2 extension: raw staging 128 to 256 records, allowing 200-sample slot plus ingest batch",
-        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
+        "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
+        "Sample-index master clock",
+        "Batch 3: bounded ENGINEERING RAW tap and existing UDP control binding; no timing configuration changes"
       ]
     },
     {
@@ -264,10 +279,12 @@
     {
       "path": "components/nocti_v4_scheduler/include/nocti_v4_scheduler.h",
       "historical_sha256": "57f9afa3eb54fd523b110c66a1bb01df588995cc00ced03480dd46a301db7723",
-      "active_sha256": "68a9afb456dd31070adfe824c498b1c28e4a0ca5b11bd965a3cc06324d78259a",
+      "active_sha256": "08bef1973114d6d4476d593a63d07e67467e40950979d1d3f49e1ac21acd178e",
       "changes": [
         "Line ending normalization only; runtime source retained",
-        "Declare scoped stopped-only Fs setter"
+        "Declare scoped stopped-only Fs setter",
+        "Sample-index master clock",
+        "PR78 bench fixes: supported SPI wait, ISR sample capture, bounded wakeups, IRAM runtime and diagnostic handoffs as applicable"
       ]
     },
     {
@@ -283,11 +300,13 @@
     {
       "path": "components/nocti_v4_scheduler/nocti_v4_scheduler.c",
       "historical_sha256": "83064d25c3e559e6a0d3c6cdb2ec8a01f0a3c27d9b942b85a5d9673e1f3ec3d1",
-      "active_sha256": "623841a06c2e3ebca083a5d9fb8590a78728b244f8bd1eb310d9ceef2bb59ed8",
+      "active_sha256": "3d4a5b21c2dcace5b752797ddcdd8412c858d580a1117064614718df4e89a970",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "Stopped-only Fs extension; atomic shared slot geometry, original 10 Hz defaults",
-        "Use PRIu32 for runtime uint32_t Fs/period values on Xtensa IDF6.1"
+        "Use PRIu32 for runtime uint32_t Fs/period values on Xtensa IDF6.1",
+        "Sample-index master clock",
+        "PR78 bench fixes: supported SPI wait, ISR sample capture, bounded wakeups, IRAM runtime and diagnostic handoffs as applicable"
       ]
     },
     {
@@ -347,7 +366,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "19381d8b2d0f5d8d01f47bf5ed6a0d2c8399f98f3612facd9d449b27bded88d1"
+      "sha256": "b3477be56c7972216a5f9e51c5bcce18babc21578856c32e16213cf57ada5248"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -360,12 +379,16 @@
     {
       "path": "components/nocti_v4_common/include/nocti_v4_boot.h",
       "sha256": "7e12e44fd8b1d8b563108244edf9f85a68b147a0047bce7e94ec39cd5b9fe3d4"
+    },
+    {
+      "path": "components/nocti_v4_async_led/critical_paths.lf",
+      "sha256": "83befe53acea717bf55f1bdf31ade43ca73d5d82a136dc666f75d5f4721ae427"
     }
   ],
   "shared_communication": [
     {
       "path": "components/nn2_core/CMakeLists.txt",
-      "sha256": "7f8b0b28359a7f8b31373d32460b5ae905b1e8dce4e70f4bb439296a6504002e"
+      "sha256": "43bce948702e8d59abf57fe221133b6600bbb797d162bc012b8dbcefacce8e6d"
     },
     {
       "path": "components/nn2_core/include/nn2_core_acquisition.h",
@@ -377,11 +400,11 @@
     },
     {
       "path": "components/nn2_core/include/nn2_core_optical.h",
-      "sha256": "cc26ea5ab0ac2bf02f5fc40d17c76b9446b14e4b67f730795c5645b956f93fe1"
+      "sha256": "a382f887cbc7fd1db6aa03d313d7b7e29f62763b4cf3c9e30d2749a00fc864c2"
     },
     {
       "path": "components/nn2_core/include/nn2_core_protocol.h",
-      "sha256": "deaee72ada89d84e5b269bc241d9e4682c7aa675f36085226f375f69cd9f7bea"
+      "sha256": "37980c64dfd2f38c605db41198016a01a9159fcd1c2289b19b8ec8299ea08264"
     },
     {
       "path": "components/nn2_core/include/nn2_core_ring.h",
@@ -397,7 +420,7 @@
     },
     {
       "path": "components/nn2_core/src/nn2_core_protocol.c",
-      "sha256": "c49591c6b25d7b34f8d8130fe050f80127f571abadf73733a34ce69d69dc6154"
+      "sha256": "3eba106123c2622111cacc39c6b508bff929f2b07ad2bf69e65e59e1cfebfe24"
     },
     {
       "path": "components/nn2_core/src/nn2_core_ring.c",
@@ -445,7 +468,7 @@
     },
     {
       "path": "components/nn2_ports/include/nn2_port_optical.h",
-      "sha256": "a017751fe30f56822c268dc582c754891f37249aec5bae90ec002e65f122da7f"
+      "sha256": "3954129f7e76b64a7edba0744ba91a53cecd48efab83d02422787ac3cc6c9b24"
     },
     {
       "path": "components/nn2_ports/include/nn2_port_safety.h",
@@ -453,7 +476,7 @@
     },
     {
       "path": "components/nn2_app/CMakeLists.txt",
-      "sha256": "7e57f2313a96f0a62e84a573791ecacf2f1f62054b2f4866f9c4078146459777"
+      "sha256": "c6e9a9cf02653145f782b19ac14beb3dcb8f4fd45b32978e5e99c9eca7708fc2"
     },
     {
       "path": "components/nn2_app/include/nn2_app_adc_diagnostic.h",
@@ -465,7 +488,7 @@
     },
     {
       "path": "components/nn2_app/include/nn2_app_comm.h",
-      "sha256": "2fd06e656717a3f6443f1c1f63b63abb65f3abc62274c9ee346432b7db3a6eab"
+      "sha256": "5fe573e73cefc7af240b7a756e052240ec033c97d62697dc49e59c402c32ef1c"
     },
     {
       "path": "components/nn2_app/include/nn2_app_provision.h",
@@ -485,7 +508,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "c51522360b6bb506b816b8a12db5b077680db302b6ed1446193c6eba5e6eb2a2"
+      "sha256": "b4ad566e3d383b233136d320a7a56dae2e0781b91fb9cf945307b05f78e148bf"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",
@@ -521,7 +544,7 @@
     },
     {
       "path": "components/nn2_net/nn2_net.c",
-      "sha256": "d71afcb32ea9f96be0679880f9adb8e598543587cfff6c8055fc9740208170e7"
+      "sha256": "573edb228ce955cb70e80c405436b2c59acd2fbaed16886d3113ebbe454d7695"
     },
     {
       "path": "components/nn2_config/CMakeLists.txt",
@@ -534,6 +557,34 @@
     {
       "path": "components/nn2_config/nn2_config.c",
       "sha256": "fa53f57638b7d07f0cdcca6a1b889303e560a911bbe9fb52cd7c926a10813c17"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_raw_buffer.h",
+      "sha256": "20277bd92ae41f6cbdc8234fc83a783eba4c659fb4b65c4e4bbdcbac233fdd46"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_raw_buffer.c",
+      "sha256": "7428f8a1d156df35443f6cbdd484f513dfc6fbe729f7877fdd3121b0a233bbf5"
+    },
+    {
+      "path": "components/nn2_core/include/nn2_core_optical_codec.h",
+      "sha256": "58436af6fc3a09d138e93c24ce02f33b3befe30781b2add93e09d8c90b4da6cd"
+    },
+    {
+      "path": "components/nn2_core/src/nn2_core_optical_codec.c",
+      "sha256": "4ee92545d62877cd2deb43ec209a257bb9c513cb8680c232b5840c857023daad"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_raw_mode.h",
+      "sha256": "1c27a3adf4bc59a2c8dd876f1019cd8fa2d9d9e896376689e1369500db2458bd"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_raw_mode.c",
+      "sha256": "abd957a2d82fecfb86220812b1d474330da6b0616477c5f5265cad329b6911de"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_raw_memory.h",
+      "sha256": "dcccb459d6e158df8eced25f202470617d0f4f2b57a8738abf6f2c33fd9fc2d9"
     }
   ]
 }

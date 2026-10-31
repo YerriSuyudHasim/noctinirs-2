@@ -97,6 +97,9 @@ typedef struct {
     uint64_t dequeue_timestamp_us;
     uint64_t submit_timestamp_us;
     uint64_t complete_timestamp_us;
+    uint32_t sample_sequence;
+    uint32_t sample_generation;
+    bool sample_valid;
     int32_t i2c_event;
     int32_t callback_core;
 } nocti_v4_async_led_completion_t;
@@ -105,6 +108,17 @@ typedef struct {
     void *runtime;
     bool initialized;
 } nocti_v4_async_led_t;
+
+/* Scheduler eligibility only; excludes payload copies and derived diagnostics. */
+typedef struct {
+    nocti_v4_pca_io_mode_t mode;
+    bool submissions_allowed;
+    bool transaction_pending;
+    int32_t selected_source;
+    uint32_t generation;
+} nocti_v4_async_led_state_t;
+void nocti_v4_async_led_get_state(const nocti_v4_async_led_t *async_led,
+                                 nocti_v4_async_led_state_t *out_state);
 
 /* Creates a dormant static LED-control task. The PCA stays qdepth=0 SYNC until
  * ASYNC_ENTER is explicitly accepted. */
