@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "status": "PROPOSED. Limits are Owner bench-reported Batch 3 figures (or static header constants). Not yet confirmed against a linker map from this branch. Changing a limit requires Owner approval.",
+  "sections": {
+    ".dram0.data": {
+      "limit_bytes": 25192,
+      "source": "KONTEKS: .data 25.192 B, Batch 3 final build (also 3abe610 map: 25192 B)"
+    },
+    ".dram0.bss": {
+      "limit_bytes": 172360,
+      "source": "KONTEKS: .bss 172.360 B, Batch 3 final build. UNRESOLVED: BATCH3_RAW_RAM_FIX.md arithmetic (184632 - 6016) gives 178616 B. Owner must confirm which figure is right before this gate is trusted."
+    }
+  },
+  "symbols": [
+    {"label": "nocti_v4_optical.s_runtime", "section": "bss", "name": "s_runtime", "object_contains": "nocti_v4_optical.c", "limit_bytes": 88840, "declared_in": "firmware/v4-idf61/components/nocti_v4_optical/nocti_v4_optical.c", "declaration": "static optical_runtime_t s_runtime;", "source": "KONTEKS: 88.840 B"},
+    {"label": "nocti_v4_scheduler.s_runtime", "section": "bss", "name": "s_runtime", "object_contains": "nocti_v4_scheduler.c", "limit_bytes": 36152, "declared_in": "firmware/v4-idf61/components/nocti_v4_scheduler/nocti_v4_scheduler.c", "declaration": "static scheduler_runtime_t s_runtime;", "source": "KONTEKS: 36.152 B"},
+    {"label": "nocti_v4_ads.s_runtime", "section": "bss", "name": "s_runtime", "object_contains": "nocti_v4_ads.c", "limit_bytes": 18360, "declared_in": "firmware/v4-idf61/components/nocti_v4_ads/nocti_v4_ads.c", "declaration": "static ads_runtime_t s_runtime;", "source": "KONTEKS: 18.360 B"},
+    {"label": "nocti_v4_async_led.s_runtime", "section": "bss", "name": "s_runtime", "object_contains": "nocti_v4_async_led.c", "limit_bytes": 8104, "declared_in": "firmware/v4-idf61/components/nocti_v4_async_led/nocti_v4_async_led.c", "declaration": "static async_led_runtime_t s_runtime;", "source": "Batch 3 map: s_runtime nocti_v4_async_led 8104 B"},
+    {"label": "main.s_nn2_app", "section": "bss", "name": "s_nn2_app", "object_contains": "main", "limit_bytes": 4096, "declared_in": "firmware/v4-idf61/main/v4_nn2_control.inc", "declaration": "static nn2_app_comm_storage_t s_nn2_app;", "source": "KONTEKS: penyimpanan komunikasi 4.096 B"},
+    {"label": "nn2_net.s_status", "section": "bss", "name": "s_status", "object_contains": "nn2_net.c", "limit_bytes": 28, "declared_in": "components/nn2_net/nn2_net.c", "declaration": "static nn2_net_status_t s_status;", "source": "Computed: nn2_net_status_t 28 B before Batch 4a (bool + 5 x u32 + int). Batch 4a makes it 48 B: needs Owner approval."},
+    {"label": "main.s_raw (pointer only)", "section": "bss", "name": "s_raw", "object_contains": "main", "limit_bytes": 4, "declared_in": "firmware/v4-idf61/main/v4_nn2_control.inc", "declaration": "static nn2_raw_buffer_t *s_raw;", "source": "Lazy allocation: the RAW buffer itself is heap, allocated at STOP set-mode, max 6272 B (see heap.raw_buffer_heap_bytes)"}
+  ],
+  "compile_time_checks": [
+    {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "#define NN2_RAW_BUFFER_MAX_BYTES 6272u"},
+    {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "_Static_assert(sizeof(nn2_raw_buffer_t) <= NN2_RAW_BUFFER_MAX_BYTES"},
+    {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "_Static_assert(sizeof(nn2_raw_entry_t) <= 32u"},
+    {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "_Static_assert(NN2_RAW_BUFFER_CAPACITY >= 128u"},
+    {"file": "firmware/v4-idf61/components/nocti_v4_common/include/nocti_v4_rtos.h", "contains": "#define NOCTI_V4_RTOS_STACK_NET_BYTES 16384u"}
+  ],
+  "heap": {
+    "status": "PROPOSED. Boot values are from the Owner bench (Batch 3 build), not re-measured here.",
+    "net_task_stack_bytes": 16384,
+    "static_task_tcb_bytes": 340,
+    "requirement_bytes": 16724,
+    "boot_largest_free_block_after_wifi_bytes": 19456,
+    "boot_free_heap_before_wifi_bytes": 79644,
+    "boot_free_heap_after_wifi_bytes": 28352,
+    "raw_buffer_heap_bytes": 6272,
+    "proposed_min_largest_block_margin_bytes": 2048,
+    "proposed_min_heap_free_min_bytes": 4096
+  }
+}
