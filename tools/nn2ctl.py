@@ -384,7 +384,8 @@ def parse_diag(text):
     elif kind == "v4netdiag":
         required = ("heap_free_now", "heap_free_min", "largest_free_block_now",
                     "frame_send_errors", "frame_send_eagain", "frame_send_enobufs",
-                    "frame_send_other", "frame_last_errno")
+                    "frame_send_other", "frame_last_errno", "net_received", "net_replied",
+                    "net_invalid", "net_send_errors", "net_last_errno")
     else:
         required = ("adc_missed", "adc_backlog_catchup", "adc_missed_backlog",
                     "boot82_bound", "spi_min_us", "spi_max_us", "spi_avg_us",
@@ -398,7 +399,8 @@ def parse_diag(text):
     return fields
 
 OBSERVATION_UINT_KEYS = ("heap_free_now", "heap_free_min", "frame_send_errors",
-                         "frame_send_eagain", "frame_send_enobufs", "frame_send_other")
+                         "frame_send_eagain", "frame_send_enobufs", "frame_send_other",
+                         "net_received", "net_replied", "net_invalid", "net_send_errors")
 
 def parse_observation(fields):
     """Decode D1/D2 observation keys. Absent keys stay absent; 'na' becomes None.
@@ -417,13 +419,17 @@ def parse_observation(fields):
             out["largest_free_block_now"] = int(value)
         else:
             raise ValueError("observation field largest_free_block_now")
-    if "frame_last_errno" in fields:
-        if not re.fullmatch(r"-?[0-9]+", fields["frame_last_errno"]):
-            raise ValueError("observation field frame_last_errno")
-        out["frame_last_errno"] = int(fields["frame_last_errno"])
+    for key in ("frame_last_errno", "net_last_errno"):
+        if key in fields:
+            if not re.fullmatch(r"-?[0-9]+", fields[key]):
+                raise ValueError("observation field " + key)
+            out[key] = int(fields[key])
     split = ("frame_send_errors", "frame_send_eagain", "frame_send_enobufs", "frame_send_other")
     if all(key in out for key in split):
         out["frame_split_ok"] = out["frame_send_errors"] == sum(out[key] for key in split[1:])
+    if "net_send_errors" in out and "frame_send_errors" in out:
+        # net_send_errors = reply failures + FRAME failures, so it cannot be below the FRAME part.
+        out["net_send_ge_frame"] = out["net_send_errors"] >= out["frame_send_errors"]
     return out
 
 def describe_led_diagnostics(line):

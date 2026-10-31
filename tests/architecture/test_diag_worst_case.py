@@ -250,6 +250,8 @@ int main(void) {{
         self.assertIn("largest_free_block_now=4294967295", out["NETDIAG_IDLE"]["text"])
         self.assertIn("largest_free_block_now=na", out["NETDIAG_RUNNING"]["text"])
         self.assertIn("frame_last_errno=-2147483648", out["NETDIAG_IDLE"]["text"])
+        self.assertIn("net_received=4294967295", out["NETDIAG_IDLE"]["text"])
+        self.assertIn("net_last_errno=-2147483648", out["NETDIAG_IDLE"]["text"])
 
     @unittest.expectedFailure
     def test_health_worst_case_fits_known_over_limit(self):

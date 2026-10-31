@@ -54,9 +54,10 @@ class ConfigMatchesCode(unittest.TestCase):
     def test_config_is_valid_and_limits_are_positive_integers(self):
         config = load_config()
         self.assertEqual(config["schema"], 1)
-        for name in (".dram0.data", ".dram0.bss"):
-            self.assertIsInstance(config["sections"][name]["limit_bytes"], int)
-            self.assertGreater(config["sections"][name]["limit_bytes"], 0)
+        self.assertIsInstance(config["sections"][".dram0.data"]["limit_bytes"], int)
+        # .dram0.bss total is deliberately UNSET until the Owner's first bench map.
+        bss = config["sections"][".dram0.bss"]["limit_bytes"]
+        self.assertTrue(bss is None or (isinstance(bss, int) and bss > 0))
         labels = [entry["label"] for entry in config["symbols"]]
         self.assertEqual(len(labels), len(set(labels)))
         for entry in config["symbols"]:
@@ -92,7 +93,14 @@ class ConfigMatchesCode(unittest.TestCase):
     def test_registered_static_sum_fits_bss_limit(self):
         config = load_config()
         total = sum(entry["limit_bytes"] for entry in config["symbols"])
-        self.assertLessEqual(total, config["sections"][".dram0.bss"]["limit_bytes"])
+        bss = config["sections"][".dram0.bss"]["limit_bytes"]
+        if bss is None:
+            self.skipTest(".dram0.bss total not set yet (Owner bench map)")
+        self.assertLessEqual(total, bss)
+
+    def test_s_status_limit_is_the_approved_48_bytes(self):
+        entry = [e for e in load_config()["symbols"] if e["name"] == "s_status"][0]
+        self.assertEqual(entry["limit_bytes"], 48)
 
     def test_heap_margins_are_proposals_with_values_in_range(self):
         heap = load_config()["heap"]
@@ -111,9 +119,17 @@ class MapGate(unittest.TestCase):
         self.assertTrue(any(name == "nocti_v4_optical.s_runtime" and used == 88840
                             for name, used, _ in rows))
 
-    def test_bss_over_limit_fails(self):
-        rows, failures = checker.check(synthetic_map(bss_total=172361), self.config)
+    def test_bss_over_limit_fails_when_limit_is_set(self):
+        config = json.loads(json.dumps(self.config))
+        config["sections"][".dram0.bss"]["limit_bytes"] = 172360  # explicit test value, not config
+        rows, failures = checker.check(synthetic_map(bss_total=172361), config)
         self.assertTrue(any(".dram0.bss 172361 B" in item for item in failures), failures)
+
+    def test_unset_bss_limit_is_reported_not_gated(self):
+        self.assertIsNone(self.config["sections"][".dram0.bss"]["limit_bytes"])
+        rows, failures = checker.check(synthetic_map(bss_total=999999), self.config)
+        self.assertFalse(any(".dram0.bss" in item for item in failures), failures)
+        self.assertTrue(any(name == ".dram0.bss" and limit is None for name, _, limit in rows))
 
     def test_symbol_over_limit_fails(self):
         config = json.loads(json.dumps(self.config))
@@ -140,12 +156,17 @@ class MapGate(unittest.TestCase):
             ok.write_text(synthetic_map(bss_total=172000))
             over = Path(scratch) / "over.map"
             over.write_text(synthetic_map(bss_total=172361))
+            limited = Path(scratch) / "limited.json"
+            limited_config = json.loads(json.dumps(self.config))
+            limited_config["sections"][".dram0.bss"]["limit_bytes"] = 172360
+            limited.write_text(json.dumps(limited_config))
             bad = Path(scratch) / "bad.map"
             bad.write_text("not a map")
             run = lambda *args: subprocess.run([sys.executable, str(TOOL), *map(str, args)],
                                                capture_output=True, text=True)
-            self.assertEqual(run(ok).returncode, 0)
-            self.assertEqual(run(over).returncode, 1)
+            self.assertEqual(run(ok, "--config", limited).returncode, 0)
+            self.assertEqual(run(over, "--config", limited).returncode, 1)
+            self.assertEqual(run(ok).returncode, 0)  # unset .bss limit: reported, not gated
             self.assertEqual(run(bad).returncode, 2)
             self.assertEqual(run(Path(scratch) / "missing.map").returncode, 2)
 

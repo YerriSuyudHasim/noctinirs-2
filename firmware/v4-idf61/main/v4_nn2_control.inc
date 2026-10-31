@@ -217,11 +217,14 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             "v4netdiag=1 heap_free_now=%" PRIu32 " heap_free_min=%" PRIu32
             " largest_free_block_now=%s frame_send_errors=%" PRIu32
             " frame_send_eagain=%" PRIu32 " frame_send_enobufs=%" PRIu32
-            " frame_send_other=%" PRIu32 " frame_last_errno=%d",
+            " frame_send_other=%" PRIu32 " frame_last_errno=%d"
+            " net_received=%" PRIu32 " net_replied=%" PRIu32 " net_invalid=%" PRIu32
+            " net_send_errors=%" PRIu32 " net_last_errno=%d",
             (uint32_t)heap_caps_get_free_size(heap_mask),
             (uint32_t)heap_caps_get_minimum_free_size(heap_mask), largest_now,
             net.frame_send_errors, net.frame_send_eagain, net.frame_send_enobufs,
-            net.frame_send_other, net.frame_last_errno);
+            net.frame_send_other, net.frame_last_errno,
+            net.received, net.replied, net.invalid, net.send_errors, net.last_errno);
         return netdiag > 0 && (size_t)netdiag < cap ? (size_t)netdiag : 0u;
     }
     nocti_v4_task_wdt_log_pending();

@@ -366,7 +366,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "8ebe26cc249a232fdc3bd55928a1d916dd4bca43ea367f9bcaa1201fdbaacf98"
+      "sha256": "d1df4491b16d655fd870e7be729347ef5a14583fc85fca9d4b7bd69e0d55422b"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",

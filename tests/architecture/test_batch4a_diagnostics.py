@@ -64,7 +64,8 @@ class NetDiagKeys(unittest.TestCase):
         block = self.netdiag_block()
         for key in ("heap_free_now=", "heap_free_min=", "largest_free_block_now=",
                     "frame_send_errors=", "frame_send_eagain=", "frame_send_enobufs=",
-                    "frame_send_other=", "frame_last_errno="):
+                    "frame_send_other=", "frame_last_errno=", "net_received=", "net_replied=",
+                    "net_invalid=", "net_send_errors=", "net_last_errno="):
             self.assertIn(key, block, key)
             self.assertEqual(CONTROL.count(key), 1, key + " must not appear in health or timing")
 

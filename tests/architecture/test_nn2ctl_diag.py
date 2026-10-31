@@ -36,7 +36,8 @@ TIMING = (
 NETDIAG = (
     "v4netdiag=1 heap_free_now=60000 heap_free_min=41000 largest_free_block_now=na "
     "frame_send_errors=7 frame_send_eagain=3 frame_send_enobufs=2 frame_send_other=2 "
-    "frame_last_errno=11"
+    "frame_last_errno=11 net_received=1000 net_replied=990 net_invalid=2 "
+    "net_send_errors=9 net_last_errno=0"
 )
 
 def reply(opcode, text, session=0):
@@ -89,7 +90,10 @@ class DiagParse(unittest.TestCase):
                           "largest_free_block_now": None,
                           "frame_send_errors": 7, "frame_send_eagain": 3,
                           "frame_send_enobufs": 2, "frame_send_other": 2,
-                          "frame_last_errno": 11, "frame_split_ok": True})
+                          "frame_last_errno": 11, "frame_split_ok": True,
+                          "net_received": 1000, "net_replied": 990, "net_invalid": 2,
+                          "net_send_errors": 9, "net_last_errno": 0,
+                          "net_send_ge_frame": True})
 
     def test_netdiag_split_mismatch_is_reported_not_hidden(self):
         text = NETDIAG.replace("frame_send_errors=7", "frame_send_errors=9").replace(
@@ -98,10 +102,19 @@ class DiagParse(unittest.TestCase):
         self.assertFalse(parsed["observation"]["frame_split_ok"])
         self.assertEqual(parsed["observation"]["frame_last_errno"], -1)
 
+    def test_netdiag_net_counters_decode_and_consistency(self):
+        text = NETDIAG.replace("net_send_errors=9", "net_send_errors=6").replace(
+            "net_last_errno=0", "net_last_errno=-11")
+        parsed = nn2ctl.describe_reply(reply(0x32, text), 7, 0x32)
+        self.assertEqual(parsed["observation"]["net_send_errors"], 6)
+        self.assertFalse(parsed["observation"]["net_send_ge_frame"])  # 6 < frame_send_errors 7
+        self.assertEqual(parsed["observation"]["net_last_errno"], -11)
+
     def test_netdiag_fallback_and_malformed_keys_are_rejected(self):
         with self.assertRaises(ValueError):
             nn2ctl.parse_diag("v4netdiag=0 reason=unavailable")
-        for bad in ("heap_free_now=12x", "largest_free_block_now=-1", "frame_last_errno=abc"):
+        for bad in ("heap_free_now=12x", "largest_free_block_now=-1", "frame_last_errno=abc",
+                    "net_received=-3", "net_last_errno=x"):
             with self.assertRaises(ValueError):
                 nn2ctl.parse_observation(nn2ctl.parse_diag(NETDIAG.replace(
                     "heap_free_now=60000", bad)))

@@ -113,8 +113,13 @@ def check(map_text, config):
     output_totals, inputs = parse_map(map_text)
     rows, failures = [], []
     for name in OUTPUT_SECTIONS:
-        limit = int(config["sections"][name]["limit_bytes"])
+        raw_limit = config["sections"][name]["limit_bytes"]
         used = output_totals[name]
+        if raw_limit is None:
+            # Not set yet: reported, not gated. Set from the Owner's first bench map.
+            rows.append((name, used, None))
+            continue
+        limit = int(raw_limit)
         rows.append((name, used, limit))
         if used > limit:
             failures.append(f"{name} {used} B > limit {limit} B")
@@ -144,7 +149,10 @@ def main(argv=None):
         return 2
     print(f"{'item':<36}{'used_B':>10}{'limit_B':>10}  status")
     for name, used, limit in rows:
-        print(f"{name:<36}{used:>10}{limit:>10}  {'OK' if used <= limit else 'OVER'}")
+        if limit is None:
+            print(f"{name:<36}{used:>10}{'UNSET':>10}  UNSET (not gated; set from first bench map)")
+        else:
+            print(f"{name:<36}{used:>10}{limit:>10}  {'OK' if used <= limit else 'OVER'}")
     if failures:
         print("FAIL:")
         for failure in failures:
