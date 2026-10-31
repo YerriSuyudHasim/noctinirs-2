@@ -324,6 +324,34 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             " largest_free_block=%" PRIu32,
             HLOAD(free_heap_before_wifi),HLOAD(free_heap_after_wifi),HLOAD(largest_free_block));
     }
+    if (wrote > 0 && (size_t)wrote < cap && kind == 0u) {
+        /* D2 observation only: free and minimum getters are O(registered heaps), no lock
+         * (ESP-IDF v6.1 heap_caps.c / multi_heap.c). The largest-block walk holds the heap
+         * spinlock over every block, so it is read only while IDLE (STOPPED); else "na". */
+        const uint32_t heap_mask = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+        char largest_now[16];
+        if (control_state(NULL) == NN2_OPTICAL_IDLE)
+            snprintf(largest_now, sizeof(largest_now), "%" PRIu32,
+                     (uint32_t)heap_caps_get_largest_free_block(heap_mask));
+        else
+            snprintf(largest_now, sizeof(largest_now), "na");
+        wrote += snprintf((char *)out+wrote, cap-(size_t)wrote,
+            " heap_free_now=%" PRIu32 " heap_free_min=%" PRIu32
+            " largest_free_block_now=%s",
+            (uint32_t)heap_caps_get_free_size(heap_mask),
+            (uint32_t)heap_caps_get_minimum_free_size(heap_mask), largest_now);
+    }
+    if (wrote > 0 && (size_t)wrote < cap && kind == 1u) {
+        /* D1 observation only, in get_timing: health has no room (see BATCH4A_DIAGNOSTICS.md).
+         * Written only by the nn2_net task, which is also the only caller of this path. */
+        const nn2_net_status_t net = nn2_net_get_status();
+        wrote += snprintf((char *)out+wrote, cap-(size_t)wrote,
+            " frame_send_errors=%" PRIu32 " frame_send_eagain=%" PRIu32
+            " frame_send_enobufs=%" PRIu32 " frame_send_other=%" PRIu32
+            " frame_last_errno=%d",
+            net.frame_send_errors, net.frame_send_eagain, net.frame_send_enobufs,
+            net.frame_send_other, net.frame_last_errno);
+    }
     if (wrote < 0 || (size_t)wrote >= cap) return 0u;
     size_t used=(size_t)wrote;
     int extra=snprintf((char *)out+used,cap-used,

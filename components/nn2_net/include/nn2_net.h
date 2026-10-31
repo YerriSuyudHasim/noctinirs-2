@@ -7,8 +7,12 @@
 
 typedef struct {
     bool socket_open;
+    /* Written only by the nn2_net task. send_errors = reply + FRAME send failures
+     * (unchanged meaning). frame_send_* count only the FRAME sendto in nn2_net_poll
+     * and satisfy frame_send_errors = eagain + enobufs + other. */
     uint32_t received, replied, invalid, socket_errors, send_errors;
-    int last_errno;
+    uint32_t frame_send_errors, frame_send_eagain, frame_send_enobufs, frame_send_other;
+    int last_errno, frame_last_errno;
 } nn2_net_status_t;
 
 /* Serialized owner, borrowed App storage/clock outlive transport.

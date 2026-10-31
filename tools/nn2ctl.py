@@ -6,6 +6,7 @@ CF1 and historical ASCII/stream-v1 packets are intentionally incompatible.
 """
 import argparse
 import dataclasses
+import re
 import json
 import math
 import secrets
@@ -96,6 +97,9 @@ def describe_reply(packet, request_id=None, opcode=None):
     elif op in (COMMANDS["health"], COMMANDS["timing"]):
         text = extra.decode("ascii")
         result["diag"] = parse_diag(text)
+        observation = parse_observation(result["diag"])
+        if observation:
+            result["observation"] = observation
         if "i2c_on_us" in result["diag"] or "i2c_off_us" in result["diag"]:
             result["async_i2c"] = parse_async_i2c(result["diag"])
         if op == COMMANDS["timing"] and "on_d" in result["diag"]:
@@ -387,6 +391,35 @@ def parse_diag(text):
     if missing:
         raise ValueError("diagnostic missing " + ",".join(missing))
     return fields
+
+OBSERVATION_UINT_KEYS = ("heap_free_now", "heap_free_min", "frame_send_errors",
+                         "frame_send_eagain", "frame_send_enobufs", "frame_send_other")
+
+def parse_observation(fields):
+    """Decode D1/D2 observation keys. Absent keys stay absent; 'na' becomes None.
+    frame_send_errors must equal eagain+enobufs+other when all four are present."""
+    out = {}
+    for key in OBSERVATION_UINT_KEYS:
+        if key in fields:
+            if not re.fullmatch(r"[0-9]+", fields[key]):
+                raise ValueError("observation field " + key)
+            out[key] = int(fields[key])
+    if "largest_free_block_now" in fields:
+        value = fields["largest_free_block_now"]
+        if value == "na":
+            out["largest_free_block_now"] = None
+        elif re.fullmatch(r"[0-9]+", value):
+            out["largest_free_block_now"] = int(value)
+        else:
+            raise ValueError("observation field largest_free_block_now")
+    if "frame_last_errno" in fields:
+        if not re.fullmatch(r"-?[0-9]+", fields["frame_last_errno"]):
+            raise ValueError("observation field frame_last_errno")
+        out["frame_last_errno"] = int(fields["frame_last_errno"])
+    split = ("frame_send_errors", "frame_send_eagain", "frame_send_enobufs", "frame_send_other")
+    if all(key in out for key in split):
+        out["frame_split_ok"] = out["frame_send_errors"] == sum(out[key] for key in split[1:])
+    return out
 
 def describe_led_diagnostics(line):
     """Decode cached per-channel masks; never infer light from a valid bit."""

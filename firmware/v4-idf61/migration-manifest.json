@@ -366,7 +366,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "b3477be56c7972216a5f9e51c5bcce18babc21578856c32e16213cf57ada5248"
+      "sha256": "91ff5ebe49d36a3d14531758e4db3f4eba9a343c0bf3ae3e9ca261dee7518a86"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -540,11 +540,11 @@
     },
     {
       "path": "components/nn2_net/include/nn2_net.h",
-      "sha256": "704b42879b444aeb6ca9a56a1a904617e50bcc5f715d6f404ada516b9feac7b8"
+      "sha256": "2926d826fd4bf3f23ef962748a2e6aebefb0f8a390657732178734a8357b2083"
     },
     {
       "path": "components/nn2_net/nn2_net.c",
-      "sha256": "573edb228ce955cb70e80c405436b2c59acd2fbaed16886d3113ebbe454d7695"
+      "sha256": "228ef463e5aae455c5ad8332e9da5cfa8059024a4160aabb73a2541b5538f36e"
     },
     {
       "path": "components/nn2_config/CMakeLists.txt",

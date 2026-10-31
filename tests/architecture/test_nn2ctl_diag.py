@@ -77,6 +77,34 @@ class DiagParse(unittest.TestCase):
             for key, value in fields.items():
                 self.assertEqual(parsed["diag"][key], str(value))
 
+    def test_batch4a_observation_keys_decode_and_na_is_not_a_number(self):
+        heap_text = HEALTH + (" heap_free_now=60000 heap_free_min=41000"
+                              " largest_free_block_now=na")
+        parsed = nn2ctl.describe_reply(reply(0x30, heap_text), 7, 0x30)
+        self.assertEqual(parsed["observation"],
+                         {"heap_free_now": 60000, "heap_free_min": 41000,
+                          "largest_free_block_now": None})
+        timing_text = TIMING + (" frame_send_errors=7 frame_send_eagain=3"
+                                " frame_send_enobufs=2 frame_send_other=2"
+                                " frame_last_errno=11")
+        parsed = nn2ctl.describe_reply(reply(0x31, timing_text), 7, 0x31)
+        self.assertEqual(parsed["observation"]["frame_send_errors"], 7)
+        self.assertTrue(parsed["observation"]["frame_split_ok"])
+        self.assertEqual(parsed["observation"]["frame_last_errno"], 11)
+
+    def test_batch4a_observation_split_mismatch_is_reported_not_hidden(self):
+        text = TIMING + (" frame_send_errors=9 frame_send_eagain=3"
+                         " frame_send_enobufs=2 frame_send_other=2 frame_last_errno=-1")
+        parsed = nn2ctl.describe_reply(reply(0x31, text), 7, 0x31)
+        self.assertFalse(parsed["observation"]["frame_split_ok"])
+        self.assertEqual(parsed["observation"]["frame_last_errno"], -1)
+
+    def test_batch4a_absent_or_malformed_observation_keys(self):
+        self.assertNotIn("observation", nn2ctl.describe_reply(reply(0x30, HEALTH), 7, 0x30))
+        for bad in ("heap_free_now=12x", "largest_free_block_now=-1", "frame_last_errno=abc"):
+            with self.assertRaises(ValueError):
+                nn2ctl.parse_observation(nn2ctl.parse_diag(HEALTH + " " + bad))
+
     def test_invalid_rate_is_rejected_before_client_creation(self):
         for rate in (0, 1, 3, 6, 7, 9, 11, 256):
             with self.subTest(rate=rate), mock.patch.object(sys, "argv",
