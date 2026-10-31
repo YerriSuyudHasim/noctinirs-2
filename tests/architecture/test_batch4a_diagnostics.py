@@ -53,39 +53,46 @@ class NetCounters(unittest.TestCase):
         self.assertLess(capture_at, frame.index("nn2_app_comm_frame_tx_result"))
 
 
-class HealthAndTimingKeys(unittest.TestCase):
-    def test_heap_keys_are_health_only_and_read_without_isr_or_adc_task(self):
-        block = CONTROL[CONTROL.index("heap_mask = MALLOC_CAP_INTERNAL"):]
-        block = block[:block.index("if (wrote > 0 && (size_t)wrote < cap && kind == 1u)")]
-        self.assertIn("if (wrote > 0 && (size_t)wrote < cap && kind == 0u) {\n        /* D2 observation",
-                      CONTROL)
-        self.assertIn("heap_caps_get_free_size(heap_mask)", block)
-        self.assertIn("heap_caps_get_minimum_free_size(heap_mask)", block)
-        self.assertIn('snprintf(largest_now, sizeof(largest_now), "na");', block)
+class NetDiagKeys(unittest.TestCase):
+    """Keys live in get_netdiag (kind 3). Health and timing keep their pre-Batch-4a text."""
 
-    def test_largest_free_block_walk_is_gated_to_idle_only(self):
-        block = CONTROL[CONTROL.index("heap_mask = MALLOC_CAP_INTERNAL"):]
+    def netdiag_block(self):
+        start = CONTROL.index("if (kind == 3u) {")
+        return CONTROL[start:CONTROL.index("return netdiag > 0", start)]
+
+    def test_heap_and_frame_keys_appear_only_in_netdiag(self):
+        block = self.netdiag_block()
+        for key in ("heap_free_now=", "heap_free_min=", "largest_free_block_now=",
+                    "frame_send_errors=", "frame_send_eagain=", "frame_send_enobufs=",
+                    "frame_send_other=", "frame_last_errno="):
+            self.assertIn(key, block, key)
+            self.assertEqual(CONTROL.count(key), 1, key + " must not appear in health or timing")
+
+    def test_largest_free_block_walk_is_gated_to_idle_in_netdiag(self):
+        block = self.netdiag_block()
         gate = block.index("control_state(NULL) == NN2_OPTICAL_IDLE")
         walk = block.index("heap_caps_get_largest_free_block(heap_mask)")
         self.assertLess(gate, walk)
+        self.assertIn('snprintf(largest_now, sizeof(largest_now), "na");', block)
         self.assertEqual(len(re.findall(r"heap_caps_get_largest_free_block\(", CONTROL)), 2,
-                         "only the boot snapshot and the gated health read may call it")
+                         "only the boot snapshot and the gated netdiag read may call it")
 
-    def test_frame_keys_are_timing_only_and_net_status_is_read_in_net_task_path(self):
-        timing = CONTROL[CONTROL.index("kind == 1u) {\n        /* D1 observation"):]
-        timing = timing[:timing.index("if (wrote < 0 || (size_t)wrote >= cap) return 0u;")]
-        self.assertIn("frame_send_errors=", timing)
-        self.assertIn("frame_last_errno=%d", timing)
-        self.assertNotIn("frame_send_errors", CONTROL[:CONTROL.index("kind == 1u) {\n        /* D1 observation")])
+    def test_net_status_is_read_once_in_netdiag_only(self):
         self.assertEqual(CONTROL.count("nn2_net_get_status()"), 1)
+        self.assertIn("nn2_net_get_status()", self.netdiag_block())
 
-    def test_existing_health_keys_and_boot_snapshot_are_still_present(self):
+    def test_fallback_and_prefix_are_netdiag(self):
+        app = (ROOT / "components/nn2_app/src/nn2_app_comm.c").read_text()
+        self.assertIn('"v4netdiag=0 reason=unavailable"', app)
+        self.assertIn("op == NN2_CMD_GET_TIMING ? 1u : 3u", app)
+        self.assertIn('"v4netdiag=1 heap_free_now=', CONTROL)
+
+    def test_boot_snapshot_and_existing_health_keys_are_still_present(self):
         for key in ("free_heap_before_wifi=", "free_heap_after_wifi=", "largest_free_block=",
                     "raw_packets_sent=", "raw_dropped_samples=", "raw_buffer_highwater=",
                     "udp_frames_dropped=", "adc_missed="):
             self.assertIn(key, CONTROL, key)
         self.assertIn('"NN2_HEAP point=%s free=%" PRIu32 " largest=%" PRIu32', CONTROL)
-
 
 if __name__ == "__main__":
     unittest.main()

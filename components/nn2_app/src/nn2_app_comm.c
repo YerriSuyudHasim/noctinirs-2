@@ -288,6 +288,7 @@ static uint16_t execute(comm_t *c, uint64_t peer, uint64_t now, uint16_t op,
     return NN2_REPLY_OK;
   case NN2_CMD_GET_HEALTH:
   case NN2_CMD_GET_TIMING:
+  case NN2_CMD_GET_NETDIAG:
     return NN2_REPLY_OK;
   default:
     return NN2_REPLY_OK;
@@ -357,7 +358,8 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
    * reply). Only fresh effects pass through current-session/owner validation.
    * Replaying an old session's ACK never refreshes a new session's liveness. */
   if (!error && op != NN2_CMD_SAFE_OFF && op != NN2_CMD_GET_HEALTH &&
-      op != NN2_CMD_GET_TIMING && req.session_id && req.session_id != c.session)
+      op != NN2_CMD_GET_TIMING && op != NN2_CMD_GET_NETDIAG &&
+      req.session_id && req.session_id != c.session)
     error = NN2_REPLY_STATE;
   if (!error && c.owner && c.owner != peer && op != NN2_CMD_INFO &&
       op != NN2_CMD_GET_CONFIG && op != NN2_CMD_GET_TIME &&
@@ -429,15 +431,18 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
       body[64] = c.grace ? 1u : 0u;
       reply.length += 21;
     }
-  } else if (!error && (op == NN2_CMD_GET_HEALTH || op == NN2_CMD_GET_TIMING)) {
+  } else if (!error && (op == NN2_CMD_GET_HEALTH || op == NN2_CMD_GET_TIMING ||
+                        op == NN2_CMD_GET_NETDIAG)) {
     /* Existing 28-byte reply prefix; reserve one local NUL outside wire text. */
     uint8_t diag[NN2_CORE_PAYLOAD_MAX - 28u + 1u];
     const char *fallback = op == NN2_CMD_GET_HEALTH ? "v4health=0 reason=unavailable"
-                                                    : "v4timing=0 reason=unavailable";
+                         : op == NN2_CMD_GET_TIMING ? "v4timing=0 reason=unavailable"
+                                                    : "v4netdiag=0 reason=unavailable";
     size_t n = 0;
+    /* read_diag kinds: 0 health, 1 timing, 2 raw info, 3 netdiag. */
+    const uint8_t kind = op == NN2_CMD_GET_HEALTH ? 0u : op == NN2_CMD_GET_TIMING ? 1u : 3u;
     if (c.optical.read_diag)
-      n = c.optical.read_diag(c.optical.ctx, (uint8_t)(op == NN2_CMD_GET_HEALTH ? 0 : 1),
-                              diag, sizeof(diag) - 64u);
+      n = c.optical.read_diag(c.optical.ctx, kind, diag, sizeof(diag) - 64u);
     if (n == 0 || n >= sizeof(diag)) {
       n = strlen(fallback);
       memcpy(body + 20, fallback, n);

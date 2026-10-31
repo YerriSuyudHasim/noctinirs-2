@@ -40,6 +40,24 @@ class OpcodeRegistry(unittest.TestCase):
         self.assertNotIn("frames=ACQ1", health)
         self.assertNotIn("frames=ACQ1", timing)
 
+    def test_netdiag_is_registered_read_only_udp_only(self):
+        header = (ROOT / "components/nn2_core/include/nn2_core_protocol.h").read_text()
+        source = (ROOT / "components/nn2_core/src/nn2_core_protocol.c").read_text()
+        adr = (ROOT / "docs/adr/0004-host-protocol.md").read_text()
+        local = (ROOT / "docs/adr/0004-local-implementation.md").read_text()
+        dispatch = (ROOT / "components/nn2_app/src/nn2_app_comm.c").read_text()
+        self.assertRegex(header, r"NN2_CMD_GET_NETDIAG\s*=\s*0x0032")
+        self.assertIn("{NN2_CMD_GET_NETDIAG, 0, false}", source)
+        self.assertEqual(nn2ctl.COMMANDS["netdiag"], 0x32)
+        row = _registry_row(adr, "0x0032")
+        self.assertIn("`get_netdiag`", row)
+        self.assertIn("UDP only", row)
+        self.assertIn("bypass", row)
+        self.assertIn("| 0032 | netdiag | none | bypass |", local)
+        self.assertIn("NN2_CMD_GET_NETDIAG", dispatch)
+        self.assertIn("v4netdiag=0 reason=unavailable", dispatch)
+        self.assertIn("file rev 5", adr)
+
 
 def _registry_row(text, opcode):
     for line in text.splitlines():

@@ -33,7 +33,9 @@ enum {
   NN2_CMD_SET_MODE = 0x0102, /* 0 ACQ normal, 1 ENGINEERING; stopped only */
   /* Read-only V4 diagnostics. Existing reply layouts are unchanged. */
   NN2_CMD_GET_HEALTH = 0x0030,
-  NN2_CMD_GET_TIMING = 0x0031
+  NN2_CMD_GET_TIMING = 0x0031,
+  /* Read-only FRAME-send and heap observation (Batch 4a amendment, ADR-0004). */
+  NN2_CMD_GET_NETDIAG = 0x0032
 };
 enum {
   NN2_REPLY_OK,

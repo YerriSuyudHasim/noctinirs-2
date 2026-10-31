@@ -18,7 +18,7 @@ import zlib
 
 COMMANDS = {"heartbeat": 1, "info": 2, "status": 3, "get-config": 4, "get-time": 5,
             "start": 0x10, "stop": 0x11, "safe-off": 0x20, "clear-fault": 0x21,
-            "health": 0x30, "timing": 0x31,
+            "health": 0x30, "timing": 0x31, "netdiag": 0x32,
             "set-fs": 0x100, "set-led-current": 0x101, "set-mode": 0x102}
 ERRORS = ("OK", "INVALID_STATE", "INVALID_ARG", "UNKNOWN_COMMAND", "HW_FAULT", "BUSY",
           "BAD_FRAME", "PRECONDITION_FAILED", "RESERVED_FLAGS")
@@ -94,7 +94,7 @@ def describe_reply(packet, request_id=None, opcode=None):
             result["message"] = "RAW buffer: not enough internal memory"
     elif op == COMMANDS["info"]:
         result["info"] = extra.decode("ascii")
-    elif op in (COMMANDS["health"], COMMANDS["timing"]):
+    elif op in (COMMANDS["health"], COMMANDS["timing"], COMMANDS["netdiag"]):
         text = extra.decode("ascii")
         result["diag"] = parse_diag(text)
         observation = parse_observation(result["diag"])
@@ -360,7 +360,7 @@ def parse_sync(fields):
 
 def parse_diag(text):
     """Parse a V4 health or timing report. This is not an ACQ1 frame."""
-    if not isinstance(text, str) or not text.startswith(("v4health=1 ", "v4timing=1 ")):
+    if not isinstance(text, str) or not text.startswith(("v4health=1 ", "v4timing=1 ", "v4netdiag=1 ")):
         raise ValueError("diagnostic report")
     fields = {}
     for item in text.split():
@@ -370,7 +370,8 @@ def parse_diag(text):
         if not key or key in fields:
             raise ValueError("diagnostic field")
         fields[key] = value
-    kind = "v4health" if text.startswith("v4health=") else "v4timing"
+    kind = ("v4health" if text.startswith("v4health=") else
+            "v4netdiag" if text.startswith("v4netdiag=") else "v4timing")
     if fields.get(kind) != "1":
         raise ValueError("diagnostic version")
     if kind == "v4health":
@@ -380,6 +381,10 @@ def parse_diag(text):
                     "task_wdt_kick_errors", "frames")
         if fields.get("frames") == "ACQ1":
             raise ValueError("health must not claim ACQ1")
+    elif kind == "v4netdiag":
+        required = ("heap_free_now", "heap_free_min", "largest_free_block_now",
+                    "frame_send_errors", "frame_send_eagain", "frame_send_enobufs",
+                    "frame_send_other", "frame_last_errno")
     else:
         required = ("adc_missed", "adc_backlog_catchup", "adc_missed_backlog",
                     "boot82_bound", "spi_min_us", "spi_max_us", "spi_avg_us",
