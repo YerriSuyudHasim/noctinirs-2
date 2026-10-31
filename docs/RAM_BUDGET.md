@@ -55,8 +55,8 @@ Network task: stack 16 384 B (`NOCTI_V4_RTOS_STACK_NET_BYTES`) + static TCB 340 
 Those three boot values are unchanged by Batch 4a (serial `NN2_HEAP` line and
 `free_heap_*` / `largest_free_block` keys are the same code path).
 
-Live values from health (Batch 4a): `heap_free_now`, `heap_free_min`
-(`heap_caps_get_free_size` / `heap_caps_get_minimum_free_size`, both O(1) per
+Live values from `get_netdiag` (Batch 4a, see `BATCH4A_DIAGNOSTICS.md`): `heap_free_now`,
+`heap_free_min` (`heap_caps_get_free_size` / `heap_caps_get_minimum_free_size`, both O(1) per
 ESP-IDF v6.1 source), `largest_free_block_now` (expensive, STOPPED only, else `na`).
 
 ## 4. Rules

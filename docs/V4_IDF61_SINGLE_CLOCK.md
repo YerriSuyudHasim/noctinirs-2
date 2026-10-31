@@ -242,7 +242,8 @@ or real-time hardware performance.
 
 ## Batch 4a diagnostics pointer
 
-Batch 4a adds observation-only keys (`heap_free_now`, `heap_free_min`,
-`largest_free_block_now` in health; `frame_send_*` in timing) and a RAM budget
-gate. See [BATCH4A_DIAGNOSTICS.md](BATCH4A_DIAGNOSTICS.md) and
+Batch 4a adds observation-only keys in a new read-only opcode `get_netdiag`
+(0x0032): `heap_free_now`, `heap_free_min`, `largest_free_block_now`, `frame_send_*`.
+`get_health` and `get_timing` are unchanged from the pre-Batch-4a build. A RAM budget
+gate is also added. See [BATCH4A_DIAGNOSTICS.md](BATCH4A_DIAGNOSTICS.md) and
 [RAM_BUDGET.md](RAM_BUDGET.md). Owner bench: **NOT RUN** in this environment.
