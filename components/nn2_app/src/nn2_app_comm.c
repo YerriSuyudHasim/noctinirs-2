@@ -263,6 +263,11 @@ static uint16_t execute(comm_t *c, uint64_t peer, uint64_t now, uint16_t op,
   case NN2_CMD_SET_MODE:
     if (c->state != NN2_COMM_IDLE) return NN2_REPLY_STATE;
     if (arg[0] > 1u) return NN2_REPLY_ARGUMENT;
+    if (c->engineering != (arg[0] != 0) && c->optical.set_mode) {
+      nn2_status_t result = c->optical.set_mode(c->optical.ctx, arg[0] != 0);
+      if (result != NN2_OK)
+        return result == NN2_ERR_FULL ? NN2_REPLY_PRECONDITION : NN2_REPLY_BUSY;
+    }
     c->engineering = arg[0] != 0;
     return NN2_REPLY_OK;
   case NN2_CMD_SET_FS:

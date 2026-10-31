@@ -16,6 +16,14 @@ def packet(first=0, count=1, flags=1):
 
 
 class RawCaptureTests(unittest.TestCase):
+    def test_allocation_rejection_has_clear_message(self):
+        payload = struct.pack('<IHHBHBQQ', 1, nn2ctl.COMMANDS['set-mode'], 7, 1, 0, 0, 42, 100)
+        reply = nn2ctl.describe_reply(nn2ctl.decode(nn2ctl.encode_envelope(payload, msg_type=nn2ctl.REPLY)))
+        self.assertEqual(reply['state'], 'STOPPED')
+        self.assertEqual(reply['message'], 'RAW buffer: not enough internal memory')
+        with self.assertRaisesRegex(RuntimeError, 'RAW buffer: not enough internal memory'):
+            nn2ctl.require_ok(reply)
+
     def test_signed_samples_and_limits(self):
         for count in (1, 100):
             wire = packet(count=count)

@@ -269,7 +269,7 @@ Single const table in `nn2_core`. Every decode resolves to exactly one row or `U
 | 0x0021 | `clear_fault` | — | ✗ | ✗ | UDP only. USB `clear_fault` is rejected in every state until Q-2 is decided | n/a (lock released) | cached | emitter (RI) / sys (restart) |
 | 0x0100 | `set_fs` | `fs:u8` ∈ {1,2,4,5,8,10} | ✗ | ✗ | UDP | n/a (STOPPED only) | cached | none (config store) |
 | 0x0101 | `set_led_current` | `channel:u8` 0..19, `mA` 0..50 (encoding **TBD Agent 03**) | ✗ | indirect (config only) | UDP only | n/a (STOPPED only) | cached | none (stores only, #48) |
-| 0x0102 | `set_mode` | `mode:u8`: 0 ACQ normal, 1 ENGINEERING | ✗ | ✗ (stores only) | UDP only | n/a (STOPPED only) | cached | Batch 3 RAW selection; default ACQ after boot |
+| 0x0102 | `set_mode` | `mode:u8`: 0 ACQ normal, 1 ENGINEERING | ✗ | ✗ (STOP-only RAM) | UDP only | n/a (STOPPED only) | cached | Batch 3 RAW selection; default ACQ after boot |
 | 0x0030 | `get_health` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | ADC diagnostic counters. Not an ACQ1 frame. |
 | 0x0031 | `get_timing` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | ADC service-time counters. Not an ACQ1 frame. |
 
@@ -1192,6 +1192,15 @@ The draft SHA-256 is
 `set_mode` is opcode 0x0102 with one byte, cached like other configuration
 mutations. Only STOPPED accepts it; STARTING, STREAMING and STOPPING reject it
 with INVALID_STATE. It does not start acquisition. Boot selects ACQ normal.
+Owner's lazy-allocation follow-up (2026-10-31) reserves one 6272-byte internal
+8-bit RAW instance only on an accepted STOPPED -> ENGINEERING mode change.
+Default ACQ boot has no RAW allocation. Mode ACQ first detaches the optical RAW
+binding and then frees the instance, only while STOPPED. Same-mode commands and
+cached retries do not allocate/free again. Allocation failure returns the
+existing PRECONDITION_FAILED status for set_mode; mode remains ACQ and nn2ctl
+shows "RAW buffer: not enough internal memory". Failed detach retains the
+instance and prior mode. Neither START/STOP nor a data/ISR path allocates or
+frees this buffer. This is the Owner-approved allocation exception only for RAW.
 Normal ACQ1 transport retains its exact prior payload and envelope behavior.
 The V4 control binding still has no ACQ1 producer in normal mode.
 
@@ -1211,7 +1220,7 @@ and marks the first subsequently accepted record. Encoding splits at sequence
 holes, epoch changes and that marker; older buffered records are not mislabeled.
 The RAM follow-up reduces the buffer from 256 to 128 entries (16 ms at 8 kSPS)
 without changing RAW encoding. Entries retain full timestamps and epochs;
-separate gap bytes avoid per-entry padding. A 6272-byte static RAM budget is
+separate gap bytes avoid per-entry padding. A 6272-byte per-instance RAM budget is
 compile-time enforced. RAW overflow is still drop-newest with explicit accounting.
 The measured timestamp belongs to the first sample, not transmit time.
 `slot_plan_epoch` carries the low 16 bits of the immutable scheduler session epoch;
@@ -1225,7 +1234,9 @@ counter. UDP send failure uses existing send_errors and sample discontinuity.
 raw_packets_sent increments only after successful sendto; raw_dropped_samples
 counts RAW-buffer overflow, not ADS or network loss. These and
 raw_buffer_highwater reset on the next start, remain visible after STOP, and are
-per-field atomic diagnostic snapshots.
+per-field atomic diagnostic snapshots. After set_mode ACQ releases the buffer,
+RAW diagnostic keys remain present with zero values; capture end-of-session
+counters while stopped in ENGINEERING before releasing it.
 
 The bench receiver starts on its own single control endpoint, keeps that socket
 for heartbeats every 500 ms and STOP confirmation, and never adopts another

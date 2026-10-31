@@ -179,7 +179,7 @@ int main(void) {
 #define __atomic_store_n(p, n, order) (*(p) = (n))
 #define HLOAD(field) (s_health.field)
 static nocti_v4_health_t s_health;
-static struct { uint32_t packets_sent, dropped, highwater; } s_raw;
+static struct { uint32_t packets_sent, dropped, highwater; } raw_storage, *s_raw=&raw_storage;
 static int s_ads, s_async_led, s_scheduler, s_optical;
 static int s_control_worker = 1, s_control_network = 1;
 static unsigned uxTaskGetStackHighWaterMark(int handle) { (void)handle; return 500; }
@@ -209,7 +209,7 @@ static const char *control_boot_stage(void) { return "ready"; }
         code += formatter + """
 int main(void) {
  uint8_t out[1440u - 28u + 1u - 64u];
- s_raw.packets_sent = 48000; s_raw.dropped = 4800000; s_raw.highwater = 256;
+ s_raw->packets_sent = 48000; s_raw->dropped = 4800000; s_raw->highwater = 128;
  s_health.free_heap_before_wifi = 120000;
  s_health.free_heap_after_wifi = 42000;
  s_health.largest_free_block = 24000;

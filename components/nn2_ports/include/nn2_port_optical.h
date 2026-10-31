@@ -29,6 +29,8 @@ typedef struct {
     void (*frame_tx_result)(void *, bool);
     /* Optional semicolon-prefixed RAW counters for info; read-only. */
     size_t (*read_raw_info)(void *, uint8_t *, size_t);
+    /* Optional STOP-only resource transition. FULL rejects allocation; mode stays unchanged. */
+    nn2_status_t (*set_mode)(void *, bool engineering);
     bool real_samples;
     const char *policy_info; /* Static capability text, or NULL for strict. */
     /* Optional read-only diagnostic. kind 0 is health, kind 1 is timing.

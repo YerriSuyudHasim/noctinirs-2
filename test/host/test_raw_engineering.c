@@ -1,5 +1,6 @@
 #include "nn2_test.h"
 #include "nn2_app_comm.h"
+#include "nn2_app_raw_mode.h"
 #include "nn2_core_acquisition.h"
 #include "nn2_core_raw_buffer.h"
 #include <string.h>
@@ -10,6 +11,34 @@ static uint8_t acq[NN2_ACQ_PAYLOAD_SIZE];
 static uint8_t state;
 static bool mode;
 static uint64_t now;
+static nn2_raw_buffer_t *mode_buffer, *bound_buffer;
+static unsigned allocations, releases, bindings;
+static bool allocation_fails, detach_fails, bind_fails;
+static void *allocate_raw(void *ctx, size_t bytes)
+{
+    (void)ctx; TEST_ASSERT_EQUAL(NN2_OPTICAL_IDLE,state);
+    TEST_ASSERT_EQUAL(sizeof(buffer),bytes); ++allocations;
+    return allocation_fails ? NULL : &buffer;
+}
+static void release_raw(void *ctx, void *memory)
+{
+    (void)ctx; TEST_ASSERT_EQUAL(NN2_OPTICAL_IDLE,state);
+    TEST_ASSERT_EQUAL_PTR(&buffer,memory);
+    TEST_ASSERT_NULL(bound_buffer); TEST_ASSERT_NULL(mode_buffer);
+    ++releases;
+}
+static nn2_status_t bind_raw(void *ctx, nn2_raw_buffer_t *memory)
+{
+    (void)ctx; TEST_ASSERT_EQUAL(NN2_OPTICAL_IDLE,state); ++bindings;
+    if ((!memory && detach_fails) || (memory && bind_fails)) return NN2_ERR_INVALID_STATE;
+    bound_buffer=memory; return NN2_OK;
+}
+static nn2_status_t set_mode(void *ctx, bool engineering)
+{
+    (void)ctx;
+    const nn2_port_raw_memory_t port={.allocate=allocate_raw,.release=release_raw,.bind=bind_raw};
+    return nn2_app_raw_mode_set(&mode_buffer,&port,engineering);
+}
 static nn2_status_t off(void *ctx) { (void)ctx; return NN2_OK; }
 static uint8_t get_state(void *ctx) { (void)ctx; return state; }
 static nn2_status_t clear(void *ctx) { (void)ctx; return NN2_OK; }
@@ -18,7 +47,8 @@ static nn2_status_t start(void *ctx, const nn2_port_optical_config_t *cfg)
 static nn2_status_t old_frame(void *ctx, uint8_t *out, size_t cap, uint64_t *ts)
 { (void)ctx; (void)cap; memcpy(out,acq,sizeof(acq)); *ts=12345; return NN2_OK; }
 static nn2_status_t raw_frame(void *ctx, uint8_t *out, size_t cap, uint64_t *ts, size_t *n)
-{ (void)ctx; *n=nn2_raw_buffer_encode(&buffer,out,cap,ts); return *n ? NN2_OK : NN2_ERR_INVALID_STATE; }
+{ (void)ctx; if (!mode_buffer) return NN2_ERR_INVALID_STATE;
+    *n=nn2_raw_buffer_encode(mode_buffer,out,cap,ts); return *n ? NN2_OK : NN2_ERR_INVALID_STATE; }
 static void tx(void *ctx, bool sent) { (void)ctx; nn2_raw_buffer_tx_result(&buffer,sent); }
 static size_t raw_info(void *ctx, uint8_t *out, size_t cap)
 {
@@ -29,12 +59,14 @@ static size_t raw_info(void *ctx, uint8_t *out, size_t cap)
 static void setup(bool raw)
 {
     state=NN2_OPTICAL_IDLE; mode=false; now=100;
+    mode_buffer=bound_buffer=NULL; allocations=releases=bindings=0;
+    allocation_fails=detach_fails=bind_fails=false;
     nn2_raw_buffer_reset(&buffer);
     nn2_port_safety_t safety={.hold_off=off};
     TEST_ASSERT_EQUAL(NN2_OK,nn2_app_comm_init(&app,42,&safety,123));
     nn2_port_optical_t optical={.start=start,.state=get_state,.clear_fault=clear,
         .current_limit_ma=NN2_OPTICAL_MAX_MA,.real_samples=true,.frame_tx_result=tx};
-    if (raw) { optical.read_frame_ex=raw_frame; optical.read_raw_info=raw_info; }
+    if (raw) { optical.read_frame_ex=raw_frame; optical.read_raw_info=raw_info; optical.set_mode=set_mode; }
     else optical.read_frame=old_frame;
     TEST_ASSERT_EQUAL(NN2_OK,nn2_app_comm_bind_optical(&app,&optical));
 }
@@ -128,7 +160,8 @@ static void mode_and_raw_sequence(void)
     TEST_ASSERT_EQUAL(0,nn2_core_get_u16(p.payload+6));
     p=request(7,NN2_CMD_START,NULL,0); TEST_ASSERT_FALSE(mode);
     TEST_ASSERT_EQUAL(NN2_OK,nn2_app_comm_tick(&app,now++,true));
-    nn2_raw_buffer_push(&buffer,ain,101,25000,3,4,0);
+    TEST_ASSERT_NULL(mode_buffer); TEST_ASSERT_NULL(bound_buffer);
+    TEST_ASSERT_EQUAL(1,releases);
     TEST_ASSERT_EQUAL(0,nn2_app_comm_frame(&app,&peer,wire,sizeof(wire)));
 }
 static void full_buffer_gap_and_codec_limits(void)
@@ -190,10 +223,64 @@ static void metadata_survives_ring_reuse(void)
     TEST_ASSERT_EQUAL(0,buffer.dropped);
     TEST_ASSERT_EQUAL(1,buffer.highwater);
 }
+static void mode_allocation_lifecycle(void)
+{
+    setup(true);
+    TEST_ASSERT_NULL(mode_buffer); TEST_ASSERT_EQUAL(0,allocations);
+    uint8_t eng=1, acq_mode=0;
+    allocation_fails=true;
+    nn2_core_packet_t p=request(1,NN2_CMD_SET_MODE,&eng,1);
+    TEST_ASSERT_EQUAL(NN2_REPLY_PRECONDITION,nn2_core_get_u16(p.payload+6));
+    TEST_ASSERT_NULL(mode_buffer); TEST_ASSERT_NULL(bound_buffer);
+    TEST_ASSERT_EQUAL(1,allocations); TEST_ASSERT_EQUAL(0,bindings); TEST_ASSERT_EQUAL(0,releases);
+    p=request(90,NN2_CMD_INFO,NULL,0); p.payload[p.length]=0;
+    TEST_ASSERT_NOT_NULL(strstr((char *)p.payload+28,"mode=ACQ"));
+    allocation_fails=false;
+    p=request(2,NN2_CMD_SET_MODE,&eng,1);
+    TEST_ASSERT_EQUAL(0,nn2_core_get_u16(p.payload+6));
+    TEST_ASSERT_EQUAL_PTR(&buffer,mode_buffer); TEST_ASSERT_EQUAL_PTR(mode_buffer,bound_buffer);
+    p=request(2,NN2_CMD_SET_MODE,&eng,1); /* Exact retry: no second allocation. */
+    p=request(3,NN2_CMD_SET_MODE,&eng,1); /* Already ENGINEERING: also no allocation. */
+    TEST_ASSERT_EQUAL(2,allocations);
+    p=request(4,NN2_CMD_START,NULL,0);
+    p=request(5,NN2_CMD_SET_MODE,&acq_mode,1);
+    TEST_ASSERT_EQUAL(NN2_REPLY_STATE,nn2_core_get_u16(p.payload+6));
+    TEST_ASSERT_EQUAL(0,releases); TEST_ASSERT_EQUAL(2,allocations);
+    p=request(6,NN2_CMD_STOP,NULL,0);
+    p=request(7,NN2_CMD_SET_MODE,&acq_mode,1);
+    TEST_ASSERT_EQUAL(NN2_REPLY_STATE,nn2_core_get_u16(p.payload+6));
+    state=NN2_OPTICAL_IDLE; TEST_ASSERT_EQUAL(NN2_OK,nn2_app_comm_tick(&app,now++,true));
+    detach_fails=true;
+    p=request(8,NN2_CMD_SET_MODE,&acq_mode,1);
+    TEST_ASSERT_EQUAL(NN2_REPLY_BUSY,nn2_core_get_u16(p.payload+6));
+    TEST_ASSERT_EQUAL_PTR(&buffer,mode_buffer); TEST_ASSERT_EQUAL_PTR(mode_buffer,bound_buffer);
+    TEST_ASSERT_EQUAL(0,releases);
+    p=request(91,NN2_CMD_INFO,NULL,0); p.payload[p.length]=0;
+    TEST_ASSERT_NOT_NULL(strstr((char *)p.payload+28,"mode=ENGINEERING"));
+    detach_fails=false;
+    p=request(9,NN2_CMD_SET_MODE,&acq_mode,1);
+    TEST_ASSERT_EQUAL(0,nn2_core_get_u16(p.payload+6));
+    TEST_ASSERT_NULL(mode_buffer); TEST_ASSERT_NULL(bound_buffer); TEST_ASSERT_EQUAL(1,releases);
+    p=request(9,NN2_CMD_SET_MODE,&acq_mode,1);
+    p=request(10,NN2_CMD_SET_MODE,&acq_mode,1);
+    TEST_ASSERT_EQUAL(1,releases); TEST_ASSERT_EQUAL(2,allocations);
+    p=request(92,NN2_CMD_INFO,NULL,0); p.payload[p.length]=0;
+    TEST_ASSERT_NOT_NULL(strstr((char *)p.payload+28,"mode=ACQ"));
+}
+static void failed_initial_bind_releases_candidate(void)
+{
+    setup(true); bind_fails=true; uint8_t eng=1;
+    nn2_core_packet_t p=request(1,NN2_CMD_SET_MODE,&eng,1);
+    TEST_ASSERT_EQUAL(NN2_REPLY_BUSY,nn2_core_get_u16(p.payload+6));
+    TEST_ASSERT_NULL(mode_buffer); TEST_ASSERT_NULL(bound_buffer);
+    TEST_ASSERT_EQUAL(1,allocations); TEST_ASSERT_EQUAL(1,releases);
+}
 void test_raw_engineering_suite(void)
 {
     RUN_TEST(acq1_bytes_unchanged);
     RUN_TEST(mode_and_raw_sequence);
     RUN_TEST(full_buffer_gap_and_codec_limits);
     RUN_TEST(metadata_survives_ring_reuse);
+    RUN_TEST(mode_allocation_lifecycle);
+    RUN_TEST(failed_initial_bind_releases_candidate);
 }

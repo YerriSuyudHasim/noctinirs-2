@@ -1,5 +1,9 @@
 # Batch 3 RAW static RAM follow-up
 
+Current lifecycle: the STOP-only lazy-allocation follow-up removes the permanent
+RAW instance at ACQ boot; see [BATCH3_RAW_LAZY_ALLOCATION.md](BATCH3_RAW_LAZY_ALLOCATION.md).
+This document retains its original commit's measurements/history.
+
 Parent: `3abe610`, branch `feat/n3-batch3-raw-engineering`. The work branch and
 clean parent were checked before editing. Scope is the Owner-reported SoftAP
 boot regression and bounded RAW RAM reduction only. No push, firmware build,

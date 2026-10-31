@@ -366,7 +366,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "e37b66fda1c42a6971e9776a70a9519cbef6d549c5ea3b9c7222a0af48c69edd"
+      "sha256": "b3477be56c7972216a5f9e51c5bcce18babc21578856c32e16213cf57ada5248"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -468,7 +468,7 @@
     },
     {
       "path": "components/nn2_ports/include/nn2_port_optical.h",
-      "sha256": "018ffd0d4888927c22081a13c79b394f6b93ab8b032a2dce1d198c5dc3d5f405"
+      "sha256": "3954129f7e76b64a7edba0744ba91a53cecd48efab83d02422787ac3cc6c9b24"
     },
     {
       "path": "components/nn2_ports/include/nn2_port_safety.h",
@@ -476,7 +476,7 @@
     },
     {
       "path": "components/nn2_app/CMakeLists.txt",
-      "sha256": "7e57f2313a96f0a62e84a573791ecacf2f1f62054b2f4866f9c4078146459777"
+      "sha256": "c6e9a9cf02653145f782b19ac14beb3dcb8f4fd45b32978e5e99c9eca7708fc2"
     },
     {
       "path": "components/nn2_app/include/nn2_app_adc_diagnostic.h",
@@ -508,7 +508,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "80afd160c773ae62e128995c750db8829cc910859ca946a226d92580969869ed"
+      "sha256": "b4ad566e3d383b233136d320a7a56dae2e0781b91fb9cf945307b05f78e148bf"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",
@@ -573,6 +573,18 @@
     {
       "path": "components/nn2_core/src/nn2_core_optical_codec.c",
       "sha256": "4ee92545d62877cd2deb43ec209a257bb9c513cb8680c232b5840c857023daad"
+    },
+    {
+      "path": "components/nn2_app/include/nn2_app_raw_mode.h",
+      "sha256": "1c27a3adf4bc59a2c8dd876f1019cd8fa2d9d9e896376689e1369500db2458bd"
+    },
+    {
+      "path": "components/nn2_app/src/nn2_app_raw_mode.c",
+      "sha256": "abd957a2d82fecfb86220812b1d474330da6b0616477c5f5265cad329b6911de"
+    },
+    {
+      "path": "components/nn2_ports/include/nn2_port_raw_memory.h",
+      "sha256": "dcccb459d6e158df8eced25f202470617d0f4f2b57a8738abf6f2c33fd9fc2d9"
     }
   ]
 }

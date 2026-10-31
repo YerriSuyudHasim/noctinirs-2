@@ -89,6 +89,8 @@ def describe_reply(packet, request_id=None, opcode=None):
                   session_id=packet.session_id, msg_sequence=packet.sequence, received_us=rx)
     if error:
         if extra: raise ValueError("unexpected error extension")
+        if op == COMMANDS["set-mode"] and error == 7:
+            result["message"] = "RAW buffer: not enough internal memory"
     elif op == COMMANDS["info"]:
         result["info"] = extra.decode("ascii")
     elif op in (COMMANDS["health"], COMMANDS["timing"]):
@@ -229,6 +231,7 @@ class Client:
 
 def require_ok(result):
     if result["error"] != "OK":
+        if result.get("message"): raise RuntimeError(result["message"])
         raise RuntimeError("device returned "+result["error"]+
                            f" (state={result.get('state', 'unknown')}, fault={result.get('fault', 'unknown')}"
                            f" {result.get('fault_name', 'UNKNOWN')})")

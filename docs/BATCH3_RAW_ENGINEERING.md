@@ -1,5 +1,9 @@
 # Batch 3: bounded engineering RAW integration
 
+Current lifecycle: the STOP-only lazy-allocation follow-up removes the permanent
+RAW instance at ACQ boot; see [BATCH3_RAW_LAZY_ALLOCATION.md](BATCH3_RAW_LAZY_ALLOCATION.md).
+This document retains its original commit's measurements/history.
+
 Historical report for commit `3abe610`. The RAM follow-up changes capacity to
 128 entries and total buffer size to 6272 bytes; see
 [BATCH3_RAW_RAM_FIX.md](BATCH3_RAW_RAM_FIX.md) for current sizes and verification.

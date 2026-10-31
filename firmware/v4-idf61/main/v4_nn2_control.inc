@@ -4,6 +4,7 @@
  * blocking I2C. There is no USB command console. */
 #if CONFIG_NOCTI_V4_NN2_COMMUNICATION
 #include "nn2_app_comm.h"
+#include "nn2_app_raw_mode.h"
 #include "nn2_core_optical.h"
 #define NN2_CURRENT_TEXT_(value) #value
 #define NN2_CURRENT_TEXT(value) NN2_CURRENT_TEXT_(value)
@@ -14,7 +15,7 @@
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 static nn2_app_comm_storage_t s_nn2_app;
-static nn2_raw_buffer_t s_raw;
+static nn2_raw_buffer_t *s_raw; /* Allocated only by a STOP-only set_mode. */
 static bool s_raw_enabled;
 static TaskHandle_t s_control_worker, s_control_network;
 static portMUX_TYPE s_control_lock=portMUX_INITIALIZER_UNLOCKED;
@@ -131,9 +132,11 @@ static void control_worker(void *ctx)
             if (result==ESP_OK && control_start_allowed())
                 result=nocti_v4_scheduler_set_fs(&s_scheduler,cfg.fs);
             if (result==ESP_OK && control_start_allowed()) {
-                nn2_raw_buffer_reset(&s_raw);
-                s_raw_enabled=cfg.engineering;
-                result=nocti_v4_optical_bind_raw(&s_optical,cfg.engineering ? &s_raw : NULL);
+                if (cfg.engineering && !s_raw) result=ESP_ERR_INVALID_STATE;
+                if (s_raw) nn2_raw_buffer_reset(s_raw);
+                s_raw_enabled=cfg.engineering && s_raw != NULL;
+                if (result==ESP_OK)
+                    result=nocti_v4_optical_bind_raw(&s_optical,cfg.engineering ? s_raw : NULL);
             }
             if (result==ESP_OK && control_start_allowed()) result=scan_start();
             portENTER_CRITICAL(&s_control_lock);
@@ -192,9 +195,9 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
     if (kind == 2u) {
         int n=snprintf((char *)out,cap,
             ";raw_packets_sent=%" PRIu32 ";raw_dropped_samples=%" PRIu32 ";raw_buffer_highwater=%" PRIu32,
-            __atomic_load_n(&s_raw.packets_sent,__ATOMIC_RELAXED),
-            __atomic_load_n(&s_raw.dropped,__ATOMIC_RELAXED),
-            __atomic_load_n(&s_raw.highwater,__ATOMIC_RELAXED));
+            (s_raw ? __atomic_load_n(&s_raw->packets_sent,__ATOMIC_RELAXED) : 0u),
+            (s_raw ? __atomic_load_n(&s_raw->dropped,__ATOMIC_RELAXED) : 0u),
+            (s_raw ? __atomic_load_n(&s_raw->highwater,__ATOMIC_RELAXED) : 0u));
         return n>0 && (size_t)n<cap ? (size_t)n : 0u;
     }
     nocti_v4_task_wdt_log_pending();
@@ -325,9 +328,9 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
     size_t used=(size_t)wrote;
     int extra=snprintf((char *)out+used,cap-used,
         " raw_packets_sent=%" PRIu32 " raw_dropped_samples=%" PRIu32 " raw_buffer_highwater=%" PRIu32,
-        __atomic_load_n(&s_raw.packets_sent,__ATOMIC_RELAXED),
-        __atomic_load_n(&s_raw.dropped,__ATOMIC_RELAXED),
-        __atomic_load_n(&s_raw.highwater,__ATOMIC_RELAXED));
+        (s_raw ? __atomic_load_n(&s_raw->packets_sent,__ATOMIC_RELAXED) : 0u),
+        (s_raw ? __atomic_load_n(&s_raw->dropped,__ATOMIC_RELAXED) : 0u),
+        (s_raw ? __atomic_load_n(&s_raw->highwater,__ATOMIC_RELAXED) : 0u));
     if (extra<0 || (size_t)extra>=cap-used) return 0;
     return used+(size_t)extra;
 }
@@ -338,13 +341,46 @@ static nn2_status_t control_read_raw(void *ctx, uint8_t *out, size_t cap,
     uint64_t *timestamp, size_t *length)
 {
     (void)ctx;
-    if (!s_raw_enabled) return NN2_ERR_INVALID_STATE;
-    *length=nn2_raw_buffer_encode(&s_raw,out,cap,timestamp);
+    if (!s_raw_enabled || !s_raw) return NN2_ERR_INVALID_STATE;
+    *length=nn2_raw_buffer_encode(s_raw,out,cap,timestamp);
     return *length ? NN2_OK : NN2_ERR_INVALID_STATE;
 }
 static void control_raw_tx(void *ctx, bool sent)
 {
-    (void)ctx; nn2_raw_buffer_tx_result(&s_raw,sent);
+    (void)ctx; if (s_raw) nn2_raw_buffer_tx_result(s_raw,sent);
+}
+static void *control_raw_allocate(void *ctx, size_t bytes)
+{
+    (void)ctx;
+    return heap_caps_malloc(bytes,MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+}
+static void control_raw_release(void *ctx, void *buffer)
+{ (void)ctx; heap_caps_free(buffer); }
+static nn2_status_t control_raw_bind(void *ctx, nn2_raw_buffer_t *buffer)
+{
+    return nocti_v4_optical_bind_raw((nocti_v4_optical_t *)ctx,buffer)==ESP_OK ?
+        NN2_OK : NN2_ERR_INVALID_STATE;
+}
+static nn2_status_t control_set_mode(void *ctx, bool engineering)
+{
+    (void)ctx;
+    if (control_state(NULL)!=NN2_OPTICAL_IDLE) return NN2_ERR_INVALID_STATE;
+    const nn2_port_raw_memory_t memory={.allocate=control_raw_allocate,
+        .release=control_raw_release,.bind=control_raw_bind,.ctx=&s_optical};
+    nn2_status_t result=nn2_app_raw_mode_set(&s_raw,&memory,engineering);
+    if (result==NN2_OK) s_raw_enabled=false;
+    return result;
+}
+/* Boot only. Once at each call site; never called by a data/ISR path. */
+static void control_heap_point(const char *point, uint32_t *free_out, uint32_t *largest_out)
+{
+    const uint32_t caps=MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    const uint32_t free_bytes=(uint32_t)heap_caps_get_free_size(caps);
+    const uint32_t largest=(uint32_t)heap_caps_get_largest_free_block(caps);
+    if (free_out) __atomic_store_n(free_out,free_bytes,__ATOMIC_RELAXED);
+    if (largest_out) __atomic_store_n(largest_out,largest,__ATOMIC_RELAXED);
+    printf("NN2_HEAP point=%s free=%" PRIu32 " largest=%" PRIu32 " stack=%u\n",
+        point,free_bytes,largest,(unsigned)NOCTI_V4_RTOS_STACK_NET_BYTES);
 }
 static esp_err_t control_init(void)
 {
@@ -355,14 +391,12 @@ static esp_err_t control_init(void)
     if (nn2_app_comm_init(&s_nn2_app,boot,&safety,esp_random())!=NN2_OK) return ESP_FAIL;
     nn2_port_optical_t optical={.start=control_start,.state=control_state,.clear_fault=control_clear,
         .current_limit_ma=NN2_OPTICAL_MAX_MA,.real_samples=true,
-        .read_diag=control_read_diag,.read_frame_ex=control_read_raw,.frame_tx_result=control_raw_tx,.read_raw_info=control_raw_info,
+        .set_mode=control_set_mode,.read_diag=control_read_diag,.read_frame_ex=control_read_raw,.frame_tx_result=control_raw_tx,.read_raw_info=control_raw_info,
         .policy_info="NoctiNIRS2/0.1.0;wire=ADR0004/1;baseline=V4_IDF61_NN2_CTRL;led=REAL_BRINGUP;short_policy=STRICT;adc=ADS131M04;frames=RAW_ENGINEERING;fs_min=2;fs_max=10;fs_allowed=2,4,5,8,10;current_default_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_DEFAULT_MA) ";current_max_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_MAX_MA) ";diag=health,timing;console=removed"};
     if (nn2_app_comm_bind_optical(&s_nn2_app,&optical)!=NN2_OK) return ESP_FAIL;
     if (xTaskCreatePinnedToCore(control_worker,"v4_control",NOCTI_V4_RTOS_STACK_CONTROL_BYTES,NULL,NOCTI_V4_RTOS_PRIO_CONTROL,&s_control_worker,NOCTI_V4_RTOS_CORE_ACQ)!=pdPASS)
         return ESP_ERR_NO_MEM;
-    const uint32_t heap_caps=MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
-    __atomic_store_n(&s_health.free_heap_before_wifi,
-        (uint32_t)heap_caps_get_free_size(heap_caps),__ATOMIC_RELAXED);
+    control_heap_point("before_wifi_init",&s_health.free_heap_before_wifi,NULL);
     result=nn2_wifi_init();
     static nn2_port_clock_t clock={.now_us=control_now};
     if (result==ESP_OK) result=nn2_net_init(&s_nn2_app,&clock,3333u);
@@ -370,12 +404,10 @@ static esp_err_t control_init(void)
     if (result!=ESP_OK) { (void)control_off(NULL); return result; }
     /* Snapshot the internal 8-bit heap immediately before the net task request.
      * Existing health storage only: no new task, allocation or data-path work. */
-    __atomic_store_n(&s_health.free_heap_after_wifi,
-        (uint32_t)heap_caps_get_free_size(heap_caps),__ATOMIC_RELAXED);
-    __atomic_store_n(&s_health.largest_free_block,
-        (uint32_t)heap_caps_get_largest_free_block(heap_caps),__ATOMIC_RELAXED);
+    control_heap_point("after_wifi_start",&s_health.free_heap_after_wifi,&s_health.largest_free_block);
     if (!s_control_fault) control_set_boot_stage(nocti_v4_boot_stage_name(NOCTI_V4_BOOT_READY));
     if (xTaskCreatePinnedToCore(control_network,"v4_nn2_net",NOCTI_V4_RTOS_STACK_NET_BYTES,NULL,NOCTI_V4_RTOS_PRIO_NET,&s_control_network,NOCTI_V4_RTOS_CORE_SOFT)!=pdPASS) {
+        control_heap_point("net_task_create_failed",NULL,NULL);
         (void)control_off(NULL); (void)nn2_wifi_stop(); return ESP_ERR_NO_MEM;
     }
     printf("V4_NN2_CONTROL boot=%" PRIu64 " ip=192.168.4.1 port=3333; V4 acquisition; frames=unsupported\n",boot);
