@@ -45,4 +45,5 @@ nn2_status_t nn2_app_comm_safe_off(nn2_app_comm_storage_t *);
 /* Stamp only uncached time queries immediately before send; state-changing
  * cached replies remain byte-identical. Not a hardware transmit timestamp. */
 void nn2_app_comm_stamp_tx(uint8_t *reply, size_t length, uint64_t now_us);
+void nn2_app_comm_frame_tx_result(nn2_app_comm_storage_t *, bool sent);
 #endif

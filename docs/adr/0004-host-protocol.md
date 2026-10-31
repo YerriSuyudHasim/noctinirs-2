@@ -269,6 +269,7 @@ Single const table in `nn2_core`. Every decode resolves to exactly one row or `U
 | 0x0021 | `clear_fault` | — | ✗ | ✗ | UDP only. USB `clear_fault` is rejected in every state until Q-2 is decided | n/a (lock released) | cached | emitter (RI) / sys (restart) |
 | 0x0100 | `set_fs` | `fs:u8` ∈ {1,2,4,5,8,10} | ✗ | ✗ | UDP | n/a (STOPPED only) | cached | none (config store) |
 | 0x0101 | `set_led_current` | `channel:u8` 0..19, `mA` 0..50 (encoding **TBD Agent 03**) | ✗ | indirect (config only) | UDP only | n/a (STOPPED only) | cached | none (stores only, #48) |
+| 0x0102 | `set_mode` | `mode:u8`: 0 ACQ normal, 1 ENGINEERING | ✗ | ✗ (stores only) | UDP only | n/a (STOPPED only) | cached | Batch 3 RAW selection; default ACQ after boot |
 | 0x0030 | `get_health` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | ADC diagnostic counters. Not an ACQ1 frame. |
 | 0x0031 | `get_timing` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | ADC service-time counters. Not an ACQ1 frame. |
 
@@ -1178,3 +1179,65 @@ M-1, M-2, M-3, and N-1 are folded in §3.16 and §3.17. The SlotPlan budget tabl
 ### 12.3 C4 seqlock item
 
 Agent 05's further seqlock item for this rev is in §3.14.1. Reader retry is bounded by `NN2_SEQLOCK_MAX_RETRIES` (value **PROVISIONAL**). On exhaustion the reader returns the last good copy and sets a stale flag. There is one writer per record. No GitHub URL for that wording was found (**reference pending**).
+
+
+## 13. Batch 3 engineering RAW amendment (2026-10-31)
+
+Scope: Owner's Batch 3 instruction against e42f2bc9, local implementation pending
+bench approval. Only RAW layout 3 from draft optical contract v0.4.3 is bound;
+OPT2, optical gates, SESSION_REPORT and gate statistics remain unimplemented.
+The draft SHA-256 is
+`4dd2b89b2ac900dfe814b6cd97e504b3227b163eee8487987f9e4e4b84c31c6f`.
+
+`set_mode` is opcode 0x0102 with one byte, cached like other configuration
+mutations. Only STOPPED accepts it; STARTING, STREAMING and STOPPING reject it
+with INVALID_STATE. It does not start acquisition. Boot selects ACQ normal.
+Normal ACQ1 transport retains its exact prior payload and envelope behavior.
+The V4 control binding still has no ACQ1 producer in normal mode.
+
+ENGINEERING selects the existing Batch 2 RAW encoder. Its 16-byte prefix and
+14-byte samples are unchanged (N=1..100; payload at most 1416 bytes; datagram at
+most 1448). `raw_flags` bit 0 always labels ENGINEERING; bit 1 is GAP_BEFORE.
+RAW is never science. RAW has no `frame_flags`, `gate_config_id` or
+`frame_sequence` wire fields: do not append them or reinterpret reserved bytes.
+`frame_flags=4` (ENGINEERING_UNGATED) and `gate_config_id=0` describe the mode in
+info/health/timing, rather than introducing OPT2 into this batch.
+
+The sole bound ADS consumer copies finalized samples to a fixed 256-entry SPSC
+RAW buffer, after the existing sample-clock classification. No extra ADS ring
+consumer, ISR work, allocation, logging or division is introduced. Unclassifiable
+startup/stop records use OUTSIDE/0xFF. Overflow drops newest, counts lost samples,
+and marks the first subsequently accepted record. Encoding splits at sequence
+holes, epoch changes and that marker; older buffered records are not mislabeled.
+The measured timestamp belongs to the first sample, not transmit time.
+`slot_plan_epoch` carries the low 16 bits of the immutable scheduler session epoch;
+`geometry_map_id=1` refers to config/optical_geometry_v1.json.
+
+RAW uses the existing bounded FRAME sender in nn2_net, the same UDP 3333 socket,
+and the full owner IP/port established by START (§3.2/3.6). No legacy 3334 change.
+Envelope message sequencing remains shared with replies. RAW sample continuity
+uses first_sample_sequence + i, including u32 wrap; RAW has no independent frame
+counter. UDP send failure uses existing send_errors and sample discontinuity.
+raw_packets_sent increments only after successful sendto; raw_dropped_samples
+counts RAW-buffer overflow, not ADS or network loss. These and
+raw_buffer_highwater reset on the next start, remain visible after STOP, and are
+per-field atomic diagnostic snapshots.
+
+The bench receiver starts on its own single control endpoint, keeps that socket
+for heartbeats every 500 ms and STOP confirmation, and never adopts another
+owner's session. It saves original length-prefixed NN2 datagrams plus AIN CSV;
+no channel remapping or physiological interpretation is performed.
+The separate capture invocation is required: a different nn2ctl start endpoint
+cannot transfer the lease to the receiver. Example after STOP:
+
+```text
+python tools/nn2ctl.py set-mode --mode ENGINEERING
+python tools/nn2_raw_capture.py --seconds 60 --rate 10 --output raw-bench3
+python tools/nn2ctl.py timing
+python tools/nn2ctl.py health
+python tools/nn2ctl.py set-mode --mode ACQ
+```
+
+Bench and ESP-IDF build/flash are NOT RUN by this change. The meanings of RAW
+versus OPT2 metadata and the final session-metadata encoding remain separate
+contract decisions; this amendment does not introduce additional RAW fields.

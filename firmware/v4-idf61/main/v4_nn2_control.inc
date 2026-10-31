@@ -13,6 +13,8 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 static nn2_app_comm_storage_t s_nn2_app;
+static nn2_raw_buffer_t s_raw;
+static bool s_raw_enabled;
 static TaskHandle_t s_control_worker, s_control_network;
 static portMUX_TYPE s_control_lock=portMUX_INITIALIZER_UNLOCKED;
 static nn2_port_optical_config_t s_control_config;
@@ -127,6 +129,11 @@ static void control_worker(void *ctx)
                 result=nocti_v4_led_run_fast_i2c_qualification(&s_led);
             if (result==ESP_OK && control_start_allowed())
                 result=nocti_v4_scheduler_set_fs(&s_scheduler,cfg.fs);
+            if (result==ESP_OK && control_start_allowed()) {
+                nn2_raw_buffer_reset(&s_raw);
+                s_raw_enabled=cfg.engineering;
+                result=nocti_v4_optical_bind_raw(&s_optical,cfg.engineering ? &s_raw : NULL);
+            }
             if (result==ESP_OK && control_start_allowed()) result=scan_start();
             portENTER_CRITICAL(&s_control_lock);
             bool cancelled=!s_control_wanted || s_control_start_epoch!=s_control_generation;
@@ -181,6 +188,14 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
 {
     (void)ctx;
     if (!out || cap < 32u) return 0u;
+    if (kind == 2u) {
+        int n=snprintf((char *)out,cap,
+            ";raw_packets_sent=%" PRIu32 ";raw_dropped_samples=%" PRIu32 ";raw_buffer_highwater=%" PRIu32,
+            __atomic_load_n(&s_raw.packets_sent,__ATOMIC_RELAXED),
+            __atomic_load_n(&s_raw.dropped,__ATOMIC_RELAXED),
+            __atomic_load_n(&s_raw.highwater,__ATOMIC_RELAXED));
+        return n>0 && (size_t)n<cap ? (size_t)n : 0u;
+    }
     nocti_v4_task_wdt_log_pending();
     __atomic_store_n(&s_health.task_wdt_subscribe_errors,
                      nocti_v4_task_wdt_subscribe_errors(), __ATOMIC_RELAXED);
@@ -300,9 +315,30 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             HLOAD(udp_frames_sent), HLOAD(udp_frames_dropped));
     }
     if (wrote < 0 || (size_t)wrote >= cap) return 0u;
-    return (size_t)wrote;
+    size_t used=(size_t)wrote;
+    int extra=snprintf((char *)out+used,cap-used,
+        " raw_packets_sent=%" PRIu32 " raw_dropped_samples=%" PRIu32 " raw_buffer_highwater=%" PRIu32,
+        __atomic_load_n(&s_raw.packets_sent,__ATOMIC_RELAXED),
+        __atomic_load_n(&s_raw.dropped,__ATOMIC_RELAXED),
+        __atomic_load_n(&s_raw.highwater,__ATOMIC_RELAXED));
+    if (extra<0 || (size_t)extra>=cap-used) return 0;
+    return used+(size_t)extra;
 }
 #undef HLOAD
+static size_t control_raw_info(void *ctx, uint8_t *out, size_t cap)
+{ return control_read_diag(ctx,2u,out,cap); }
+static nn2_status_t control_read_raw(void *ctx, uint8_t *out, size_t cap,
+    uint64_t *timestamp, size_t *length)
+{
+    (void)ctx;
+    if (!s_raw_enabled) return NN2_ERR_INVALID_STATE;
+    *length=nn2_raw_buffer_encode(&s_raw,out,cap,timestamp);
+    return *length ? NN2_OK : NN2_ERR_INVALID_STATE;
+}
+static void control_raw_tx(void *ctx, bool sent)
+{
+    (void)ctx; nn2_raw_buffer_tx_result(&s_raw,sent);
+}
 static esp_err_t control_init(void)
 {
     esp_err_t result=nn2_config_init(); uint64_t boot=0u;
@@ -312,8 +348,8 @@ static esp_err_t control_init(void)
     if (nn2_app_comm_init(&s_nn2_app,boot,&safety,esp_random())!=NN2_OK) return ESP_FAIL;
     nn2_port_optical_t optical={.start=control_start,.state=control_state,.clear_fault=control_clear,
         .current_limit_ma=NN2_OPTICAL_MAX_MA,.real_samples=true,
-        .read_diag=control_read_diag,
-        .policy_info="NoctiNIRS2/0.1.0;wire=ADR0004/1;baseline=V4_IDF61_NN2_CTRL;led=REAL_BRINGUP;short_policy=STRICT;adc=ADS131M04;frames=unsupported;fs_min=2;fs_max=10;fs_allowed=2,4,5,8,10;current_default_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_DEFAULT_MA) ";current_max_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_MAX_MA) ";diag=health,timing;console=removed"};
+        .read_diag=control_read_diag,.read_frame_ex=control_read_raw,.frame_tx_result=control_raw_tx,.read_raw_info=control_raw_info,
+        .policy_info="NoctiNIRS2/0.1.0;wire=ADR0004/1;baseline=V4_IDF61_NN2_CTRL;led=REAL_BRINGUP;short_policy=STRICT;adc=ADS131M04;frames=RAW_ENGINEERING;fs_min=2;fs_max=10;fs_allowed=2,4,5,8,10;current_default_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_DEFAULT_MA) ";current_max_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_MAX_MA) ";diag=health,timing;console=removed"};
     if (nn2_app_comm_bind_optical(&s_nn2_app,&optical)!=NN2_OK) return ESP_FAIL;
     if (xTaskCreatePinnedToCore(control_worker,"v4_control",NOCTI_V4_RTOS_STACK_CONTROL_BYTES,NULL,NOCTI_V4_RTOS_PRIO_CONTROL,&s_control_worker,NOCTI_V4_RTOS_CORE_ACQ)!=pdPASS)
         return ESP_ERR_NO_MEM;

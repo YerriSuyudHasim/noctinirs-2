@@ -5,6 +5,7 @@ enum { NN2_OPTICAL_IDLE, NN2_OPTICAL_STARTING, NN2_OPTICAL_RUNNING,
        NN2_OPTICAL_STOPPING, NN2_OPTICAL_FAULT };
 typedef struct {
     uint8_t fs;
+    bool engineering; /* Boot default false; changed only while stopped. */
     uint16_t current_ma[NN2_OPTICAL_SLOTS];
 } nn2_port_optical_config_t;
 /* Application-owner task only, nonblocking, never ISR/reentry. start snapshots
@@ -22,6 +23,12 @@ typedef struct {
      * Copies a FRAME payload; EMPTY leaves output unchanged. real_samples
      * changes provenance only for this explicit, complete ADC+LED binding. */
     nn2_status_t (*read_frame)(void *, uint8_t *, size_t, uint64_t *timestamp);
+    /* ENGINEERING-only RAW variable-size payload binding. The producer uses
+     * the typed codec; normal mode continues through read_frame (ACQ1). */
+    nn2_status_t (*read_frame_ex)(void *, uint8_t *, size_t, uint64_t *, size_t *);
+    void (*frame_tx_result)(void *, bool);
+    /* Optional semicolon-prefixed RAW counters for info; read-only. */
+    size_t (*read_raw_info)(void *, uint8_t *, size_t);
     bool real_samples;
     const char *policy_info; /* Static capability text, or NULL for strict. */
     /* Optional read-only diagnostic. kind 0 is health, kind 1 is timing.

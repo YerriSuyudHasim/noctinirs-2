@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include "nn2_core_raw_buffer.h"
 #include <stdint.h>
 
 #include "esp_err.h"
@@ -170,6 +171,8 @@ esp_err_t nocti_v4_optical_init(nocti_v4_optical_t *optical,
                                  nocti_v4_health_t *health);
 /* Called while ADS is stopped. It clears ownership/state, binds the optical
  * task as the sole ADS raw consumer, and rejects mid-session reconfiguration. */
+/* Called only with optical/ADS stopped, before prepare_scan. */
+esp_err_t nocti_v4_optical_bind_raw(nocti_v4_optical_t *, nn2_raw_buffer_t *);
 esp_err_t nocti_v4_optical_prepare_scan(nocti_v4_optical_t *optical);
 /* Called after scheduler_start has fixed the scan epoch. Samples before this
  * point are explicitly counted as STARTUP_DISCARD. */
