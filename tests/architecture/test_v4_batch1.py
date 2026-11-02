@@ -191,6 +191,18 @@ static const char *control_boot_stage(void) { return "ready"; }
 #define nocti_v4_async_led_sample_stack_watermark(p) ((void)(p))
 #define nocti_v4_scheduler_sample_stack_watermark(p) ((void)(p))
 #define nocti_v4_optical_sample_stack_watermarks(p) ((void)(p))
+#define MALLOC_CAP_INTERNAL 1u
+#define MALLOC_CAP_8BIT 2u
+#define NN2_OPTICAL_IDLE 0
+/* Stubs for the get_netdiag branch (kind 3). Health and timing do not call these. */
+typedef struct { uint8_t socket_open; uint32_t received, replied, invalid, socket_errors, send_errors;
+  uint32_t frame_send_errors, frame_send_eagain, frame_send_enobufs, frame_send_other;
+  int last_errno, frame_last_errno; } nn2_net_status_t;
+static nn2_net_status_t nn2_net_get_status(void) { nn2_net_status_t s = {0}; return s; }
+static unsigned char control_state(void *ctx) { (void)ctx; return NN2_OPTICAL_IDLE; }
+static size_t heap_caps_get_free_size(uint32_t caps) { (void)caps; return 0u; }
+static size_t heap_caps_get_minimum_free_size(uint32_t caps) { (void)caps; return 0u; }
+static size_t heap_caps_get_largest_free_block(uint32_t caps) { (void)caps; return 0u; }
 """
         for name, var in (("nocti_v4_ads_status_snapshot_t", "adc"),
                           ("nocti_v4_scheduler_status_t", "sched")):

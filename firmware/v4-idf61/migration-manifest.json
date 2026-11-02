@@ -366,7 +366,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "b3477be56c7972216a5f9e51c5bcce18babc21578856c32e16213cf57ada5248"
+      "sha256": "d1df4491b16d655fd870e7be729347ef5a14583fc85fca9d4b7bd69e0d55422b"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -404,7 +404,7 @@
     },
     {
       "path": "components/nn2_core/include/nn2_core_protocol.h",
-      "sha256": "37980c64dfd2f38c605db41198016a01a9159fcd1c2289b19b8ec8299ea08264"
+      "sha256": "57e6000b2492613a216c0c498540ddc5ab491822c454751de374c0e3279091a6"
     },
     {
       "path": "components/nn2_core/include/nn2_core_ring.h",
@@ -420,7 +420,7 @@
     },
     {
       "path": "components/nn2_core/src/nn2_core_protocol.c",
-      "sha256": "3eba106123c2622111cacc39c6b508bff929f2b07ad2bf69e65e59e1cfebfe24"
+      "sha256": "08a7537347b5152ce806d450a5b3313707c6bdf28984247ca473b88b39e8521c"
     },
     {
       "path": "components/nn2_core/src/nn2_core_ring.c",
@@ -508,7 +508,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "b4ad566e3d383b233136d320a7a56dae2e0781b91fb9cf945307b05f78e148bf"
+      "sha256": "5662ddcd50d8fc06bf9cc3e8205d299e6d7a84f42a065eb7f439178435a4ea32"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",
@@ -540,11 +540,11 @@
     },
     {
       "path": "components/nn2_net/include/nn2_net.h",
-      "sha256": "704b42879b444aeb6ca9a56a1a904617e50bcc5f715d6f404ada516b9feac7b8"
+      "sha256": "2926d826fd4bf3f23ef962748a2e6aebefb0f8a390657732178734a8357b2083"
     },
     {
       "path": "components/nn2_net/nn2_net.c",
-      "sha256": "573edb228ce955cb70e80c405436b2c59acd2fbaed16886d3113ebbe454d7695"
+      "sha256": "228ef463e5aae455c5ad8332e9da5cfa8059024a4160aabb73a2541b5538f36e"
     },
     {
       "path": "components/nn2_config/CMakeLists.txt",

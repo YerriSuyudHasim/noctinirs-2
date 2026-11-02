@@ -129,9 +129,15 @@ nn2_status_t nn2_net_poll(bool link_up, uint32_t epoch)
             .sin_addr.s_addr=(uint32_t)(peer>>16),.sin_port=(uint16_t)peer};
         int sent=sendto(s_socket,output,count,MSG_DONTWAIT,
             (struct sockaddr *)&target,sizeof(target));
+        const int frame_errno=sent<0?errno:EIO; /* captured before any other call */
         nn2_app_comm_frame_tx_result(s_app, sent==(int)count);
         if (sent!=(int)count) {
-            s_status.last_errno=sent<0?errno:EIO; ++s_status.send_errors;
+            /* Observation only: no retry, no budget change. Same nn2_net task is the sole writer. */
+            s_status.last_errno=frame_errno; ++s_status.send_errors;
+            s_status.frame_last_errno=frame_errno; ++s_status.frame_send_errors;
+            if (frame_errno==EAGAIN || frame_errno==EWOULDBLOCK) ++s_status.frame_send_eagain;
+            else if (frame_errno==ENOBUFS) ++s_status.frame_send_enobufs;
+            else ++s_status.frame_send_other;
         }
     }
     return NN2_OK;

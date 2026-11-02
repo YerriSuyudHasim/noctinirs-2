@@ -200,6 +200,33 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             (s_raw ? __atomic_load_n(&s_raw->highwater,__ATOMIC_RELAXED) : 0u));
         return n>0 && (size_t)n<cap ? (size_t)n : 0u;
     }
+    if (kind == 3u) {
+        /* get_netdiag, read-only (ADR-0004 amendment). The nn2_net task is the sole writer of
+         * the net counters and the only caller of this path. Free/minimum heap getters are
+         * O(registered heaps) without a lock (ESP-IDF v6.1). The largest-block walk holds the
+         * heap spinlock over every block, so it is read only while IDLE (STOPPED); else "na". */
+        const uint32_t heap_mask = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+        const nn2_net_status_t net = nn2_net_get_status();
+        char largest_now[16];
+        if (control_state(NULL) == NN2_OPTICAL_IDLE)
+            snprintf(largest_now, sizeof(largest_now), "%" PRIu32,
+                     (uint32_t)heap_caps_get_largest_free_block(heap_mask));
+        else
+            snprintf(largest_now, sizeof(largest_now), "na");
+        int netdiag = snprintf((char *)out, cap,
+            "v4netdiag=1 heap_free_now=%" PRIu32 " heap_free_min=%" PRIu32
+            " largest_free_block_now=%s frame_send_errors=%" PRIu32
+            " frame_send_eagain=%" PRIu32 " frame_send_enobufs=%" PRIu32
+            " frame_send_other=%" PRIu32 " frame_last_errno=%d"
+            " net_received=%" PRIu32 " net_replied=%" PRIu32 " net_invalid=%" PRIu32
+            " net_send_errors=%" PRIu32 " net_last_errno=%d",
+            (uint32_t)heap_caps_get_free_size(heap_mask),
+            (uint32_t)heap_caps_get_minimum_free_size(heap_mask), largest_now,
+            net.frame_send_errors, net.frame_send_eagain, net.frame_send_enobufs,
+            net.frame_send_other, net.frame_last_errno,
+            net.received, net.replied, net.invalid, net.send_errors, net.last_errno);
+        return netdiag > 0 && (size_t)netdiag < cap ? (size_t)netdiag : 0u;
+    }
     nocti_v4_task_wdt_log_pending();
     __atomic_store_n(&s_health.task_wdt_subscribe_errors,
                      nocti_v4_task_wdt_subscribe_errors(), __ATOMIC_RELAXED);

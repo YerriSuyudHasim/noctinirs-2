@@ -239,3 +239,11 @@ this task. No network format or frame structure is changed.
 ESP-IDF build: **NOT RUN**. Flash: **NOT RUN**. On-target bench: **NOT RUN**.
 Owner bench is required before push. Host tests do not validate optical safety
 or real-time hardware performance.
+
+## Batch 4a diagnostics pointer
+
+Batch 4a adds observation-only keys in a new read-only opcode `get_netdiag`
+(0x0032): `heap_free_now`, `heap_free_min`, `largest_free_block_now`, `frame_send_*`.
+`get_health` and `get_timing` are unchanged from the pre-Batch-4a build. A RAM budget
+gate is also added. See [BATCH4A_DIAGNOSTICS.md](BATCH4A_DIAGNOSTICS.md) and
+[RAM_BUDGET.md](RAM_BUDGET.md). Owner bench: **NOT RUN** in this environment.

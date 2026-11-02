@@ -6,6 +6,7 @@ CF1 and historical ASCII/stream-v1 packets are intentionally incompatible.
 """
 import argparse
 import dataclasses
+import re
 import json
 import math
 import secrets
@@ -17,7 +18,7 @@ import zlib
 
 COMMANDS = {"heartbeat": 1, "info": 2, "status": 3, "get-config": 4, "get-time": 5,
             "start": 0x10, "stop": 0x11, "safe-off": 0x20, "clear-fault": 0x21,
-            "health": 0x30, "timing": 0x31,
+            "health": 0x30, "timing": 0x31, "netdiag": 0x32,
             "set-fs": 0x100, "set-led-current": 0x101, "set-mode": 0x102}
 ERRORS = ("OK", "INVALID_STATE", "INVALID_ARG", "UNKNOWN_COMMAND", "HW_FAULT", "BUSY",
           "BAD_FRAME", "PRECONDITION_FAILED", "RESERVED_FLAGS")
@@ -93,9 +94,12 @@ def describe_reply(packet, request_id=None, opcode=None):
             result["message"] = "RAW buffer: not enough internal memory"
     elif op == COMMANDS["info"]:
         result["info"] = extra.decode("ascii")
-    elif op in (COMMANDS["health"], COMMANDS["timing"]):
+    elif op in (COMMANDS["health"], COMMANDS["timing"], COMMANDS["netdiag"]):
         text = extra.decode("ascii")
         result["diag"] = parse_diag(text)
+        observation = parse_observation(result["diag"])
+        if observation:
+            result["observation"] = observation
         if "i2c_on_us" in result["diag"] or "i2c_off_us" in result["diag"]:
             result["async_i2c"] = parse_async_i2c(result["diag"])
         if op == COMMANDS["timing"] and "on_d" in result["diag"]:
@@ -356,7 +360,7 @@ def parse_sync(fields):
 
 def parse_diag(text):
     """Parse a V4 health or timing report. This is not an ACQ1 frame."""
-    if not isinstance(text, str) or not text.startswith(("v4health=1 ", "v4timing=1 ")):
+    if not isinstance(text, str) or not text.startswith(("v4health=1 ", "v4timing=1 ", "v4netdiag=1 ")):
         raise ValueError("diagnostic report")
     fields = {}
     for item in text.split():
@@ -366,7 +370,8 @@ def parse_diag(text):
         if not key or key in fields:
             raise ValueError("diagnostic field")
         fields[key] = value
-    kind = "v4health" if text.startswith("v4health=") else "v4timing"
+    kind = ("v4health" if text.startswith("v4health=") else
+            "v4netdiag" if text.startswith("v4netdiag=") else "v4timing")
     if fields.get(kind) != "1":
         raise ValueError("diagnostic version")
     if kind == "v4health":
@@ -376,6 +381,11 @@ def parse_diag(text):
                     "task_wdt_kick_errors", "frames")
         if fields.get("frames") == "ACQ1":
             raise ValueError("health must not claim ACQ1")
+    elif kind == "v4netdiag":
+        required = ("heap_free_now", "heap_free_min", "largest_free_block_now",
+                    "frame_send_errors", "frame_send_eagain", "frame_send_enobufs",
+                    "frame_send_other", "frame_last_errno", "net_received", "net_replied",
+                    "net_invalid", "net_send_errors", "net_last_errno")
     else:
         required = ("adc_missed", "adc_backlog_catchup", "adc_missed_backlog",
                     "boot82_bound", "spi_min_us", "spi_max_us", "spi_avg_us",
@@ -387,6 +397,40 @@ def parse_diag(text):
     if missing:
         raise ValueError("diagnostic missing " + ",".join(missing))
     return fields
+
+OBSERVATION_UINT_KEYS = ("heap_free_now", "heap_free_min", "frame_send_errors",
+                         "frame_send_eagain", "frame_send_enobufs", "frame_send_other",
+                         "net_received", "net_replied", "net_invalid", "net_send_errors")
+
+def parse_observation(fields):
+    """Decode D1/D2 observation keys. Absent keys stay absent; 'na' becomes None.
+    frame_send_errors must equal eagain+enobufs+other when all four are present."""
+    out = {}
+    for key in OBSERVATION_UINT_KEYS:
+        if key in fields:
+            if not re.fullmatch(r"[0-9]+", fields[key]):
+                raise ValueError("observation field " + key)
+            out[key] = int(fields[key])
+    if "largest_free_block_now" in fields:
+        value = fields["largest_free_block_now"]
+        if value == "na":
+            out["largest_free_block_now"] = None
+        elif re.fullmatch(r"[0-9]+", value):
+            out["largest_free_block_now"] = int(value)
+        else:
+            raise ValueError("observation field largest_free_block_now")
+    for key in ("frame_last_errno", "net_last_errno"):
+        if key in fields:
+            if not re.fullmatch(r"-?[0-9]+", fields[key]):
+                raise ValueError("observation field " + key)
+            out[key] = int(fields[key])
+    split = ("frame_send_errors", "frame_send_eagain", "frame_send_enobufs", "frame_send_other")
+    if all(key in out for key in split):
+        out["frame_split_ok"] = out["frame_send_errors"] == sum(out[key] for key in split[1:])
+    if "net_send_errors" in out and "frame_send_errors" in out:
+        # net_send_errors = reply failures + FRAME failures, so it cannot be below the FRAME part.
+        out["net_send_ge_frame"] = out["net_send_errors"] >= out["frame_send_errors"]
+    return out
 
 def describe_led_diagnostics(line):
     """Decode cached per-channel masks; never infer light from a valid bit."""
