@@ -560,11 +560,11 @@
     },
     {
       "path": "components/nn2_core/include/nn2_core_raw_buffer.h",
-      "sha256": "20277bd92ae41f6cbdc8234fc83a783eba4c659fb4b65c4e4bbdcbac233fdd46"
+      "sha256": "0d97bdc7b737ec668510e3321b2a2b290684c187e2a80b74ee32b7207d0a64d5"
     },
     {
       "path": "components/nn2_core/src/nn2_core_raw_buffer.c",
-      "sha256": "7428f8a1d156df35443f6cbdd484f513dfc6fbe729f7877fdd3121b0a233bbf5"
+      "sha256": "767da470c6199b3b6d147ef92150fe3572fc0d0660f9a2516fa2b872617cfb7d"
     },
     {
       "path": "components/nn2_core/include/nn2_core_optical_codec.h",

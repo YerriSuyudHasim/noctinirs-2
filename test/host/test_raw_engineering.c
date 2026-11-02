@@ -144,12 +144,13 @@ static void mode_and_raw_sequence(void)
     TEST_ASSERT_TRUE(nn2_core_packet_decode(wire,count,&p));
     TEST_ASSERT_EQUAL(4,p.sequence);
     TEST_ASSERT_EQUAL(1,nn2_core_get_u16(p.payload+10)); /* sample wrap is contiguous */
-    for (uint32_t i=1;i<=100;++i) nn2_raw_buffer_push(&buffer,ain,i,12470+i*125u,2,4,0);
+    /* A full buffer drains as one packet: 32 B header + 16 B RAW header + 14 B per sample. */
+    for (uint32_t i=1;i<=NN2_RAW_BUFFER_CAPACITY;++i) nn2_raw_buffer_push(&buffer,ain,i,12470+i*125u,2,4,0);
     count=nn2_app_comm_frame(&app,&peer,wire,sizeof(wire));
-    TEST_ASSERT_EQUAL(1448,count);
+    TEST_ASSERT_EQUAL(48u+14u*NN2_RAW_BUFFER_CAPACITY,count);
     TEST_ASSERT_TRUE(nn2_core_packet_decode(wire,count,&p));
     TEST_ASSERT_EQUAL(5,p.sequence);
-    TEST_ASSERT_EQUAL(100,nn2_core_get_u16(p.payload+8));
+    TEST_ASSERT_EQUAL(NN2_RAW_BUFFER_CAPACITY,nn2_core_get_u16(p.payload+8));
     p=request(4,NN2_CMD_STOP,NULL,0);
     engineering=0;
     p=request(5,NN2_CMD_SET_MODE,&engineering,1);
@@ -166,6 +167,7 @@ static void mode_and_raw_sequence(void)
 }
 static void full_buffer_gap_and_codec_limits(void)
 {
+    _Static_assert(NN2_RAW_BUFFER_CAPACITY<100u,"test assumes the buffer is smaller than one N=100 packet");
     nn2_raw_buffer_reset(&buffer);
     int32_t ain[4]={1,2,3,4};
     for (uint32_t i=0;i<NN2_RAW_BUFFER_CAPACITY+7u;++i)
@@ -174,21 +176,28 @@ static void full_buffer_gap_and_codec_limits(void)
     TEST_ASSERT_EQUAL(NN2_RAW_BUFFER_CAPACITY,buffer.highwater);
     uint64_t timestamp; nn2_oc_raw_t raw; nn2_oc_stats_t stats={0};
     size_t n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
-    TEST_ASSERT_EQUAL(1416,n);
+    TEST_ASSERT_TRUE(n>0);
     TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
-    TEST_ASSERT_EQUAL(100,raw.sample_count); TEST_ASSERT_EQUAL(1,raw.raw_flags);
-    /* Publish after the overflow while older pre-gap entries remain queued. */
+    TEST_ASSERT_EQUAL(NN2_RAW_BUFFER_CAPACITY,raw.sample_count); TEST_ASSERT_EQUAL(1,raw.raw_flags);
+    TEST_ASSERT_EQUAL(0,raw.first_sample_sequence);
+    /* The 7 dropped samples leave a hole: the next accepted sample is GAP_BEFORE. */
     uint32_t after_drop=NN2_RAW_BUFFER_CAPACITY+7u;
     nn2_raw_buffer_push(&buffer,ain,after_drop,(uint64_t)after_drop*125u,1,0,255);
     n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
     TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
-    TEST_ASSERT_EQUAL(NN2_RAW_BUFFER_CAPACITY-100u,raw.sample_count);
-    TEST_ASSERT_EQUAL(1,raw.raw_flags);
-    TEST_ASSERT_EQUAL(100,raw.first_sample_sequence);
-    n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
-    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+    TEST_ASSERT_EQUAL(1,raw.sample_count);
     TEST_ASSERT_EQUAL(3,raw.raw_flags); TEST_ASSERT_EQUAL(after_drop,raw.first_sample_sequence);
     TEST_ASSERT_EQUAL(7,buffer.dropped);
+    TEST_ASSERT_EQUAL(0,nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp));
+    /* The codec still accepts N=100 (1416 B payload) even though the buffer holds fewer. */
+    memset(&raw,0,sizeof(raw));
+    raw.raw_flags=1; raw.geometry_map_id=1; raw.slot_plan_epoch=1; raw.sample_count=100;
+    for (unsigned i=0;i<100u;++i) raw.sample[i].phase_class=4;
+    size_t written=0;
+    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_encode_raw(&raw,wire,sizeof(wire),&written,&stats));
+    TEST_ASSERT_EQUAL(1416,written);
+    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,written,NULL,&raw,&stats));
+    TEST_ASSERT_EQUAL(100,raw.sample_count);
     size_t untouched=123;
     raw.sample_count=0;
     TEST_ASSERT_EQUAL(NN2_OC_INVALID,nn2_oc_encode_raw(&raw,wire,sizeof(wire),&untouched,&stats));
@@ -196,6 +205,44 @@ static void full_buffer_gap_and_codec_limits(void)
     raw.sample_count=101;
     TEST_ASSERT_EQUAL(NN2_OC_TOO_LARGE,nn2_oc_encode_raw(&raw,wire,sizeof(wire),&untouched,&stats));
     TEST_ASSERT_EQUAL(123,untouched);
+}
+static uint64_t timestamp_unused;
+static void wrap_keeps_order_and_depth(void)
+{
+    /* Positions wrap at 2 * CAPACITY: run several multi-sample cycles across both wraps. */
+    nn2_raw_buffer_reset(&buffer);
+    int32_t ain[4]={5,6,7,8};
+    uint32_t next=0, expected=0;
+    for (unsigned cycle=0; cycle<2u*NN2_RAW_BUFFER_CAPACITY; ++cycle) {
+        const uint32_t batch=NN2_RAW_BUFFER_MIN_SAMPLES-20u;
+        for (uint32_t i=0;i<batch;++i,++next)
+            nn2_raw_buffer_push(&buffer,ain,next,(uint64_t)next*125u,1,4,0);
+        uint32_t drained=0;
+        while (drained<batch) {
+            nn2_oc_raw_t raw; nn2_oc_stats_t stats={0}; uint64_t timestamp=0;
+            size_t n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+            TEST_ASSERT_TRUE(n>0);
+            TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+            TEST_ASSERT_EQUAL(expected,raw.first_sample_sequence);
+            TEST_ASSERT_EQUAL_UINT64((uint64_t)expected*125u,timestamp);
+            TEST_ASSERT_EQUAL(1,raw.raw_flags);
+            expected+=raw.sample_count; drained+=raw.sample_count;
+        }
+        TEST_ASSERT_EQUAL(batch,drained);
+        TEST_ASSERT_EQUAL(0,nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp_unused));
+    }
+    TEST_ASSERT_EQUAL(0,buffer.dropped);
+    TEST_ASSERT_EQUAL(NN2_RAW_BUFFER_MIN_SAMPLES-20u,buffer.highwater);
+}
+static void two_slots_of_40_fit_without_drop(void)
+{
+    /* 80 samples = two 40-sample slots queued at once (Batch 3 high-water). */
+    nn2_raw_buffer_reset(&buffer);
+    int32_t ain[4]={1,1,1,1};
+    for (uint32_t i=0;i<NN2_RAW_BUFFER_MIN_SAMPLES;++i)
+        nn2_raw_buffer_push(&buffer,ain,i,(uint64_t)i*125u,1,4,0);
+    TEST_ASSERT_EQUAL(0,buffer.dropped);
+    TEST_ASSERT_EQUAL(NN2_RAW_BUFFER_MIN_SAMPLES,buffer.highwater);
 }
 static void metadata_survives_ring_reuse(void)
 {
@@ -280,6 +327,8 @@ void test_raw_engineering_suite(void)
     RUN_TEST(acq1_bytes_unchanged);
     RUN_TEST(mode_and_raw_sequence);
     RUN_TEST(full_buffer_gap_and_codec_limits);
+    RUN_TEST(wrap_keeps_order_and_depth);
+    RUN_TEST(two_slots_of_40_fit_without_drop);
     RUN_TEST(metadata_survives_ring_reuse);
     RUN_TEST(mode_allocation_lifecycle);
     RUN_TEST(failed_initial_bind_releases_candidate);
