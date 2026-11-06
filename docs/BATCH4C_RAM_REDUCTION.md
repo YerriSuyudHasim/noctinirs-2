@@ -9,7 +9,7 @@ Evidence classes: **static**, **host/unit**, **on-target bench** (Owner only). S
 | Item | Commit | Status |
 |---|---|---|
 | 1a ADS `raw_ring` 256 -> 128 records (-7,168 B `.bss`) | `fed718d` | Done in source. Owner approved 2026-11-06 (chat). |
-| 1b optical `raw_stage` 256 -> 128 | none | **Blocked**, see section 2. Needs an Owner decision. |
+| 1b optical `raw_stage` 256 -> 128 | none | **Closed, stays 256.** Owner decision 2026-11-06 (chat), see section 2. |
 | 2 remove unused diagnostics | none | Not started. Not approved. |
 | 3 `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM` 4 -> 6 | `f28a2c1` | Done in source. Owner approved 4 -> 6 only. 8 is NOT done. |
 | 4, 5, 6 stacks, history, finalized rings | none | Not started. Not approved. |
@@ -32,7 +32,7 @@ The raw sample period is 125 us, a slot is 1,000,000 / (20 x Fs) us.
 The 4b bench ran at 10 Hz only, so its `raw_depth_max` (23 in ACQ, 19 in ENGINEERING; the ADS ring, not the optical
 stage) says nothing about 2 and 4 Hz. Capacity must be a power of two (`RAW_STAGE_MASK`), so 128 is the next step
 down and it breaks the budget at 2 and 4 Hz. Overflow of the stage sets `staging_integrity_fault`.
-Options for the Owner: keep 256 (no saving); drop 2 and 4 Hz (a protocol change); or non-power-of-two indexing
+Owner decision (chat, 2026-11-06): keep 256. Options that were considered: keep 256 (no saving); drop 2 and 4 Hz (a protocol change); or non-power-of-two indexing
 (saves little, as in 4b). Nothing was changed for 1b, and the verifier was not edited.
 RTOS review of PR #93 agrees and recommends keeping 256. It adds that 256 leaves only 23 records of headroom at
 2 Hz (233 needed), so this stage is tighter than the ADS ring. Larger redesigns (a smaller staged record, or
