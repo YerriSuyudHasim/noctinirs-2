@@ -29,7 +29,7 @@ def synthetic_map(bss_total=0x2A000, data_total=0x6268, extra=None, drop=None):
     symbols = [  # (section, name, size, object)
         ("bss", "s_runtime", 88840, "libnocti_v4_optical.a(nocti_v4_optical.c.obj)"),
         ("bss", "s_runtime", 36152, "libnocti_v4_scheduler.a(nocti_v4_scheduler.c.obj)"),
-        ("bss", "s_runtime", 18360, "libnocti_v4_ads.a(nocti_v4_ads.c.obj)"),
+        ("bss", "s_runtime", 11192, "libnocti_v4_ads.a(nocti_v4_ads.c.obj)"),
         ("bss", "s_runtime", 8104, "libnocti_v4_async_led.a(nocti_v4_async_led.c.obj)"),
         ("bss", "s_nn2_app", 4096, "libmain.a(main.c.obj)"),
         ("bss", "s_status", 28, "libnn2_net.a(nn2_net.c.obj)"),

@@ -19,7 +19,7 @@ recorded in `docs/BATCH3_RAW_RAM_FIX.md`).
 | `.dram0.bss` total | 172 360 | `[bench]` | Limit in config. **Unresolved:** `[map]` 3abe610 showed 184 632; minus 6 016 (RAW fix) gives 178 616 `[hitung]`. Owner must confirm which total the current build has. |
 | `nocti_v4_optical` `s_runtime` | 88 840 | `[bench]` | Optical runtime |
 | `nocti_v4_scheduler` `s_runtime` | 36 152 | `[bench]` | Scheduler |
-| `nocti_v4_ads` `s_runtime` | 18 360 | `[bench]` | ADS |
+| `nocti_v4_ads` `s_runtime` | 18 360 -> **11 192** | `[bench]` `[hitung]` | ADS. Batch 4c: `raw_ring` 256 -> 128 records (-7 168 B = 128 x 56 B). Limit lowered with Owner approval, 2026-11-06. Confirm with the linker map at the first 4c bench build. |
 | `nocti_v4_async_led` `s_runtime` | 8 104 | `[map]` | Async LED |
 | `main` `s_nn2_app` | 4 096 | `[bench]` | Communication storage |
 | `nn2_net` `s_status` | 28 -> **48** | `[hitung]` `[sumber]` | Batch 4a adds 20 B (frame counters). **Needs Owner approval.** |
@@ -27,7 +27,8 @@ recorded in `docs/BATCH3_RAW_RAM_FIX.md`).
 | Other `.bss` (not registered) | 16 776 | `[hitung]` | Remainder of `.bss` after the registered items above |
 
 Limits in `config/ram_budget.json`: symbol limits are the bench figures above, and `nn2_net.s_status`
-is 48 B (Owner approval, 2026-10-31). The `.dram0.bss` total is **not set**. It is taken from the
+is 48 B (Owner approval, 2026-10-31) and `nocti_v4_ads.s_runtime` is 11 192 B (Batch 4c, Owner approval,
+2026-11-06). The `.dram0.bss` total is **not set**. It is taken from the
 Owner's linker map at the first bench build, and `check_ram_budget.py` reports it as `UNSET`.
 
 ## 2. Dynamic RAW buffer (heap, only while ENGINEERING and STOPPED)

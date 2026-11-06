@@ -107,7 +107,7 @@
     {
       "path": "components/nocti_v4_common/include/nocti_v4_ads_config.h",
       "historical_sha256": "1ec6e74d6aaf1ca24ac94ab10a3a91607f34e8b6e5ab5ead364a0e7fdf897c43",
-      "active_sha256": "de0759b84a24a5709f1e808b0fe85633ef4aea2af17929c0989142148222e2f2",
+      "active_sha256": "c42c38479b352a561361d0caf315c6910adb1ceaa24fc5a3bb5de7cccc749006",
       "changes": [
         "Use the active board approved dedicated SPI2 controller; electrical pin map unchanged",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed"
