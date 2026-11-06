@@ -16,8 +16,8 @@ An earlier flash of Build B produced an image with `baseline=V4_PIPELINE` (root 
 below were taken after `info` showed `V4_IDF61_NN2_CTRL`.
 
 ## RAM
-`free_heap_before_wifi` 86,664 and `free_heap_after_wifi` 35,376 on both builds, against 79,496 and 28,228 in 4b: +7,168 B and +7,148 B,
-equal to the ring reduction. `heap_free_now` while idle in ENGINEERING 20,332 (A) and 20,340 (B), so two more TX buffers cost no visible idle heap.
+`free_heap_before_wifi` 86,664 and `free_heap_after_wifi` 35,376 on both builds, against 79,496 and 28,228 in 4b: +7,168 B and +7,148 B.
+Only the before-Wi-Fi gain equals the ring reduction exactly; the after-Wi-Fi gain is 20 B smaller (unexplained). `heap_free_now` while idle in ENGINEERING 20,332 (A) and 20,340 (B), so two more TX buffers cost no visible idle heap.
 
 ## ACQ, 30 s each (`run --rate <n> --seconds 30 --led`), Build B
 | Rate | `adc_ok` | `raw_depth_max` | `adc_ring_overflow` | `fault` | `heap_free_min` |

@@ -40,11 +40,11 @@ classifying samples into slot work as they arrive) would need their own design r
 
 ## 3. Risks of what was changed
 
-- 1a: ring overflow in the ADS task is a hard fault (`set_fault`, `NOCTI_V4_ADS_FAULT_RAW_RING_OVERFLOW`): DRDY is
+- 1a (this paragraph is the state before the bench; section 7 has the results): ring overflow in the ADS task is a hard fault (`set_fault`, `NOCTI_V4_ADS_FAULT_RAW_RING_OVERFLOW`): DRDY is
   disabled and the session ends. 128 records are 16 ms at 8 kSPS (computed capacity). The only measured depths come
   from the 4b bench on the previous 256-record build, at 10 Hz only: 23 records in ACQ (600 s) and 19 in an
-  ENGINEERING 60 s capture, that is about 2.4-2.9 ms. The 128-record build has not been benched and 2, 4, 5 and 8 Hz
-  were never measured. RTOS review (R1): the optical task classifies a whole slot in one burst (40 samples at 10 Hz,
+  ENGINEERING 60 s capture, that is about 2.4-2.9 ms. Before the bench the 128-record build was unmeasured at every rate. Section 7: 2, 4 and 10 Hz are now measured (30 s); 5 Hz, 8 Hz,
+  DARK_DIAGNOSTIC and worst-case load are still not. RTOS review (R1): the optical task classifies a whole slot in one burst (40 samples at 10 Hz,
   100 at 4 Hz, 200 at 2 Hz), which may push the ring toward 128 at low rates. This is a calculation plus an
   assumption, not a measurement. It is the gate for merging 1a.
 - 3: the cost of one extra TX buffer is unverified (0.65 KB in the 4c context, up to 1.5 KB in the 4b analysis). Worst
