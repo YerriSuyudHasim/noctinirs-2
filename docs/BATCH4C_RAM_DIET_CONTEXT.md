@@ -26,9 +26,19 @@ on-target measurement are done only by the Owner on the lab computer.
 
 ## 2. Where we are (end of Batch 4b)
 
-- PR #92 (Batch 4b, base `cursor/n3-single-clock-72a4`, head `feat/n4b-raw-heap-margin`) is open and not merged.
-  Batch 4c branches from that head (`feat/n4c-ram-diet`) because it uses the 96-sample RAW buffer.
-  If PR #92 changes before merge, rebase/merge deliberately and tell the Owner.
+- PR #92 (Batch 4b) was squash-merged by the Owner into `cursor/n3-single-clock-72a4` as `7bcc01d` on 2026-11-06.
+  Batch 4c works on branch `feat/n4c-ram-reduction`, created from `7bcc01d`, and its PR targets
+  `cursor/n3-single-clock-72a4` (not `main`: the V4 firmware is not on `main`, which is 34+ commits behind). The older
+  branch `feat/n4c-ram-diet` (based on the pre-merge 4b head) is obsolete; do not use it.
+- Reviews of 4b: independent review (Codex) ended as COMMENT after earlier REQUEST CHANGES; RTOS specialist review
+  (Grok) COMMENT, no blocking defects. Host tests at merge: 147, 0 failures. CI was green on the PR head.
+- Follow-ups left open by those reviews (take them into 4c only if the Owner agrees):
+  1. Wording of the `lost_in_breaks / 40` hint in `docs/BATCH4B_RAW_HEAP_MARGIN.md` (section 8 criterion text): it is a
+     consistency check that assumes 40-sample packets (received mean 40.0003), not proof.
+  2. A host test for epoch change / sequence gap while older entries are still queued across the ring wrap.
+  3. A two-thread stress test of the SPSC ring with a sanitizer (not done; host tests are single-threaded).
+  4. The Batch 4b bench evidence is a summary of pasted terminal text (`docs/evidence/batch4b-bench-2026-11-06.md`);
+     the original log is not archived and the board revision / actual `sdkconfig` were not recorded. Record both in 4c benches.
 - Batch 4b result: ENGINEERING RAW buffer 128 -> 96 samples, `sizeof(nn2_raw_buffer_t)` 5216 B.
   Heap at ENGINEERING: `heap_free_min` 6448 B (4a: 3068 B). ACQ: no regression.
 - Open problem 4b left: in ENGINEERING RAW capture, 110 `sendto` failures with errno 12 (ENOMEM) in 60 s,
@@ -178,7 +188,7 @@ probe using the Xtensa ESP32-S3 compiler (`_Static_assert(sizeof(...))`).
 ### Owner bench steps (lab computer, after pulling the branch)
 
 ```text
-git fetch origin ; git checkout feat/n4c-ram-diet ; git log -1 --oneline ; git status --short
+git fetch origin ; git checkout feat/n4c-ram-reduction ; git log -1 --oneline ; git status --short
 idf.py -C firmware\v4-idf61 -p COM11 build flash
 idf.py -C firmware\v4-idf61 -p COM11 monitor
 python tools/check_ram_budget.py firmware\v4-idf61\build\NoctiNIRSv4_IDF61.map
