@@ -109,3 +109,15 @@ no fault, `raw_dropped_samples == 0`, `lost_in_breaks / 40 == delta(frame_send_e
 | RTOS R1/R2/R3: low-rate classify burst, core-0 preemption, DARK_DIAGNOSTIC | Open. Gate for merging 1a: ACQ at 2, 4 and 10 Hz with `raw_depth_max` at most 64 (section 5). The `OPTICAL_EXEC` lines the review asked for are not printed by the current firmware. |
 | RTOS R4: heap and fragmentation from two more TX buffers | Open, low risk. Measure in section 5. |
 | RTOS note: comment in `nocti_v4_ads_config.h` says "16-deep" while `nocti_v4_backlog.h` asserts 8 | Pre-existing, not from this PR. Not changed. |
+
+## 7. Bench result (Owner, 2026-11-06)
+
+Full key fields: `docs/evidence/batch4c-bench-2026-11-06.md` (on-target bench, Owner, not independently reproduced).
+
+- 1a: `raw_depth_max` at most 28 at 2, 4 and 10 Hz ACQ (30 s each, Build B), no ring overflow. The merge condition of section 5 is met on those runs.
+  Heap before Wi-Fi is 7,168 B higher than in 4b; `nocti_v4_ads.s_runtime` is 11,192 B in the linker map.
+- 3 (TX 6): 13 failed sends in 29,648 packets over 5 ENGINEERING runs on B, against 28 in 11,836 over 2 runs on A. The spread between runs is
+  large, so the effect of the TX buffer count is **not proven**. TX 8 not tried.
+- Open, unexplained, recorded only (Owner decided not to re-test on Build A): one FAULT_OPTICAL (267) at the stop of a 10 Hz ACQ run, and one
+  `sched_error` 259 after an ENGINEERING capture. Neither reproduced in later runs.
+- 1b stays at 256 (section 2). Items 2, 4, 5 and 6 not started.
