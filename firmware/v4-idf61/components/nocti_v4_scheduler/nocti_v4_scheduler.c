@@ -12,6 +12,8 @@
 #include "freertos/task.h"
 
 #include "nocti_v4_common.h"
+#include "nocti_v4_sample_clock.h"
+#include "nocti_v4_sample_edge.h"
 
 #define SCHEDULER_RING_MASK (NOCTI_V4_SCHEDULER_EVENT_RING_CAPACITY - 1u)
 #define FINALIZED_RING_MASK (NOCTI_V4_SCHEDULER_FINALIZED_RING_CAPACITY - 1u)
@@ -132,6 +134,28 @@ typedef struct {
     uint32_t off_latency_count;
     uint64_t deferred_work_sum_us;
     uint32_t deferred_work_count;
+    nocti_v4_sample_geometry_t sample_geometry;
+    uint32_t sample_generation;
+    uint32_t sample_origin;
+    uint8_t sample_origin_valid;
+    uint8_t sample_next_is_off;
+    uint32_t sample_next_submit;
+    uint32_t sample_next_frame_sequence;
+    uint8_t sample_next_slot;
+    uint64_t sample_anchor_us;
+    uint8_t sample_anchor_valid;
+    uint32_t sync_on_i2c_us[NOCTI_V4_SLOT_COUNT];
+    uint32_t sync_off_i2c_us[NOCTI_V4_SLOT_COUNT];
+    uint32_t sync_on_planned[NOCTI_V4_SLOT_COUNT];
+    uint32_t sync_on_actual[NOCTI_V4_SLOT_COUNT];
+    uint8_t sync_on_known[NOCTI_V4_SLOT_COUNT];
+    uint32_t sync_off_planned[NOCTI_V4_SLOT_COUNT];
+    uint32_t sync_off_actual[NOCTI_V4_SLOT_COUNT];
+    uint8_t sync_off_known[NOCTI_V4_SLOT_COUNT];
+    uint32_t sync_anchor;
+    uint32_t sync_frame_delta;
+    uint8_t sync_anchor_valid;
+    uint8_t sync_frame_delta_valid;
     uint8_t source_to_channel[NOCTI_V4_SLOT_COUNT];
     frame_descriptor_t frames[NOCTI_V4_SCHEDULER_HISTORY_FRAMES];
     slot_record_t slots[NOCTI_V4_SCHEDULER_HISTORY_FRAMES][NOCTI_V4_SLOT_COUNT];
@@ -220,112 +244,21 @@ static bool finalized_pop(scheduler_runtime_t *runtime,
     return true;
 }
 
-static bool IRAM_ATTR deadline_push_from_isr(scheduler_runtime_t *runtime,
-                                              const deadline_event_t *event)
-{
-    const uint32_t head = __atomic_load_n(&runtime->deadline_head, __ATOMIC_RELAXED);
-    const uint32_t tail = __atomic_load_n(&runtime->deadline_tail, __ATOMIC_ACQUIRE);
-    if (head - tail >= NOCTI_V4_SCHEDULER_EVENT_RING_CAPACITY) {
-        counter_add(&runtime->health->scheduler_event_overflow, 1u);
-        __atomic_store_n(&runtime->event_overflow_pending, true, __ATOMIC_RELEASE);
-        return false;
-    }
-    runtime->deadline_ring[head & SCHEDULER_RING_MASK] = *event;
-    __atomic_store_n(&runtime->deadline_head, head + 1u, __ATOMIC_RELEASE);
-    update_max((uint32_t *)&runtime->deadline_depth_max, head - tail + 1u);
-    return true;
-}
-
-static deadline_event_t IRAM_ATTR next_absolute_deadline(
-    const scheduler_runtime_t *runtime, const deadline_event_t *current)
-{
-    deadline_event_t next = *current;
-    next.callback_timestamp_us = 0u;
-    next.callback_core = -1;
-    if (current->phase == DEADLINE_SLOT_START) {
-        next.phase = DEADLINE_LED_OFF;
-        next.deadline_us = current->frame_epoch_us +
-                           (uint64_t)current->slot_index * NOCTI_V4_SLOT_PERIOD_US +
-                           runtime->active_off_phase_us;
-        return next;
-    }
-    next.phase = DEADLINE_SLOT_START;
-    if (current->slot_index + 1u == NOCTI_V4_SLOT_COUNT) {
-        next.slot_index = 0u;
-        ++next.frame_sequence;
-        next.frame_epoch_us = current->frame_epoch_us + NOCTI_V4_FRAME_PERIOD_US;
-        ++next.slot_epoch;
-    } else {
-        ++next.slot_index;
-    }
-    next.deadline_us = next.frame_epoch_us +
-                       (uint64_t)next.slot_index * NOCTI_V4_SLOT_PERIOD_US;
-    return next;
-}
-
+/* The GPTimer alarm is no longer the LED master. A stale alarm must not
+ * submit an edge. The DRDY sample index wakes the scheduler instead. */
 static bool IRAM_ATTR scheduler_alarm_handler(gptimer_handle_t timer,
                                                const gptimer_alarm_event_data_t *event,
                                                void *user_data)
 {
-    (void)event;
     scheduler_runtime_t *runtime = (scheduler_runtime_t *)user_data;
-    if (runtime == NULL) {
-        return false;
-    }
-    BaseType_t higher_priority_woken = pdFALSE;
-    deadline_event_t current = {0};
-    bool active = false;
-    portENTER_CRITICAL_ISR(&runtime->timer_lock);
-    active = runtime->scan_active;
-    if (active) {
-        current = runtime->next_deadline;
-    }
-    portEXIT_CRITICAL_ISR(&runtime->timer_lock);
-    if (!active) {
-        return false;
-    }
-    (void)nocti_v4_time_now_us_isr(runtime->timebase, &current.callback_timestamp_us);
-    current.callback_core = xPortGetCoreID();
-    __atomic_store_n(&runtime->gptimer_callback_core, current.callback_core,
-                     __ATOMIC_RELEASE);
-    __atomic_store_n(&runtime->health->scheduler_gptimer_callback_core,
-                     current.callback_core, __ATOMIC_RELEASE);
-    if (!deadline_push_from_isr(runtime, &current)) {
-        portENTER_CRITICAL_ISR(&runtime->timer_lock);
-        runtime->scan_active = false;
-        runtime->timer_armed = false;
-        portEXIT_CRITICAL_ISR(&runtime->timer_lock);
+    (void)event;
+    if (timer != NULL) {
         (void)gptimer_set_alarm_action(timer, NULL);
-    } else {
-        const deadline_event_t next = next_absolute_deadline(runtime, &current);
-        bool rearm = false;
-        portENTER_CRITICAL_ISR(&runtime->timer_lock);
-        /* SCAN_STOP can race this alarm handler on the other core.  It first
-         * clears scan_active under this same lock, so never publish another
-         * future deadline after it has taken ownership of the stop. */
-        if (runtime->scan_active) {
-            runtime->next_deadline = next;
-            runtime->alarm_config.alarm_count = next.deadline_us;
-            runtime->alarm_config.reload_count = 0u;
-            runtime->alarm_config.flags.auto_reload_on_alarm = false;
-            rearm = true;
-        }
-        portEXIT_CRITICAL_ISR(&runtime->timer_lock);
-        /* ESP-IDF 5.5.1 explicitly permits this from the alarm ISR. The
-         * target is always derived from frame_epoch, never callback time. */
-        if (rearm) {
-            (void)gptimer_set_alarm_action(timer, &runtime->alarm_config);
-            /* Close the small interval where SCAN_STOP clears scan_active
-             * after the lock is released but before the ISR arms the timer. */
-            if (!__atomic_load_n(&runtime->scan_active, __ATOMIC_ACQUIRE)) {
-                (void)gptimer_set_alarm_action(timer, NULL);
-            }
-        }
     }
-    if (runtime->task != NULL) {
-        vTaskNotifyGiveFromISR(runtime->task, &higher_priority_woken);
+    if (runtime != NULL && runtime->health != NULL) {
+        counter_add(&runtime->health->sample_clock_spurious_alarm, 1u);
     }
-    return higher_priority_woken == pdTRUE;
+    return false;
 }
 
 static esp_err_t disarm_deadlines(scheduler_runtime_t *runtime)
@@ -334,6 +267,7 @@ static esp_err_t disarm_deadlines(scheduler_runtime_t *runtime)
     runtime->scan_active = false;
     runtime->timer_armed = false;
     portEXIT_CRITICAL(&runtime->timer_lock);
+    nocti_v4_sample_edge_disarm();
     return gptimer_set_alarm_action(runtime->timebase->timer, NULL);
 }
 
@@ -355,18 +289,12 @@ static esp_err_t arm_first_deadline(scheduler_runtime_t *runtime,
     };
     portENTER_CRITICAL(&runtime->timer_lock);
     runtime->next_deadline = first;
-    runtime->alarm_config.alarm_count = first.deadline_us;
-    runtime->alarm_config.reload_count = 0u;
-    runtime->alarm_config.flags.auto_reload_on_alarm = false;
     runtime->scan_active = true;
-    runtime->timer_armed = true;
+    runtime->timer_armed = false;
     portEXIT_CRITICAL(&runtime->timer_lock);
-    const esp_err_t err = gptimer_set_alarm_action(runtime->timebase->timer,
-                                                    &runtime->alarm_config);
-    if (err != ESP_OK) {
-        (void)disarm_deadlines(runtime);
-    }
-    return err;
+    (void)gptimer_set_alarm_action(runtime->timebase->timer, NULL);
+    nocti_v4_sample_edge_arm(runtime->task, runtime->sample_generation);
+    return ESP_OK;
 }
 
 static slot_record_t *slot_at(scheduler_runtime_t *runtime, int32_t history_index,
@@ -570,6 +498,112 @@ static void fault_scan(scheduler_runtime_t *runtime, esp_err_t error)
     (void)nocti_v4_async_led_all_off_burst(runtime->async_led);
 }
 
+static void attach_sample_plan(scheduler_runtime_t *runtime, slot_record_t *record)
+{
+    nocti_v4_sample_slot_plan_t plan;
+    if (runtime == NULL || record == NULL || runtime->sample_origin_valid == 0u ||
+        record->frame_sequence == 0u) {
+        return;
+    }
+    if (!nocti_v4_sample_slot_plan(&runtime->sample_geometry, runtime->sample_origin,
+                                   record->frame_sequence - 1u, record->slot_index,
+                                   &plan)) {
+        return;
+    }
+    record->sample_plan_valid = 1u;
+    record->slot_start_sequence = plan.on_edge;
+    record->off_edge_sequence = plan.off_edge;
+    record->slot_end_sequence = plan.slot_end;
+    record->guard_sequence = plan.guard_start;
+    record->settle_samples = runtime->sample_geometry.settle_samples;
+    if (record->slot_index == 0u) {
+        nocti_v4_sample_edge_set_watch(plan.on_edge);
+    }
+}
+
+static void capture_slot0_anchor(scheduler_runtime_t *runtime, slot_record_t *record)
+{
+    uint32_t sequence = 0u;
+    uint64_t timestamp_us = 0u;
+    if (runtime == NULL || record == NULL || record->slot_index != 0u ||
+        record->sample_plan_valid == 0u) {
+        return;
+    }
+    if (!nocti_v4_sample_edge_copy_latch(&sequence, &timestamp_us) ||
+        sequence != record->slot_start_sequence || timestamp_us == 0u) {
+        return;
+    }
+    record->anchor_timestamp_us = timestamp_us;
+    record->anchor_valid = 1u;
+    runtime->sample_anchor_us = timestamp_us;
+    runtime->sample_anchor_valid = 1u;
+    runtime->next_deadline.frame_epoch_us = timestamp_us;
+    if (runtime->sync_anchor_valid != 0u) {
+        runtime->sync_frame_delta = sequence - runtime->sync_anchor;
+        runtime->sync_frame_delta_valid = 1u;
+    }
+    runtime->sync_anchor = sequence;
+    runtime->sync_anchor_valid = 1u;
+}
+
+static void note_sample_commit(scheduler_runtime_t *runtime, slot_record_t *record,
+                               int on_phase,
+                               const nocti_v4_async_led_completion_t *completion)
+{
+    const uint32_t observed = completion->sample_sequence;
+    nocti_v4_sample_slot_plan_t plan;
+    if (runtime == NULL || record == NULL || record->sample_plan_valid == 0u ||
+        runtime->sample_origin_valid == 0u || record->frame_sequence == 0u) {
+        return;
+    }
+    if (!completion->sample_valid ||
+        completion->sample_generation != runtime->sample_generation) {
+        return;
+    }
+    if (!nocti_v4_sample_slot_plan(&runtime->sample_geometry, runtime->sample_origin,
+                                   record->frame_sequence - 1u, record->slot_index,
+                                   &plan)) {
+        return;
+    }
+    nocti_v4_sample_note_commit(&plan, on_phase, observed);
+    const uint32_t late = on_phase ? plan.on_late_samples : plan.off_late_samples;
+    if (late == 1u) counter_add(&runtime->health->sample_clock_late_1, 1u);
+    else if (late == 2u) counter_add(&runtime->health->sample_clock_late_2, 1u);
+    else if (late >= 3u) counter_add(&runtime->health->sample_clock_late_3p, 1u);
+    update_max(&runtime->health->sample_clock_late_max, late);
+    if (on_phase) {
+        record->on_commit_known = 1u;
+        record->on_commit_sequence = observed;
+        record->on_first_affected = plan.on_first_affected;
+        record->on_commit_late = plan.on_commit_late;
+        if (record->slot_index < NOCTI_V4_SLOT_COUNT) {
+            runtime->sync_on_planned[record->slot_index] = plan.on_edge;
+            runtime->sync_on_actual[record->slot_index] = plan.on_first_affected;
+            runtime->sync_on_known[record->slot_index] = 1u;
+        }
+        if (plan.on_commit_late != 0u) {
+            counter_add(&runtime->health->sample_clock_late_commits, 1u);
+        } else if (plan.on_first_affected != plan.on_edge) {
+            counter_add(&runtime->health->sample_clock_early_commits, 1u);
+        }
+    } else {
+        record->off_commit_known = 1u;
+        record->off_commit_sequence = observed;
+        record->off_first_affected = plan.off_first_affected;
+        record->off_commit_late = plan.off_commit_late;
+        if (record->slot_index < NOCTI_V4_SLOT_COUNT) {
+            runtime->sync_off_planned[record->slot_index] = plan.off_edge;
+            runtime->sync_off_actual[record->slot_index] = plan.off_first_affected;
+            runtime->sync_off_known[record->slot_index] = 1u;
+        }
+        if (plan.off_commit_late != 0u) {
+            counter_add(&runtime->health->sample_clock_late_commits, 1u);
+        } else if (plan.off_first_affected != plan.off_edge) {
+            counter_add(&runtime->health->sample_clock_early_commits, 1u);
+        }
+    }
+}
+
 static void process_led_completion(
     scheduler_runtime_t *runtime,
     const nocti_v4_async_led_completion_t *completion)
@@ -594,8 +628,8 @@ static void process_led_completion(
         fault_scan(runtime, completion->result);
         return;
     }
-    nocti_v4_async_led_status_t status;
-    nocti_v4_async_led_get_status(runtime->async_led, &status);
+    nocti_v4_async_led_state_t status;
+    nocti_v4_async_led_get_state(runtime->async_led, &status);
     slot_record_t *record = slot_at(
         runtime,
         (int32_t)(completion->frame_sequence %
@@ -623,6 +657,7 @@ static void process_led_completion(
         completion->payload_length == 7u &&
         record->state == NOCTI_V4_SLOT_LED_ON_PENDING) {
         portENTER_CRITICAL(&runtime->state_lock);
+        runtime->sync_on_i2c_us[record->slot_index] = latency_us;
         record->led_on_command_id = completion->command_id;
         record->led_on_queue_ts = completion->queue_timestamp_us;
         record->led_on_dequeue_ts = completion->dequeue_timestamp_us;
@@ -635,6 +670,7 @@ static void process_led_completion(
                                          NOCTI_V4_LED_ON_SETTLE_US;
         record->state = NOCTI_V4_SLOT_LED_ON_STABLE;
         portEXIT_CRITICAL(&runtime->state_lock);
+        note_sample_commit(runtime, record, 1, completion);
         record_latency(runtime->health, true, latency_us,
                        &runtime->on_latency_sum_us,
                        &runtime->on_latency_count);
@@ -645,6 +681,7 @@ static void process_led_completion(
         completion->payload_length == 2u &&
         record->state == NOCTI_V4_SLOT_LED_OFF_PENDING) {
         portENTER_CRITICAL(&runtime->state_lock);
+        runtime->sync_off_i2c_us[record->slot_index] = latency_us;
         record->led_off_command_id = completion->command_id;
         record->led_off_queue_ts = completion->queue_timestamp_us;
         record->led_off_dequeue_ts = completion->dequeue_timestamp_us;
@@ -657,6 +694,7 @@ static void process_led_completion(
                                           NOCTI_V4_LED_OFF_SETTLE_US;
         record->state = NOCTI_V4_SLOT_LED_OFF_STABLE;
         portEXIT_CRITICAL(&runtime->state_lock);
+        note_sample_commit(runtime, record, 0, completion);
         record_latency(runtime->health, false, latency_us,
                        &runtime->off_latency_sum_us,
                        &runtime->off_latency_count);
@@ -735,8 +773,11 @@ static void process_deadline(scheduler_runtime_t *runtime, const deadline_event_
             runtime->slot_epoch = event->slot_epoch;
         }
         slot_record_t *record = init_slot_record(runtime, event, handling_us);
-        nocti_v4_async_led_status_t before;
-        nocti_v4_async_led_get_status(runtime->async_led, &before);
+        if (record != NULL) {
+            attach_sample_plan(runtime, record);
+        }
+        nocti_v4_async_led_state_t before;
+        nocti_v4_async_led_get_state(runtime->async_led, &before);
         if (record == NULL || before.mode != PCA_IO_MODE_ASYNC ||
             !before.submissions_allowed || before.transaction_pending ||
             before.selected_source >= 0) {
@@ -763,6 +804,7 @@ static void process_deadline(scheduler_runtime_t *runtime, const deadline_event_
         uint64_t post_handoff_us = request_us;
         (void)nocti_v4_time_now_us(runtime->timebase, &post_handoff_us);
         if (previous != NULL && previous->valid && !previous->finalized) {
+            capture_slot0_anchor(runtime, previous);
             finalize_slot(runtime, previous, post_handoff_us, false, false);
         }
         counter_add(&runtime->health->scheduler_events, 1u);
@@ -801,8 +843,8 @@ static void process_deadline(scheduler_runtime_t *runtime, const deadline_event_
     portENTER_CRITICAL(&runtime->state_lock);
     record->scheduler_off_deadline_ts = event->deadline_us;
     portEXIT_CRITICAL(&runtime->state_lock);
-    nocti_v4_async_led_status_t before;
-    nocti_v4_async_led_get_status(runtime->async_led, &before);
+    nocti_v4_async_led_state_t before;
+    nocti_v4_async_led_get_state(runtime->async_led, &before);
     if (before.mode != PCA_IO_MODE_ASYNC || !before.submissions_allowed ||
         before.transaction_pending ||
         before.selected_source != (int32_t)record->logical_source) {
@@ -829,13 +871,6 @@ static void process_deadline(scheduler_runtime_t *runtime, const deadline_event_
     if (off_result != ESP_OK) {
         fault_scan(runtime, off_result);
     }
-}
-
-static uint64_t aligned_frame_epoch(uint64_t now_us)
-{
-    const uint64_t minimum = now_us + NOCTI_V4_SCHEDULER_ARM_LEAD_US;
-    const uint64_t remainder = minimum % NOCTI_V4_SLOT_PERIOD_US;
-    return remainder == 0u ? minimum : minimum + NOCTI_V4_SLOT_PERIOD_US - remainder;
 }
 
 static void reset_scheduler_counters(scheduler_runtime_t *runtime)
@@ -865,6 +900,10 @@ static void reset_scheduler_counters(scheduler_runtime_t *runtime)
     RESET_SCAN(raw_rejected_on_settle); RESET_SCAN(raw_rejected_transition);
     RESET_SCAN(raw_rejected_off_settle); RESET_SCAN(raw_candidate_off);
     RESET_SCAN(raw_rejected_guard); RESET_SCAN(scan_session_faults);
+    RESET_SCAN(sample_clock_edges); RESET_SCAN(sample_clock_late_commits);
+    RESET_SCAN(sample_clock_early_commits); RESET_SCAN(sample_clock_missed_edges);
+    RESET_SCAN(sample_clock_late_1); RESET_SCAN(sample_clock_late_2);
+    RESET_SCAN(sample_clock_late_3p); RESET_SCAN(sample_clock_late_max);
 #undef RESET_SCAN
     runtime->lateness_sum_us = 0u;
     runtime->lateness_count = 0u;
@@ -919,7 +958,35 @@ static esp_err_t start_internal(scheduler_runtime_t *runtime)
     }
     __atomic_store_n(&runtime->active_off_phase_us, configured_off_phase_us,
                      __ATOMIC_RELEASE);
-    const uint64_t frame_epoch_us = aligned_frame_epoch(now_us);
+    {
+        const uint32_t slot_us = nocti_v4_scheduler_slot_period_us();
+        const uint32_t optical_fs = 1000000u / (slot_us * NOCTI_V4_SLOT_COUNT);
+        if (!nocti_v4_sample_geometry_for(optical_fs, configured_off_phase_us,
+                                          &runtime->sample_geometry)) {
+            runtime->last_error = ESP_ERR_INVALID_STATE;
+            __atomic_store_n(&runtime->lifecycle, NOCTI_V4_SCAN_FAULTED,
+                             __ATOMIC_RELEASE);
+            counter_add(&runtime->health->scan_session_faults, 1u);
+            return ESP_ERR_INVALID_STATE;
+        }
+    }
+    runtime->sample_origin_valid = 0u;
+    runtime->sample_anchor_valid = 0u;
+    runtime->sync_anchor_valid = 0u;
+    runtime->sync_frame_delta_valid = 0u;
+    runtime->sync_anchor = 0u;
+    runtime->sync_frame_delta = 0u;
+    memset(runtime->sync_on_known, 0, sizeof(runtime->sync_on_known));
+    memset(runtime->sync_off_known, 0, sizeof(runtime->sync_off_known));
+    runtime->sample_anchor_us = 0u;
+    runtime->sample_next_is_off = 0u;
+    runtime->sample_generation += 1u;
+    if (runtime->sample_generation == 0u) {
+        runtime->sample_generation = 1u;
+    }
+    /* now_us is the START diagnostic, not the frame anchor. The anchor is the
+     * first DRDY at the slot-0 sample index, latched later by the ISR. */
+    const uint64_t frame_epoch_us = now_us;
     const esp_err_t arm_result = arm_first_deadline(runtime, runtime->session_epoch,
                                                      runtime->frame_sequence,
                                                      runtime->slot_epoch,
@@ -973,6 +1040,115 @@ static esp_err_t stop_internal(scheduler_runtime_t *runtime)
     return ESP_OK;
 }
 
+static void submit_sample_edge(scheduler_runtime_t *runtime, uint32_t observed)
+{
+    deadline_event_t event = {0};
+    nocti_v4_sample_slot_plan_t plan;
+    uint32_t nominal_submit;
+    uint32_t late_samples = 0u;
+    uint64_t now_us = 0u;
+    const uint32_t frame_index = runtime->sample_next_frame_sequence - 1u;
+    if (runtime->sample_next_frame_sequence == 0u ||
+        !nocti_v4_sample_slot_plan(&runtime->sample_geometry, runtime->sample_origin,
+                                   frame_index, runtime->sample_next_slot, &plan)) {
+        fault_scan(runtime, ESP_FAIL);
+        return;
+    }
+    nominal_submit = runtime->sample_next_is_off ? plan.off_submit : plan.on_submit;
+    if (nocti_v4_sample_reached(observed, nominal_submit)) {
+        late_samples = observed - nominal_submit;
+    }
+    (void)nocti_v4_time_now_us(runtime->timebase, &now_us);
+    event.session_epoch = runtime->session_epoch;
+    event.frame_sequence = runtime->sample_next_frame_sequence;
+    event.slot_epoch = runtime->slot_epoch;
+    event.slot_index = runtime->sample_next_slot;
+    event.phase = runtime->sample_next_is_off ? DEADLINE_LED_OFF : DEADLINE_SLOT_START;
+    event.frame_epoch_us = runtime->sample_anchor_valid != 0u ?
+        runtime->sample_anchor_us : now_us;
+    event.deadline_us = now_us >= (uint64_t)late_samples * NOCTI_V4_SAMPLE_PERIOD_US ?
+        now_us - (uint64_t)late_samples * NOCTI_V4_SAMPLE_PERIOD_US : now_us;
+    event.callback_core = -1;
+    runtime->next_deadline = event;
+    counter_add(&runtime->health->sample_clock_edges, 1u);
+    process_deadline(runtime, &event);
+}
+
+static void advance_sample_plan(scheduler_runtime_t *runtime)
+{
+    nocti_v4_sample_slot_plan_t plan;
+    const uint32_t frame_index = runtime->sample_next_frame_sequence - 1u;
+    if (runtime->sample_next_is_off == 0u) {
+        if (!nocti_v4_sample_slot_plan(&runtime->sample_geometry, runtime->sample_origin,
+                                       frame_index, runtime->sample_next_slot, &plan)) {
+            fault_scan(runtime, ESP_FAIL);
+            return;
+        }
+        runtime->sample_next_is_off = 1u;
+        runtime->sample_next_submit = plan.off_submit;
+    } else {
+        runtime->sample_next_is_off = 0u;
+        if ((uint32_t)runtime->sample_next_slot + 1u >= NOCTI_V4_SLOT_COUNT) {
+            runtime->sample_next_slot = 0u;
+            runtime->sample_next_frame_sequence += 1u;
+        } else {
+            runtime->sample_next_slot = (uint8_t)(runtime->sample_next_slot + 1u);
+        }
+        ++runtime->slot_epoch;
+        if (runtime->sample_next_frame_sequence == 0u ||
+            !nocti_v4_sample_slot_plan(&runtime->sample_geometry, runtime->sample_origin,
+                                       runtime->sample_next_frame_sequence - 1u,
+                                       runtime->sample_next_slot, &plan)) {
+            fault_scan(runtime, ESP_FAIL);
+            return;
+        }
+        runtime->sample_next_submit = plan.on_submit;
+    }
+    nocti_v4_sample_edge_set_submit(runtime->sample_next_submit);
+}
+
+static void service_sample_clock(scheduler_runtime_t *runtime)
+{
+    uint32_t observed = 0u;
+    uint32_t generation = 0u;
+    if (runtime == NULL || !runtime->scan_active ||
+        __atomic_load_n(&runtime->lifecycle, __ATOMIC_ACQUIRE) != NOCTI_V4_SCAN_RUNNING) {
+        return;
+    }
+    if (!nocti_v4_sample_edge_observed(&observed, &generation) ||
+        generation != runtime->sample_generation) {
+        return;
+    }
+    if (runtime->sample_origin_valid == 0u) {
+        runtime->sample_origin = observed + runtime->sample_geometry.lead_samples;
+        runtime->sample_origin_valid = 1u;
+        runtime->sample_next_is_off = 0u;
+        runtime->sample_next_slot = 0u;
+        runtime->sample_next_frame_sequence = runtime->frame_sequence;
+        runtime->sample_next_submit = observed;
+        submit_sample_edge(runtime, observed);
+        if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_ACQUIRE) != NOCTI_V4_SCAN_RUNNING) {
+            return;
+        }
+        advance_sample_plan(runtime);
+        return;
+    }
+    if (!nocti_v4_sample_reached(observed, runtime->sample_next_submit)) {
+        return;
+    }
+    if (nocti_v4_sample_since(runtime->sample_next_submit, observed) >=
+        runtime->sample_geometry.slot_samples) {
+        counter_add(&runtime->health->sample_clock_missed_edges, 1u);
+        fault_scan(runtime, ESP_ERR_TIMEOUT);
+        return;
+    }
+    submit_sample_edge(runtime, observed);
+    if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_ACQUIRE) != NOCTI_V4_SCAN_RUNNING) {
+        return;
+    }
+    advance_sample_plan(runtime);
+}
+
 static void scheduler_task(void *argument)
 {
     scheduler_runtime_t *runtime = (scheduler_runtime_t *)argument;
@@ -1013,6 +1189,7 @@ static void scheduler_task(void *argument)
                 break;
             }
         }
+        service_sample_clock(runtime);
     }
 }
 
@@ -1070,6 +1247,7 @@ esp_err_t nocti_v4_scheduler_init(nocti_v4_scheduler_t *scheduler,
     runtime->last_history_index = -1;
     runtime->last_slot_index = -1;
     runtime->task_core = -1;
+    __atomic_store_n(&health->scheduler_task_core, -1, __ATOMIC_RELEASE);
     runtime->gptimer_callback_core = -1;
     runtime->lifecycle = NOCTI_V4_SCAN_STOPPED;
     runtime->configured_off_phase_us = NOCTI_V4_OFF_PHASE_DEFAULT_US;
@@ -1119,7 +1297,6 @@ esp_err_t nocti_v4_scheduler_init(nocti_v4_scheduler_t *scheduler,
         s_runtime_claimed = false;
         return bind_result;
     }
-    __atomic_store_n(&health->scheduler_task_core, -1, __ATOMIC_RELEASE);
     __atomic_store_n(&health->scheduler_gptimer_callback_core, -1, __ATOMIC_RELEASE);
     scheduler->runtime = runtime;
     scheduler->initialized = true;
@@ -1216,6 +1393,112 @@ bool nocti_v4_scheduler_pop_finalized_slot(nocti_v4_scheduler_t *scheduler,
     return finalized_pop(runtime, out_timing);
 }
 
+static int append_delta_list(char *out, size_t cap, const uint32_t *planned,
+                             const uint32_t *actual, const uint8_t *known)
+{
+    size_t used = 0u;
+    uint8_t slot;
+    if (out == NULL || cap == 0u) {
+        return -1;
+    }
+    out[0] = '\0';
+    for (slot = 0u; slot < NOCTI_V4_SLOT_COUNT; ++slot) {
+        int wrote;
+        if (slot != 0u) {
+            if (used + 1u >= cap) {
+                return -1;
+            }
+            out[used++] = ',';
+            out[used] = '\0';
+        }
+        if (known[slot] == 0u) {
+            wrote = snprintf(out + used, cap - used, "x");
+        } else {
+            const int32_t delta = (int32_t)(actual[slot] - planned[slot]);
+            wrote = snprintf(out + used, cap - used, "%" PRId32, delta);
+        }
+        if (wrote < 0 || (size_t)wrote >= cap - used) {
+            return -1;
+        }
+        used += (size_t)wrote;
+    }
+    return (int)used;
+}
+
+static bool append_latency_list(char *out, size_t cap,
+                                const uint32_t *values, const uint8_t *known)
+{
+    size_t used = 0u;
+    for (uint32_t slot = 0u; slot < NOCTI_V4_SLOT_COUNT; ++slot) {
+        const char *comma = slot == 0u ? "" : ",";
+        const int wrote = known[slot] ?
+            snprintf(out + used, cap - used, "%s%" PRIu32, comma, values[slot]) :
+            snprintf(out + used, cap - used, "%sx", comma);
+        if (wrote < 0 || (size_t)wrote >= cap - used) return false;
+        used += (size_t)wrote;
+    }
+    return true;
+}
+
+size_t nocti_v4_scheduler_append_led_timing(const nocti_v4_scheduler_t *scheduler,
+                                           char *out, size_t cap)
+{
+    if (scheduler == NULL || scheduler->runtime == NULL || out == NULL || cap == 0u)
+        return 0u;
+    const scheduler_runtime_t *runtime = scheduler->runtime;
+    char on_us[240], off_us[240];
+    if (!append_latency_list(on_us, sizeof(on_us), runtime->sync_on_i2c_us,
+                             runtime->sync_on_known) ||
+        !append_latency_list(off_us, sizeof(off_us), runtime->sync_off_i2c_us,
+                             runtime->sync_off_known)) return 0u;
+    const int wrote = snprintf(out, cap, " i2c_on_us=%s i2c_off_us=%s", on_us, off_us);
+    if (wrote < 0 || (size_t)wrote >= cap) { out[0] = '\0'; return 0u; }
+    return (size_t)wrote;
+}
+
+size_t nocti_v4_scheduler_append_sync(const nocti_v4_scheduler_t *scheduler,
+                                      char *out, size_t cap)
+{
+    const scheduler_runtime_t *runtime;
+    char on_list[320];
+    char off_list[320];
+    int wrote;
+    if (out == NULL || cap < 32u) {
+        return 0u;
+    }
+    out[0] = '\0';
+    if (scheduler == NULL || scheduler->runtime == NULL) {
+        return 0u;
+    }
+    runtime = (const scheduler_runtime_t *)scheduler->runtime;
+    if (append_delta_list(on_list, sizeof(on_list), runtime->sync_on_planned,
+                          runtime->sync_on_actual, runtime->sync_on_known) < 0 ||
+        append_delta_list(off_list, sizeof(off_list), runtime->sync_off_planned,
+                          runtime->sync_off_actual, runtime->sync_off_known) < 0) {
+        return 0u;
+    }
+    wrote = snprintf(out, cap,
+                     " fs=%" PRIu32 " anchor=%" PRIu32 " frame_delta=%" PRIu32
+                     " slot_samples=%" PRIu32 " off_samples=%" PRIu32
+                     " missed=%" PRIu32 " catchup=%" PRIu32 " gap=%" PRIu32
+                     " edge_miss=%" PRIu32 " on_d=%s off_d=%s",
+                     (uint32_t)NOCTI_V4_SAMPLE_ADC_HZ,
+                     runtime->sync_anchor_valid ? runtime->sync_anchor : 0u,
+                     runtime->sync_frame_delta_valid ? runtime->sync_frame_delta : 0u,
+                     runtime->sample_geometry.slot_samples,
+                     runtime->sample_geometry.off_phase_samples,
+                     __atomic_load_n(&runtime->health->adc_missed, __ATOMIC_RELAXED),
+                     __atomic_load_n(&runtime->health->adc_backlog_catchup, __ATOMIC_RELAXED),
+                     __atomic_load_n(&runtime->health->adc_sequence_gap, __ATOMIC_RELAXED),
+                     __atomic_load_n(&runtime->health->sample_clock_missed_edges, __ATOMIC_RELAXED),
+                     on_list, off_list);
+    if (wrote < 0 || (size_t)wrote >= cap) {
+        out[0] = '\0';
+        return 0u;
+    }
+    return (size_t)wrote;
+}
+
 void nocti_v4_scheduler_get_status(const nocti_v4_scheduler_t *scheduler,
                                    nocti_v4_scheduler_status_t *out_status)
 {
@@ -1246,6 +1529,10 @@ void nocti_v4_scheduler_get_status(const nocti_v4_scheduler_t *scheduler,
     out_status->deadline_ring_depth_max = __atomic_load_n(&runtime->deadline_depth_max,
                                                            __ATOMIC_ACQUIRE);
     out_status->scheduler_task_core = runtime->task_core;
+    out_status->sample_origin = runtime->sample_origin;
+    out_status->sample_origin_valid = runtime->sample_origin_valid;
+    out_status->sample_slot_samples = runtime->sample_geometry.slot_samples;
+    out_status->sample_off_phase_samples = runtime->sample_geometry.off_phase_samples;
     out_status->gptimer_callback_core = __atomic_load_n(&runtime->gptimer_callback_core,
                                                          __ATOMIC_ACQUIRE);
     out_status->last_error = runtime->last_error;

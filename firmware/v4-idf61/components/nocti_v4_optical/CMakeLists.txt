@@ -2,6 +2,7 @@ idf_component_register(
     SRCS "nocti_v4_optical.c"
     INCLUDE_DIRS "include"
     REQUIRES
+        nn2_core
         freertos
         esp_common
         nocti_v4_common

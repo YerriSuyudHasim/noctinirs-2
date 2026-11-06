@@ -1,0 +1,76 @@
+{
+  "schema": "noctinirs.batch2_author_checks/1",
+  "source_sha": "e963e34c96df565e9ec0a28b11c5ab5e262f470b",
+  "base_sha": "2ccbbffb00ea735a1cd652d271e3a1bed463a25d",
+  "utc": "2026-10-30T15:54:58.981327+00:00",
+  "evidence_class": [
+    "static",
+    "host/unit"
+  ],
+  "architecture": {
+    "base_tests": 104,
+    "head_tests": 114,
+    "base_failures": 14,
+    "head_failures": 14,
+    "base_errors": 2,
+    "head_errors": 2,
+    "new_failures": [],
+    "unchanged_failure_ids": [
+      "ERROR: test_adr_headers_cite_owner_authorization (test_v4_d6_boot.V4D6Boot.test_adr_headers_cite_owner_authorization)",
+      "ERROR: test_health_and_timing_are_registered (test_opcode_registry.OpcodeRegistry.test_health_and_timing_are_registered)",
+      "FAIL: test_actual_report_formatter_fits_ten_minute_bench_and_preserves_keys (test_v4_batch1.Batch1C.test_actual_report_formatter_fits_ten_minute_bench_and_preserves_keys)",
+      "FAIL: test_c11_positive_effective_flags (test_c11.C11Tests.test_c11_positive_effective_flags)",
+      "FAIL: test_ci_gate_exit_propagation (test_n6.N6Tests.test_ci_gate_exit_propagation) (rc=0)",
+      "FAIL: test_ci_invariant_verdict_matrix (test_n6.N6Tests.test_ci_invariant_verdict_matrix) (detect='success', present='false', gate='skipped')",
+      "FAIL: test_ci_invariant_verdict_matrix (test_n6.N6Tests.test_ci_invariant_verdict_matrix) (detect='success', present='true', gate='success')",
+      "FAIL: test_equal_tail_guard_and_original_ten_sample_means (test_v4_batch1.Batch1C.test_equal_tail_guard_and_original_ten_sample_means)",
+      "FAIL: test_header_only_contract_compiled (test_c11.C11Tests.test_header_only_contract_compiled)",
+      "FAIL: test_info_uses_shared_current_constants (test_v4_batch1b.CurrentC.test_info_uses_shared_current_constants)",
+      "FAIL: test_later_c17_override_fails (test_c11.C11Tests.test_later_c17_override_fails)",
+      "FAIL: test_later_gnu11_override_fails (test_c11.C11Tests.test_later_gnu11_override_fails)",
+      "FAIL: test_production_commit_histogram_zero_one_two_three_plus_early_and_stale (test_v4_batch1.Batch1C.test_production_commit_histogram_zero_one_two_three_plus_early_and_stale)",
+      "FAIL: test_sample_clock_unity_suite_including_late_sample_cases (test_v4_batch1.Batch1C.test_sample_clock_unity_suite_including_late_sample_cases)",
+      "FAIL: test_shared_pca_register_writes_and_rejection (test_v4_batch1b.CurrentC.test_shared_pca_register_writes_and_rejection)",
+      "FAIL: test_v4_set_current_production_function_and_iref (test_v4_batch1b.CurrentC.test_v4_set_current_production_function_and_iref)"
+    ]
+  },
+  "host": {
+    "base_tests": 137,
+    "head_tests": 137,
+    "failures": 0,
+    "ignored": 0,
+    "ctest_targets_passed": 2
+  },
+  "codec_vectors": 35,
+  "gate_vectors": 26,
+  "reference_files": 319,
+  "pending_document_sha256": "f38755c474b664ab77d28cedb977634c1eeed5f6c16ccd8c3e66fb4284b97ad7",
+  "logs": [
+    {
+      "local_path": "C:\\Users\\doeki\\Documents\\ChatGPT\\NoctiNIRS 2 - main code architecture\\batch2-isolated-base-architecture.log",
+      "sha256": "36b0e5f69e66b71381f19ab574ff95615136c590f57ebc410ab8249d3b1ab9b1"
+    },
+    {
+      "local_path": "C:\\Users\\doeki\\Documents\\ChatGPT\\NoctiNIRS 2 - main code architecture\\batch2-v041-architecture.log",
+      "sha256": "2006c4ec1425cf4102c9eca031616de8d02adda6fc82f81dbdf4b8238e8f0e7e"
+    },
+    {
+      "local_path": "C:\\Users\\doeki\\Documents\\ChatGPT\\NoctiNIRS 2 - main code architecture\\batch2-isolated-base-host.log",
+      "sha256": "8993a529717765015759d2c8fa8163dae3fc3743687cee24a1514c8090df6bd1"
+    },
+    {
+      "local_path": "C:\\Users\\doeki\\Documents\\ChatGPT\\NoctiNIRS 2 - main code architecture\\batch2-v04-host.log",
+      "sha256": "77274713a6ecd9b209de2f1d147b357a3f657b73fbbf82395936ce42dbed558a"
+    },
+    {
+      "local_path": "C:\\Users\\doeki\\Documents\\ChatGPT\\NoctiNIRS 2 - main code architecture\\batch2-v041-rebuild.log",
+      "sha256": "aca4bfb417a954289a4890c676601deb409044566037f7b876d6121aee1de353"
+    }
+  ],
+  "limits": [
+    "Author evidence, not independent review",
+    "CI not yet observed",
+    "No firmware build or bench performed",
+    "Local logs are not immutable CI artifacts"
+  ]
+}

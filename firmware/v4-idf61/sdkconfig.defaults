@@ -55,9 +55,13 @@ CONFIG_I2C_ISR_IRAM_SAFE=y
 
 # V4-7 SoftAP transports about 20 kB/s to one station. Bound Wi-Fi/lwIP memory
 # to that contract; acquisition drops only at the separate network boundary.
+# Batch 4c experiment: ENGINEERING RAW sends about 120 kB/s (6x the contract) and
+# lost about 0.9% of packets to sendto errno 12 with 4 dynamic TX buffers. 6 is
+# the first step (raise to 8 only after a bench). TX buffers are allocated when
+# in use, so ACQ at about 20 kB/s is expected to be unaffected (not measured).
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=4
-CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=6
 CONFIG_ESP_WIFI_MGMT_SBUF_NUM=6
 # CONFIG_ESP_WIFI_AMPDU_TX_ENABLED is not set
 # CONFIG_ESP_WIFI_AMPDU_RX_ENABLED is not set

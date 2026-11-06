@@ -1,0 +1,22 @@
+{
+  "schema": "noctinirs.optical_gate_configs/1",
+  "configs": [
+    {
+      "gate_config_id": 0,
+      "enabled": false,
+      "mode": "ENGINEERING"
+    },
+    {
+      "gate_config_id": 1,
+      "enabled": true,
+      "provisional_unmeasured": true,
+      "z_witness": 5.0,
+      "z_channel": 5.0,
+      "stable_k": 3.0,
+      "sat_code": 7969177,
+      "floor_counts": 4,
+      "se_floor": 0.3,
+      "no_witness_stop_ms": 3000
+    }
+  ]
+}

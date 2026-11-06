@@ -51,8 +51,14 @@ def execute(root, build, evidence):
 def check_public_opacity(build, evidence):
     """Use the actual isolated product command: public fields must not compile."""
     commands = json.loads((build / 'compile_commands.json').read_text())
-    entry = next(c for c in commands if c['file'].endswith('/nn2_core_ring.c'))
-    original = entry.get('arguments') or shlex.split(entry['command'])
+    entry = next(c for c in commands if Path(c['file']).name == 'nn2_core_ring.c')
+    # CMake emits native backslashes in Windows command/file entries. They
+    # are path separators, not POSIX shlex escapes.
+    command = entry.get('command', '')
+    if os.name == 'nt':
+        command = command.replace('\\', '/')
+    original = entry.get('arguments') or shlex.split(command)
+    source = entry['file'].replace('\\', '/') if os.name == 'nt' else entry['file']
     base = []
     skip = False
     for token in original:
@@ -60,7 +66,7 @@ def check_public_opacity(build, evidence):
             skip = False
         elif token in ('-o', '-MF', '-MT', '-MQ'):
             skip = True
-        elif token not in ('-c', '-MD', '-MMD', '-MP', entry['file']):
+        elif token not in ('-c', '-MD', '-MMD', '-MP', source):
             base.append(token)
     cases = {
         'public-control': ('#include "nn2_core_ring.h"\n#include "nn2_app_sequencer.h"\n'
@@ -110,8 +116,8 @@ def main():
         for kind in ('assertion-failure', 'zero-tests'):
             # Retained isolated source copy is part of the control evidence.
             isolated = evidence / kind / 'source'
-            for path in ('test/host', 'components', 'cmake', 'main/adapters', 'tools',
-                         'firmware/v4-idf61/components/nocti_v4_common/include'):
+            for path in ('test/host', 'test/golden', 'components', 'cmake', 'main/adapters', 'tools',
+                         'firmware/v4-idf61/components/nocti_v4_common'):
                 shutil.copytree(ROOT / path, isolated / path)
             if kind == 'assertion-failure':
                 path = isolated / 'test/host/test_ring.c'
@@ -123,7 +129,7 @@ def main():
             else:
                 path = isolated / 'test/host/test_main.c'
                 source = path.read_text()
-                for suite in ('ring', 'sequencer', 'contract', 'storage', 'acquisition', 'ads131', 'ads131_control', 'ads131_transport', 'v4_rtos'):
+                for suite in ('ring', 'sequencer', 'contract', 'storage', 'acquisition', 'ads131', 'ads131_control', 'ads131_transport', 'v4_rtos', 'v4_sample_clock', 'v4_sample_edge', 'raw_engineering'):
                     source = source.replace('    test_' + suite + '_suite();', '')
                 path.write_text(source)
             control = execute(isolated, evidence / kind / 'build', evidence / kind)

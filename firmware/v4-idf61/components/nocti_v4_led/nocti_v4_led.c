@@ -8,6 +8,7 @@
 #include "esp_rom_sys.h"
 #include "esp_timer.h"
 #include "nocti_v4_common.h"
+#include "nn2_core_optical.h"
 
 static const char *TAG = "nocti_v4_led";
 
@@ -32,8 +33,8 @@ static const char *TAG = "nocti_v4_led";
 #define PCA_LEDOUT_ON               0x01u
 #define PCA_INIT_TIMEOUT_MS         50u
 #define PCA_COMMAND_TIMEOUT_MS      50u
-#define PCA_DEFAULT_CURRENT_MA      15u
-#define PCA_MAX_CURRENT_MA          30u
+#define PCA_DEFAULT_CURRENT_MA      NN2_OPTICAL_DEFAULT_MA
+#define PCA_MAX_CURRENT_MA          NN2_OPTICAL_MAX_MA
 #define PCA_FAST_QUAL_STRESS_READS  1000u
 
 static const uint8_t k_source_to_pca[NOCTI_V4_OPTICAL_SOURCE_COUNT] = {
@@ -305,7 +306,7 @@ static esp_err_t program_sync_golden_path(nocti_v4_led_t *led)
             return fail_safe_reset(led, err);
         }
     }
-    /* Operating IREF (default 15 mA, cap 30 mA) is written only after LEDOUT
+    /* Operating IREF (default 30 mA, cap 50 mA) is written only after LEDOUT
      * readback is zero, so the emitters stay off. */
     err = program_iref_verified(led);
     if (err != ESP_OK) {

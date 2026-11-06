@@ -288,7 +288,8 @@ static void optical_binding(void) {
   port.policy_info = "led=REAL_BRINGUP;short_policy=BENCH_WARN;duration=HOST;fs_min=2;fs_max=10;limit_s=0;single_run=0";
   CHECK(nn2_app_comm_bind_optical(&state, &port) == NN2_OK);
   nn2_core_packet_t info = command(1, 0, NN2_CMD_INFO, NULL, 0);
-  CHECK(info.length == 28 + strlen(port.policy_info));
+  CHECK(info.length == 28 + strlen(port.policy_info) + strlen(";mode=ACQ"));
+  CHECK(!memcmp(info.payload + 28 + strlen(port.policy_info), ";mode=ACQ", strlen(";mode=ACQ")));
   CHECK(!memcmp(info.payload + 28, port.policy_info, strlen(port.policy_info)));
   nn2_core_packet_t started = command(1, 1, NN2_CMD_START, NULL, 0);
   CHECK(error(started) == 0 && started.payload[8] == NN2_COMM_STARTING);

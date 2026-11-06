@@ -1,5 +1,6 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "nocti_v4_ads.h"
+#include "nocti_v4_sample_edge.h"
 #include "nocti_v4_backlog.h"
 #include "nocti_v4_common.h"
 
@@ -598,10 +599,10 @@ static esp_err_t transport_acquire(ads_transport_t *transport)
     if (transport->bus_acquired) {
         return ESP_OK;
     }
-    /* One owner of this bus. A missed release must fault instead of waiting
-     * forever. Three seconds is inside the 8 s init wait and the 5 s TWDT. */
+    /* ESP-IDF 6.1 rejects finite waits for bus acquisition. This dedicated
+     * bus has one owner; the control/init waits remain bounded by callers. */
     const esp_err_t err = spi_device_acquire_bus(
-        transport->device, pdMS_TO_TICKS(NOCTI_V4_ADS_CONTROL_TIMEOUT_MS));
+        transport->device, portMAX_DELAY);
     if (err == ESP_OK) {
         transport->bus_acquired = true;
     }
@@ -1037,6 +1038,8 @@ static void IRAM_ATTR drdy_isr(void *argument)
             counter_add(&runtime->health->drdy_events_pushed, 1u);
             update_max((uint32_t *)&runtime->event_depth_max, depth + 1u);
         }
+        /* Sample index is the LED master. This does not start I2C. */
+        nocti_v4_sample_edge_on_drdy(sequence, timestamp_us, &higher_priority_woken);
     }
     if (runtime->ads_task != NULL) {
         vTaskNotifyGiveFromISR(runtime->ads_task, &higher_priority_woken);

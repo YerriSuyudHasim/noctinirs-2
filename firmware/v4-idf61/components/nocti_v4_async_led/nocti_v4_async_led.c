@@ -12,6 +12,7 @@
 
 #include "nocti_v4_common.h"
 #include "nocti_v4_rtos.h"
+#include "nocti_v4_sample_edge.h"
 
 #define PCA_LEDOUT0                         0x02u
 #define PCA_LEDOUT_ON                        0x01u
@@ -136,6 +137,9 @@ typedef struct {
     uint64_t complete_timestamp_us;
     i2c_master_event_t event;
     int32_t callback_core;
+    uint32_t sample_sequence;
+    uint32_t sample_generation;
+    bool sample_valid;
 } async_completion_t;
 
 typedef struct {
@@ -196,6 +200,9 @@ typedef struct {
     uint64_t last_complete_timestamp_us;
     int32_t last_i2c_event;
     int32_t last_callback_core;
+    uint32_t last_sample_sequence;
+    uint32_t last_sample_generation;
+    bool last_sample_valid;
 } async_led_runtime_t;
 
 static async_led_runtime_t s_runtime;
@@ -553,6 +560,10 @@ static bool IRAM_ATTR i2c_done_callback(i2c_master_dev_handle_t device,
     completion.event = event != NULL ? event->event : I2C_EVENT_TIMEOUT;
     completion.callback_core = xPortGetCoreID();
     (void)nocti_v4_time_now_us_isr(runtime->timebase, &completion.complete_timestamp_us);
+    /* Freeze the DRDY index at completion. A later task wake is not an LED
+     * edge and must not move the classifier's first-affected sample. */
+    completion.sample_valid = nocti_v4_sample_edge_observed(
+        &completion.sample_sequence, &completion.sample_generation) != 0;
     __atomic_store_n(&runtime->callback_core, completion.callback_core, __ATOMIC_RELEASE);
     __atomic_store_n(&runtime->health->async_callback_core, completion.callback_core,
                      __ATOMIC_RELEASE);
@@ -642,7 +653,8 @@ static void set_last_submission_error(async_led_runtime_t *runtime,
 }
 
 static esp_err_t wait_for_completion(async_led_runtime_t *runtime,
-                                     const async_identity_t *identity)
+                                     const async_identity_t *identity,
+                                     bool detailed_timing)
 {
     const TickType_t started = xTaskGetTickCount();
     const TickType_t timeout = pdMS_TO_TICKS(ASYNC_TRANSACTION_TIMEOUT_MS);
@@ -657,6 +669,9 @@ static esp_err_t wait_for_completion(async_led_runtime_t *runtime,
             runtime->last_complete_timestamp_us = completion.complete_timestamp_us;
             runtime->last_i2c_event = completion.event;
             runtime->last_callback_core = completion.callback_core;
+            runtime->last_sample_sequence = completion.sample_sequence;
+            runtime->last_sample_generation = completion.sample_generation;
+            runtime->last_sample_valid = completion.sample_valid;
             const uint32_t latency_us = completion.complete_timestamp_us >=
                                         identity->submit_timestamp_us ?
                 (uint32_t)(completion.complete_timestamp_us - identity->submit_timestamp_us) : 0u;
@@ -666,8 +681,12 @@ static esp_err_t wait_for_completion(async_led_runtime_t *runtime,
             update_max(&runtime->health->async_latency_max_us, latency_us);
             counter_store(&runtime->health->async_latency_avg_us,
                           (uint32_t)(runtime->latency_sum_us / runtime->latency_count));
-            record_command_timing(runtime, identity,
-                                  completion.complete_timestamp_us);
+            /* Legacy ten-stage histograms and 64-bit averages are diagnostic
+             * work. Do not delay a scheduled edge's terminal publication. */
+            if (detailed_timing) {
+                record_command_timing(runtime, identity,
+                                      completion.complete_timestamp_us);
+            }
             counter_add(&runtime->health->async_commands_completed, 1u);
             if (completion.event != I2C_EVENT_DONE) {
                 counter_add(&runtime->health->async_completion_errors, 1u);
@@ -745,10 +764,12 @@ static esp_err_t submit_payload(async_led_runtime_t *runtime,
     uint64_t submit_return_timestamp_us = submit_timestamp_us;
     (void)nocti_v4_time_now_us(runtime->timebase, &submit_return_timestamp_us);
     runtime->last_i2c_submit_return_timestamp_us = submit_return_timestamp_us;
-    record_timing_stat(&runtime->timing[timing_class_for_payload(payload_type)]
+    if (command->completion_route == ASYNC_COMPLETION_TO_CALLER) {
+        record_timing_stat(&runtime->timing[timing_class_for_payload(payload_type)]
                                        [ASYNC_TIMING_I2C_SUBMIT_CALL],
                        elapsed_us(submit_timestamp_us,
                                   submit_return_timestamp_us));
+    }
     if (submit_result != ESP_OK) {
         if (__atomic_exchange_n(&runtime->transaction_pending, false,
                                 __ATOMIC_ACQ_REL)) {
@@ -757,7 +778,8 @@ static esp_err_t submit_payload(async_led_runtime_t *runtime,
             return force_reset(runtime, submit_result);
         }
     }
-    return wait_for_completion(runtime, &identity);
+    return wait_for_completion(runtime, &identity,
+        command->completion_route == ASYNC_COMPLETION_TO_CALLER);
 }
 
 static esp_err_t enter_async(async_led_runtime_t *runtime)
@@ -1002,6 +1024,9 @@ static void publish_scheduled_completion(async_led_runtime_t *runtime,
         completion.payload_length = identity->payload_length;
         completion.submit_timestamp_us = identity->submit_timestamp_us;
         completion.complete_timestamp_us = runtime->last_complete_timestamp_us;
+        completion.sample_sequence = runtime->last_sample_sequence;
+        completion.sample_generation = runtime->last_sample_generation;
+        completion.sample_valid = runtime->last_sample_valid;
     } else {
         completion.generation = runtime->generation;
         completion.payload_type = command->type ==
@@ -1176,11 +1201,8 @@ static esp_err_t submit_scheduled_command(
             (void)nocti_v4_time_now_us(runtime->timebase,
                                        &queue_exit_timestamp_us);
             runtime->last_queue_exit_timestamp_us = queue_exit_timestamp_us;
-            record_timing_stat(
-                &runtime->timing[timing_class_for_command(type)]
-                                [ASYNC_TIMING_QUEUE_SEND_CALL],
-                elapsed_us(command.queue_timestamp_us,
-                           queue_exit_timestamp_us));
+            /* Scheduled edges retain raw timestamps; formatting, histograms
+             * and averages do not belong before the next sample deadline. */
             update_max(&runtime->health->async_command_queue_depth_max, 1u);
         }
     }
@@ -1498,6 +1520,20 @@ void nocti_v4_async_led_get_status(const nocti_v4_async_led_t *async_led,
                    runtime->last_identity.submit_timestamp_us) : 0u;
     out_status->last_i2c_event = runtime->last_i2c_event;
     out_status->last_callback_core = runtime->last_callback_core;
+}
+
+void nocti_v4_async_led_get_state(const nocti_v4_async_led_t *async_led,
+                                 nocti_v4_async_led_state_t *out_state)
+{
+    if (out_state == NULL) return;
+    *out_state = (nocti_v4_async_led_state_t){.mode = PCA_IO_MODE_ASYNC_FAULTED};
+    if (async_led == NULL || async_led->runtime == NULL) return;
+    const async_led_runtime_t *runtime = async_led->runtime;
+    out_state->mode = __atomic_load_n(&runtime->mode, __ATOMIC_ACQUIRE);
+    out_state->submissions_allowed = __atomic_load_n(&runtime->submissions_allowed, __ATOMIC_ACQUIRE);
+    out_state->transaction_pending = __atomic_load_n(&runtime->transaction_pending, __ATOMIC_ACQUIRE);
+    out_state->selected_source = runtime->selected_source;
+    out_state->generation = runtime->generation;
 }
 
 void nocti_v4_async_led_print_status(const nocti_v4_async_led_t *async_led)

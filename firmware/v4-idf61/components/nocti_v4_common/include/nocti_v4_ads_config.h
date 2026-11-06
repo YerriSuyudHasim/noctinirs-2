@@ -30,10 +30,16 @@
 
 #define NOCTI_V4_DRDY_EVENT_RING_CAPACITY        128u
 /* V4-6 hardware observed a maximum raw-ring depth of one over the final
- * ~206-second quiet run. 256 records retain 32 ms of lossless backlog at
- * 8 kSPS while recovering 43,008 bytes of internal RAM for the bounded Wi-Fi
- * subsystem. Overflow remains a hard, counted acquisition fault. */
-#define NOCTI_V4_RAW_SAMPLE_RING_CAPACITY        256u
+ * ~206-second quiet run. The Batch 4b bench (10 Hz only, on the previous
+ * 256-record ring) observed a maximum of 23 records in ACQ (600 s, LED on) and
+ * 19 in an ENGINEERING 60 s capture, about 2.4 to 2.9 ms. Batch 4c halves the
+ * ring from 256 to 128 records, recovering another 7,168 bytes of internal RAM:
+ * 128 records are 16 ms at 8 kSPS (computed). Owner bench of the 128-record
+ * build (30 s ACQ at 2, 4 and 10 Hz): 28 records at most; 5 Hz, 8 Hz,
+ * DARK_DIAGNOSTIC and worst-case load are not measured. The per-slot optical
+ * classify burst grows with slot length. The capacity must stay a power of two (index mask).
+ * Overflow remains a hard, counted acquisition fault. */
+#define NOCTI_V4_RAW_SAMPLE_RING_CAPACITY        128u
 /* Startup qualification still rejects two events left behind the one being
  * serviced. RUNNING catch-up is nocti_v4_backlog.h: overwritten events are
  * counted, and only a 16-deep or 1 ms-stale queue faults the session. */

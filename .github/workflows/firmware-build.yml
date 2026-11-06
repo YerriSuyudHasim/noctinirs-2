@@ -21,6 +21,24 @@ env:
   SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
+  v4-idf61-build:
+    name: class-b-v4-idf61-build
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Build V4 and verify runtime placement
+        shell: bash
+        run: |
+          set -euo pipefail
+          . "$IDF_PATH/export.sh" > /dev/null
+          idf.py -C firmware/v4-idf61 build
+          python tools/verify-v4-idf61.py
+          python tools/verify_v4_runtime_placement.py firmware/v4-idf61/build/NoctiNIRSv4_IDF61.elf
+
   layer-detect:
     # Detection only. Not conformance evidence.
     name: Layer detect (informational, not a conformance check)

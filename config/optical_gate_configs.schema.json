@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema",
+    "configs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "noctinirs.optical_gate_configs/1"
+    },
+    "configs": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "object",
+          "required": [
+            "gate_config_id",
+            "enabled",
+            "mode"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "gate_config_id": {
+              "type": "integer",
+              "const": 0
+            },
+            "enabled": {
+              "type": "boolean",
+              "const": false
+            },
+            "mode": {
+              "type": "string",
+              "const": "ENGINEERING"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "gate_config_id",
+            "enabled",
+            "provisional_unmeasured",
+            "z_witness",
+            "z_channel",
+            "stable_k",
+            "sat_code",
+            "floor_counts",
+            "se_floor",
+            "no_witness_stop_ms"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "gate_config_id": {
+              "type": "integer",
+              "const": 1
+            },
+            "enabled": {
+              "type": "boolean",
+              "const": true
+            },
+            "provisional_unmeasured": {
+              "type": "boolean",
+              "const": true
+            },
+            "z_witness": {
+              "type": "number",
+              "minimum": 0,
+              "const": 5.0
+            },
+            "z_channel": {
+              "type": "number",
+              "minimum": 0,
+              "const": 5.0
+            },
+            "stable_k": {
+              "type": "number",
+              "minimum": 0,
+              "const": 3.0
+            },
+            "sat_code": {
+              "type": "integer",
+              "const": 7969177
+            },
+            "floor_counts": {
+              "type": "integer",
+              "const": 4
+            },
+            "se_floor": {
+              "type": "number",
+              "minimum": 0,
+              "const": 0.3
+            },
+            "no_witness_stop_ms": {
+              "type": "integer",
+              "const": 3000
+            }
+          }
+        }
+      ],
+      "items": false
+    }
+  }
+}

@@ -1,0 +1,228 @@
+{
+  "type": "object",
+  "required": [
+    "schema",
+    "geometry_map_id",
+    "status",
+    "provenance",
+    "adc",
+    "detectors",
+    "sources",
+    "channels",
+    "control_rule",
+    "notes",
+    "source_draft_status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "noctinirs.optical_geometry/1"
+    },
+    "geometry_map_id": {
+      "type": "integer",
+      "const": 1
+    },
+    "status": {
+      "type": "string",
+      "const": "draft_pending_caliper"
+    },
+    "provenance": {
+      "type": "string"
+    },
+    "adc": {
+      "type": "object",
+      "required": [
+        "model",
+        "fs_nominal_hz",
+        "ain_to_pd"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "fs_nominal_hz": {
+          "type": "integer"
+        },
+        "ain_to_pd": {
+          "type": "object",
+          "required": [
+            "2",
+            "3",
+            "0",
+            "1"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "2": {
+              "type": "string"
+            },
+            "3": {
+              "type": "string"
+            },
+            "0": {
+              "type": "string"
+            },
+            "1": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "detectors": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": [
+          "pd",
+          "ain",
+          "side"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pd": {
+            "type": "string"
+          },
+          "ain": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "L",
+              "R"
+            ]
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "side",
+          "software_source",
+          "slot",
+          "pca_output"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "L",
+              "R"
+            ]
+          },
+          "software_source": {
+            "type": "integer"
+          },
+          "slot": {
+            "type": "object",
+            "required": [
+              "735",
+              "850"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "735": {
+                "type": "integer"
+              },
+              "850": {
+                "type": "integer"
+              }
+            }
+          },
+          "pca_output": {
+            "type": "object",
+            "required": [
+              "735",
+              "850"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "735": {
+                "type": "integer"
+              },
+              "850": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "channels": {
+      "type": "array",
+      "minItems": 20,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "source",
+          "pd",
+          "ain",
+          "sd_mm",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "pd": {
+            "type": "string"
+          },
+          "ain": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "sd_mm": {
+            "type": "number",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "short",
+              "long"
+            ]
+          }
+        }
+      }
+    },
+    "control_rule": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "source_draft_status": {
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

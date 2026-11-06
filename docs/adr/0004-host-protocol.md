@@ -269,10 +269,14 @@ Single const table in `nn2_core`. Every decode resolves to exactly one row or `U
 | 0x0021 | `clear_fault` | — | ✗ | ✗ | UDP only. USB `clear_fault` is rejected in every state until Q-2 is decided | n/a (lock released) | cached | emitter (RI) / sys (restart) |
 | 0x0100 | `set_fs` | `fs:u8` ∈ {1,2,4,5,8,10} | ✗ | ✗ | UDP | n/a (STOPPED only) | cached | none (config store) |
 | 0x0101 | `set_led_current` | `channel:u8` 0..19, `mA` 0..50 (encoding **TBD Agent 03**) | ✗ | indirect (config only) | UDP only | n/a (STOPPED only) | cached | none (stores only, #48) |
+| 0x0102 | `set_mode` | `mode:u8`: 0 ACQ normal, 1 ENGINEERING | ✗ | ✗ (STOP-only RAM) | UDP only | n/a (STOPPED only) | cached | Batch 3 RAW selection; default ACQ after boot |
 | 0x0030 | `get_health` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | ADC diagnostic counters. Not an ACQ1 frame. |
 | 0x0031 | `get_timing` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | ADC service-time counters. Not an ACQ1 frame. |
+| 0x0032 | `get_netdiag` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | Heap, FRAME-send and net-counter observation (`heap_free_now`, `heap_free_min`, `largest_free_block_now`, `frame_send_*`, `frame_last_errno`, `net_received`, `net_replied`, `net_invalid`, `net_send_errors`, `net_last_errno`). Not an ACQ1 frame. |
 
 **Owner direction, 2026-10-29 (PR #76, image `firmware/v4-idf61`).** All command control on that image is Wi-Fi UDP through `nn2ctl`. Serial command control is removed, including a USB diagnostic console that accepts commands. `get_health` (0x0030) and `get_timing` (0x0031) are the UDP read-only diagnostics added for that image. This amends L1, L2, O8, and §3.2 item 5 for that image: USB is not a command transport there. Sentences above that still name a USB console are the earlier target record. They are not a command path on this image. USB provisioning is not implemented on it. The C registry is `NN2_CMD_GET_HEALTH` and `NN2_CMD_GET_TIMING` in `components/nn2_core/include/nn2_core_protocol.h`, with argument size 0 and cache bypass in `components/nn2_core/src/nn2_core_protocol.c`.
+
+**Owner decision, 2026-10-31 (Batch 4a, branch `feat/n4a-diagnostics-ram-budget`).** The heap and FRAME-send observation keys are moved out of `get_health`/`get_timing` into a new read-only opcode `get_netdiag` (`0x0032`), UDP only, owner only while locked, cache bypass, argument size 0. `get_health` (0x0030) and `get_timing` (0x0031) return to their pre-Batch-4a contents. The reply prefix is `v4netdiag=1` (fallback `v4netdiag=0 reason=unavailable`). Reason: the 10-digit worst-case replies of health and timing exceed the 1349-byte diagnostic capacity (`components/nn2_app/src/nn2_app_comm.c`), so no new keys fit there. The `net_*` counters (`net_received`, `net_replied`, `net_invalid`, `net_send_errors`, `net_last_errno`) are included, read from the existing `nn2_net_status_t` (`s_status`). The C registry is `NN2_CMD_GET_NETDIAG` in `components/nn2_core/include/nn2_core_protocol.h` and `components/nn2_core/src/nn2_core_protocol.c`; the read path is `control_read_diag` kind 3.
 
 Column semantics:
 
@@ -1126,6 +1130,7 @@ Class I in this table is simulator conformance (`nn2ctl` against the simulator).
 | boot / HB addendum / rev 3 | 2026-10-17 | Boot sequence, P1 heartbeat, P2/Q-B1, R1–R5, F1 |
 | rev 3.1 (this file) | 2026-10-22 | GPIO26 caveat dropped; IO35–37 role-based + octal checks; named budgets, IO6 safe state, OSR/data-rate init inputs; IR-B1–B3 closed; 28 B header with `flags` (SIMULATED, reserved fail-closed, `RESERVED_FLAGS`); scope/non-goals; opcode ranges per subsystem; Agent 05 heartbeat/grace ownership constraints; #48/#51 alignment |
 | file rev 2 | 2026-10-22 | rev 2 — RTOS Class S S-1..S-4 (Agent 05) on `702a8c4a` + Q-17/Q-18/Q-20 resolved with Agent 03 agreement ([6334229454](https://github.com/YerriSuyudHasim/noctinirs-2/pull/55#issuecomment-6334229454)) + §3.16 time and sequencing contract for [#56](https://github.com/YerriSuyudHasim/noctinirs-2/issues/56); docs only. S-1 event-driven STOPPING/RI/T17 waits. S-2 USB `BUSY`/`usb_busy` versus internal queue-full FAULT, and USB `safe_off` `assert_reset` then notify. S-3 stale grace generation; `xTaskNotify(..., eSetBits)`. S-4 grace expiry does not itself raise a fault. `_Static_assert` timing relations (§3.14.4). `NN2_PROTO_MAX_DGRAM` 1472 / payload 1440 not from Kconfig; pre-CRC silent drop (`rx_malformed`); `RESERVED_FLAGS` only if `req_id` parsable; v1 `protocol_version` exact match; T16 guard does not enter RI. §3.16.a–§3.16.f: monotonic clock, `boot_id`, the single loss rule, DRDY latch, `TS_ESTIMATED`, `get_time` `0x0005` (Proposed), integer JSON units, V3 defect trace R1–R10 (`reference/v3` @ `f2d7c8cf`). Q-21 closed by criteria (IRAM ISR, Core-1 critical-section budget TBD, p99.9 relative to one sample period, measurement NOT RUN, `TS_ESTIMATED` until the evidence is linked). Agent 05 RTOS additions on R1–R10: one loss rule; `frames_dropped` atomic across Core 0 and Core 1; measured latch anchor; fault means STOPPED or RECOVERED_STOP; VTS-T4 hooks both sequences; VTS-T2 and VTS-T7 are simulator only. Superseded earlier §3.16 text, with one rule left in each place: (1) §3.16.a "longer than any boot" becomes about 584 thousand years, and every wire time is absolute u64 LE (no relative, truncated, or big-endian stamp); the u64 clock is not the VTS-T4 wrap hook. (2) §3.16.b "continues across RECOVERING / does not reset" becomes the R9 rule: a fault ends in STOPPED or RECOVERED_STOP and the next `start_stream` gets a new `session_id`; a transient RECOVERING that returns to STREAMING keeps the session and its counters. (3) §3.16.b, §3.16.c item 2, and the §7 Class I row "sample gap equals the overrun delta plus counted frame drops" become the split: a `sample_sequence` gap equals the `overrun` delta; a `frame_sequence` gap equals the `frames_dropped` delta; on every drop path `frames_dropped` increments atomically with, or before, release of the consumed `frame_sequence`. (4) §3.16.c item 5 per-slot offsets without a formula become the measured DRDY anchor plus the published SlotPlan formula; a scheduled stamp is not used; `TS_ESTIMATED` stays set until the Q-21 evidence is linked. (5) §3.16.d "`get_time` REQUEST has no arguments" becomes `get_time`, `heartbeat`, and `get_status` carrying and echoing opaque `t_host`; the accuracy target stays TBD, NOT RUN. (6) §3.4.4, §3.11, §3.12, INV-5, the state diagram, and T10 point at that single session rule; T10b is the transient return. (7) C6/C7, §3.2 `EAGAIN`, §3.13.5, and §3.13.6 use that same loss rule, the atomic `frames_dropped` snapshot, and the R8/R9 field sets. (8) §7 names the study tests `VTS-T1`–`VTS-T16` so they stay distinct from transition-table T1–T23; `VTS-T2` and `VTS-T7` are simulator only; `VTS-T4` hooks both sequences; the Class S atomic-counter check and the Class H logic-analyser and 1 h drift rows stay NOT RUN. N1–N11 (§3.17; safety invariants move to §3.18): one classification rule (`UNDER_K` only below `K_min`; `MINIMUM`+`BELOW_TARGET` stays valid); mean sentinel `INT32_MIN`; saturation counts; I2C-completion commit through the DRDY latch API; `LED_COMMIT_LATENCY_BUDGET_US` is a declared provisional constant (NOT RUN) and the SlotPlan formula stays in core; no `ESP_LOG*` on the Core-1 streaming path; N11 counters are single-writer or atomic. FRAME payload `16 + 20 × 27 = 556` ≤ 1440. `n_on`/`n_off` u16 and the §3.13.4 mask are replaced by the §3.17 fields, not dropped. H1–H5 are Class H, NOT RUN, on hold. Risk-4 records the settle versus OFF-window tradeoff. |
+| file rev 5 | 2026-10-31 | Owner decision (Batch 4a): new read-only `get_netdiag` 0x0032 carries `heap_free_now`, `heap_free_min`, `largest_free_block_now`, `frame_send_*`, `frame_last_errno`, `net_*`; `get_health`/`get_timing` return to pre-Batch-4a contents. UDP only, cache bypass, argument size 0. |
 | file rev 4 | 2026-10-29 | Owner direction: the `firmware/v4-idf61` image takes every command over Wi-Fi UDP `nn2ctl`. Serial command control is removed. Registry rows `get_health` 0x0030 and `get_timing` 0x0031, UDP only, read-only, cache bypass. Amends L1, L2, O8, and §3.2 item 5 for that image. Upstream USB-console sentences stay as the earlier target record. Owner authorization: [PR #76 comment 6498933500](https://github.com/YerriSuyudHasim/noctinirs-2/pull/76#issuecomment-6498933500) (2026-10-29 23:08 KST). |
 | file rev 3 | 2026-10-22 | On parent `75865f3b`. Status stays **Proposed**. F1: §2.2 D6 and §3.8.1 from [#33 6333972667](https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6333972667) (Nori under [6333953903](https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6333953903)); B4/B7/RI-4/T5/T14/T16; INV-1 and INV-16; Risk-5. Checklist clauses not in that comment are marked needs trace (§3.8.1 items 2 and 4). F2: C4 seqlock for u64 `first_fault`, `last_fault`, and `uptime_us` only, quoting [6226822784](https://github.com/YerriSuyudHasim/noctinirs-2/issues/33#issuecomment-6226822784); `NN2_SEQLOCK_MAX_RETRIES` PROVISIONAL; single writer per record. u32 counters stay lock-free relaxed atomics. `timestamp_us` is not in the seqlock. F3: Q-2 left open and not renumbered; USB `clear_fault` rejected until decided. F4: write-authorization row; Agent 01 assignment of PR #55 is reference pending. M-1: §3.16.c anchor is the first DRDY latch at or after the slot-0 boundary; one formula. M-2: per-field snapshot; exact frame gap only on SESSION_REPORT. M-3: cross-core u32 atomics; histogram may tear. N-1: I2C completion clock port is ISR-safe and `IRAM_ATTR`. SlotPlan budget §3.17.3 (Agent 05, G1 ~15:52 KST), all values PROVISIONAL, H1/H2/H4 NOT RUN. Q-24 `fs`-dependent `K_target` not decided. Payload stays `16 + 20 × 27 = 556`. Class H NOT RUN. CI status is not claimed. |
 
@@ -1178,3 +1183,80 @@ M-1, M-2, M-3, and N-1 are folded in §3.16 and §3.17. The SlotPlan budget tabl
 ### 12.3 C4 seqlock item
 
 Agent 05's further seqlock item for this rev is in §3.14.1. Reader retry is bounded by `NN2_SEQLOCK_MAX_RETRIES` (value **PROVISIONAL**). On exhaustion the reader returns the last good copy and sets a stale flag. There is one writer per record. No GitHub URL for that wording was found (**reference pending**).
+
+
+## 13. Batch 3 engineering RAW amendment (2026-10-31)
+
+Scope: Owner's Batch 3 instruction against e42f2bc9, local implementation pending
+bench approval. Only RAW layout 3 from draft optical contract v0.4.3 is bound;
+OPT2, optical gates, SESSION_REPORT and gate statistics remain unimplemented.
+The draft SHA-256 is
+`4dd2b89b2ac900dfe814b6cd97e504b3227b163eee8487987f9e4e4b84c31c6f`.
+
+`set_mode` is opcode 0x0102 with one byte, cached like other configuration
+mutations. Only STOPPED accepts it; STARTING, STREAMING and STOPPING reject it
+with INVALID_STATE. It does not start acquisition. Boot selects ACQ normal.
+Owner's lazy-allocation follow-up (2026-10-31) reserves one 6272-byte internal
+8-bit RAW instance only on an accepted STOPPED -> ENGINEERING mode change.
+Default ACQ boot has no RAW allocation. Mode ACQ first detaches the optical RAW
+binding and then frees the instance, only while STOPPED. Same-mode commands and
+cached retries do not allocate/free again. Allocation failure returns the
+existing PRECONDITION_FAILED status for set_mode; mode remains ACQ and nn2ctl
+shows "RAW buffer: not enough internal memory". Failed detach retains the
+instance and prior mode. Neither START/STOP nor a data/ISR path allocates or
+frees this buffer. This is the Owner-approved allocation exception only for RAW.
+Normal ACQ1 transport retains its exact prior payload and envelope behavior.
+The V4 control binding still has no ACQ1 producer in normal mode.
+
+ENGINEERING selects the existing Batch 2 RAW encoder. Its 16-byte prefix and
+14-byte samples are unchanged (N=1..100; payload at most 1416 bytes; datagram at
+most 1448). `raw_flags` bit 0 always labels ENGINEERING; bit 1 is GAP_BEFORE.
+RAW is never science. RAW has no `frame_flags`, `gate_config_id` or
+`frame_sequence` wire fields: do not append them or reinterpret reserved bytes.
+`frame_flags=4` (ENGINEERING_UNGATED) and `gate_config_id=0` describe the mode in
+info/health/timing, rather than introducing OPT2 into this batch.
+
+The sole bound ADS consumer copies finalized samples to a fixed 128-entry SPSC
+RAW buffer, after the existing sample-clock classification. No extra ADS ring
+consumer, ISR work, allocation, logging or division is introduced. Unclassifiable
+startup/stop records use OUTSIDE/0xFF. Overflow drops newest, counts lost samples,
+and marks the first subsequently accepted record. Encoding splits at sequence
+holes, epoch changes and that marker; older buffered records are not mislabeled.
+The RAM follow-up reduces the buffer from 256 to 128 entries (16 ms at 8 kSPS)
+without changing RAW encoding. Entries retain full timestamps and epochs;
+separate gap bytes avoid per-entry padding. A 6272-byte per-instance RAM budget is
+compile-time enforced. RAW overflow is still drop-newest with explicit accounting.
+The measured timestamp belongs to the first sample, not transmit time.
+`slot_plan_epoch` carries the low 16 bits of the immutable scheduler session epoch;
+`geometry_map_id=1` refers to config/optical_geometry_v1.json.
+
+RAW uses the existing bounded FRAME sender in nn2_net, the same UDP 3333 socket,
+and the full owner IP/port established by START (§3.2/3.6). No legacy 3334 change.
+Envelope message sequencing remains shared with replies. RAW sample continuity
+uses first_sample_sequence + i, including u32 wrap; RAW has no independent frame
+counter. UDP send failure uses existing send_errors and sample discontinuity.
+raw_packets_sent increments only after successful sendto; raw_dropped_samples
+counts RAW-buffer overflow, not ADS or network loss. These and
+raw_buffer_highwater reset on the next start, remain visible after STOP, and are
+per-field atomic diagnostic snapshots. After set_mode ACQ releases the buffer,
+RAW diagnostic keys remain present with zero values; capture end-of-session
+counters while stopped in ENGINEERING before releasing it.
+
+The bench receiver starts on its own single control endpoint, keeps that socket
+for heartbeats every 500 ms and STOP confirmation, and never adopts another
+owner's session. It saves original length-prefixed NN2 datagrams plus AIN CSV;
+no channel remapping or physiological interpretation is performed.
+The separate capture invocation is required: a different nn2ctl start endpoint
+cannot transfer the lease to the receiver. Example after STOP:
+
+```text
+python tools/nn2ctl.py set-mode --mode ENGINEERING
+python tools/nn2_raw_capture.py --seconds 60 --rate 10 --output raw-bench3
+python tools/nn2ctl.py timing
+python tools/nn2ctl.py health
+python tools/nn2ctl.py set-mode --mode ACQ
+```
+
+Bench and ESP-IDF build/flash are NOT RUN by this change. The meanings of RAW
+versus OPT2 metadata and the final session-metadata encoding remain separate
+contract decisions; this amendment does not introduce additional RAW fields.

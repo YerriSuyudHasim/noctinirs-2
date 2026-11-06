@@ -1,0 +1,27 @@
+# ISR-safe driver options do not place the task-context submit path or the
+# application tasks in IRAM. Keep the complete sample-clock ownership chain
+# independent of flash/cache fetch latency. No bus timing or priority changes.
+[mapping:nocti_v4_led_runtime]
+archive: libnocti_v4_async_led.a
+entries:
+    nocti_v4_async_led (noflash)
+
+[mapping:nocti_v4_scheduler_runtime]
+archive: libnocti_v4_scheduler.a
+entries:
+    nocti_v4_scheduler (noflash)
+
+[mapping:nocti_v4_ads_runtime]
+archive: libnocti_v4_ads.a
+entries:
+    nocti_v4_ads (noflash)
+
+[mapping:nocti_v4_i2c_submit]
+archive: libesp_driver_i2c.a
+entries:
+    i2c_master (noflash)
+
+[mapping:nocti_v4_i2c_submit_hal]
+archive: libesp_hal_i2c.a
+entries:
+    i2c_hal (noflash)

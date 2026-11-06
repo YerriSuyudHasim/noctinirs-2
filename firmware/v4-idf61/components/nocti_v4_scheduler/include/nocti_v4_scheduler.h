@@ -60,6 +60,10 @@ typedef struct {
     int32_t scheduler_task_core;
     int32_t gptimer_callback_core;
     esp_err_t last_error;
+    uint32_t sample_origin;
+    uint8_t sample_origin_valid;
+    uint32_t sample_slot_samples;
+    uint32_t sample_off_phase_samples;
 } nocti_v4_scheduler_status_t;
 
 /* Immutable copy exported by the scheduler task only after it has finalized a
@@ -111,6 +115,23 @@ typedef struct {
     uint32_t rejected_transition;
     uint32_t rejected_off_settle;
     uint32_t rejected_guard;
+    /* Sample-index plan. Classification uses these, not the microsecond fields. */
+    uint8_t sample_plan_valid;
+    uint8_t anchor_valid;
+    uint8_t on_commit_known;
+    uint8_t off_commit_known;
+    uint8_t on_commit_late;
+    uint8_t off_commit_late;
+    uint32_t slot_start_sequence;
+    uint32_t off_edge_sequence;
+    uint32_t slot_end_sequence;
+    uint32_t guard_sequence;
+    uint32_t settle_samples;
+    uint32_t on_first_affected;
+    uint32_t off_first_affected;
+    uint32_t on_commit_sequence;
+    uint32_t off_commit_sequence;
+    uint64_t anchor_timestamp_us;
 } nocti_v4_slot_timing_t;
 
 typedef struct {
@@ -144,6 +165,13 @@ bool nocti_v4_scheduler_pop_finalized_slot(nocti_v4_scheduler_t *scheduler,
                                            nocti_v4_slot_timing_t *out_timing);
 void nocti_v4_scheduler_get_status(const nocti_v4_scheduler_t *scheduler,
                                    nocti_v4_scheduler_status_t *out_status);
+/* Append one nn2ctl timing suffix. Values are sample indices and signed
+ * edge deltas (actual first-affected minus planned edge). 'x' means the
+ * commit for that slot has not been observed. Returns bytes written. */
+size_t nocti_v4_scheduler_append_led_timing(const nocti_v4_scheduler_t *scheduler,
+                                           char *out, size_t cap);
+size_t nocti_v4_scheduler_append_sync(const nocti_v4_scheduler_t *scheduler,
+                                      char *out, size_t cap);
 void nocti_v4_scheduler_print_status(const nocti_v4_scheduler_t *scheduler);
 void nocti_v4_scheduler_print_timing(const nocti_v4_scheduler_t *scheduler);
 void nocti_v4_scheduler_print_health(const nocti_v4_scheduler_t *scheduler);
