@@ -25,4 +25,6 @@ After capture (`netdiag`): `heap_free_now` 13204, `heap_free_min` 6448, `largest
 `late_max` 2, `raw_packets_sent` 11821, `raw_dropped_samples` 0, `raw_buffer_highwater` 80, `raw_depth_max` 19.
 After `set-mode ACQ` (`netdiag`): `heap_free_now` 18584, `heap_free_min` 6448 (minimum never rises), `frame_send_errors` 110.
 
-Derived: 110 failed sends = 4400 / 40; 110 / (11821 + 110) = 0.92 %; mean samples per received packet 472844 / 11821 = 40.0.
+Derived: 110 failed sends = 4400 / 40; 110 / (11821 + 110) = 0.92 %; mean samples per received packet 472844 / 11821 = 40.0003 (4 samples more than 11821 x 40, so not every packet had exactly 40; the /40 equality is a consistency check, not proof).
+
+Provenance: this file is a summary of terminal text pasted by the Owner, not the original capture or a checksummed log; no link to the original session exists. The Owner's decision (option 3) was given in a chat session on 2026-11-06 and is not otherwise archived. Board hardware revision and the `sdkconfig` actually used were not recorded.

@@ -263,6 +263,36 @@ static void epoch_and_gap_boundaries_across_wrap(void)
     TEST_ASSERT_EQUAL(0,nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp));
     TEST_ASSERT_EQUAL(0,buffer.dropped);
 }
+static void overflow_gap_and_epoch_near_position_limit(void)
+{
+    /* Drive positions to the top of [0, 2*CAPACITY), then overflow while older entries are still queued. */
+    nn2_raw_buffer_reset(&buffer);
+    int32_t ain[4]={3,3,3,3};
+    nn2_oc_raw_t raw; nn2_oc_stats_t stats={0}; uint64_t timestamp=0;
+    uint32_t next=0;
+    while (buffer.head<2u*NN2_RAW_BUFFER_CAPACITY-10u) { /* consume one sample at a time */
+        nn2_raw_buffer_push(&buffer,ain,next,(uint64_t)next*125u,1,4,0); ++next;
+        size_t n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+        TEST_ASSERT_TRUE(n>0);
+    }
+    TEST_ASSERT_TRUE(buffer.head==buffer.tail);
+    /* Queue CAPACITY entries across the position wrap, then 3 overflow drops, then drain one epoch-1 packet. */
+    for (uint32_t i=0;i<NN2_RAW_BUFFER_CAPACITY;++i,++next)
+        nn2_raw_buffer_push(&buffer,ain,next,(uint64_t)next*125u,1,4,0);
+    for (uint32_t i=0;i<3u;++i,++next) nn2_raw_buffer_push(&buffer,ain,next,(uint64_t)next*125u,1,4,0);
+    TEST_ASSERT_EQUAL(3,buffer.dropped);
+    size_t n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+    TEST_ASSERT_EQUAL(NN2_RAW_BUFFER_CAPACITY,raw.sample_count);
+    TEST_ASSERT_EQUAL(1,raw.raw_flags);
+    /* The next accepted sample follows the drops: GAP_BEFORE from the overflow, new epoch, near the limit. */
+    nn2_raw_buffer_push(&buffer,ain,next,(uint64_t)next*125u,2,4,0);
+    n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+    TEST_ASSERT_EQUAL(1,raw.sample_count); TEST_ASSERT_EQUAL(next,raw.first_sample_sequence);
+    TEST_ASSERT_EQUAL(2,raw.slot_plan_epoch); TEST_ASSERT_EQUAL(3,raw.raw_flags);
+    TEST_ASSERT_EQUAL(3,buffer.dropped);
+}
 static void two_slots_of_40_fit_without_drop(void)
 {
     /* 80 samples = two 40-sample slots queued at once (Batch 3 high-water). */
@@ -359,6 +389,7 @@ void test_raw_engineering_suite(void)
     RUN_TEST(wrap_keeps_order_and_depth);
     RUN_TEST(two_slots_of_40_fit_without_drop);
     RUN_TEST(epoch_and_gap_boundaries_across_wrap);
+    RUN_TEST(overflow_gap_and_epoch_near_position_limit);
     RUN_TEST(metadata_survives_ring_reuse);
     RUN_TEST(mode_allocation_lifecycle);
     RUN_TEST(failed_initial_bind_releases_candidate);

@@ -28,7 +28,7 @@ size probe (Xtensa GCC 15.2, `xtensa-esp32s3-elf-gcc -fsyntax-only`), `[hitung]`
 Not touched: codec, golden vectors, timing constants, task priorities and stacks (including
 `NOCTI_V4_RTOS_STACK_NET_BYTES`), I2C, pins, watchdog, partitions, `sdkconfig`, port 3334, `reference/`,
 the ISR and the ADS task. `nn2_raw_buffer_push` is called from the optical consumer (not the DRDY
-ISR, not the ADS task); its work per sample is the same plus two compares (see section 6).
+ISR, not the ADS task); its work per sample is the same plus a few integer compares and one add/subtract per access (see section 6).
 
 ## 2. E1 - cause of `ENOMEM`
 
@@ -55,8 +55,10 @@ also returns `ERR_MEM` when it must copy a chained pbuf into a new `PBUF_RAM` an
 cannot be allocated: **tidak terverifikasi** (closed-source Wi-Fi library; `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER=y`,
 `DYNAMIC_TX_BUFFER_NUM=4` in `firmware/v4-idf61/sdkconfig`).
 
-Conclusion: **verified** that `ENOMEM` on UDP `sendto` is a failed contiguous heap allocation of the
-datagram copy in lwIP (path 1-5). **Not verified** is the extra Wi-Fi driver TX buffer allocation.
+Conclusion, from reading the source only (nothing was observed inside the stack on the target): `sendto` returns
+`ENOMEM` when the lwIP datagram copy cannot be allocated (path 1-5) or when the Wi-Fi driver path returns
+`ESP_ERR_NO_MEM`. **Which of these paths failed on the board is not verified**, and the Wi-Fi driver's own TX
+buffer allocation is not verifiable (closed-source library).
 
 ### 2.2 Heap budget in ENGINEERING
 
@@ -77,7 +79,7 @@ One datagram `[sumber]` + `[hitung]`:
 
 Why `ENOMEM` appears now and then, first reading (**superseded by the Batch 4b bench, section 8**):
 the 4a figures (`heap_free_min` 3068 B, largest block 5632 B) suggested that short bursts of low total free heap
-starve the lwIP pbuf and the Wi-Fi TX buffer. The Batch 4b bench disproved that as the main cause: with
+starve the lwIP pbuf and the Wi-Fi TX buffer. The Batch 4b bench did not support it: with
 `heap_free_min` 6448 B (never below 6.4 KB) `sendto` still failed 110 times with errno 12. Total free heap alone
 therefore does not explain the failures, but fragmentation of the largest free block during the capture is **not
 excluded** (the largest block was only read while STOPPED: 7680 B). A reading that is better supported by the
@@ -98,7 +100,7 @@ failed `sendto`; it is not a proof that no packet is lost elsewhere.
 
 | Option | Bytes freed | Risk | Status |
 |---|---:|---|---|
-| **A** shrink RAW buffer 128 -> 96 samples | 1056 (`[probe]`) | Buffer overflow if consumer lags > 12 ms; shows as `raw_dropped_samples` > 0 and GAP_BEFORE. Measured high-water 80 (Batch 3) leaves 16 samples of headroom. | **Implemented** |
+| **A** shrink RAW buffer 128 -> 96 samples | 1056 (`[probe]`) | Buffer overflow if the consumer stalls longer than the free space allows (12 ms from empty, about 2 ms at the measured high-water 80); shows as `raw_dropped_samples` > 0 and GAP_BEFORE. Measured high-water 80 (Batch 3) leaves 16 samples of headroom. | **Implemented** |
 | A' shrink to 80 samples (two slots exactly) | 1584 | Zero headroom over the only measured high-water; any jitter drops samples. | Not recommended |
 | **C1** cap samples per packet at 40 in `nn2_raw_buffer_encode` | 0 steady state; lowers the transient peak by up to ~840 B (1506 -> 666 B) | Changes RAW packet sizes/count (more datagrams, 4-frame budget per round is then hit sooner, CPU/airtime up). Protocol effect: needs an issue/ADR. | Analysis only |
 | **C2** fewer Wi-Fi dynamic TX buffers (`CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=4`) or other lwIP/Wi-Fi options | up to ~1.5 KB per buffer removed from the worst case (unverified) | Needs `sdkconfig` change (forbidden here); lower TX concurrency can raise `EAGAIN`/`ENOBUFS`. lwIP itself has no UDP send queue and no pool to shrink (`MEM_LIBC_MALLOC=1`, `MEMP_MEM_MALLOC=1`). | Analysis only |
@@ -114,7 +116,7 @@ failed `sendto`; it is not a proof that no packet is lost elsewhere.
 - Measured high-water: 80 (Batch 3, quoted by the Owner as "80 of 128"). **Limitation:** this figure is not in the repo
   and was measured before Batch 4a; no newer high-water is known (the Batch 4a bench report does not state one).
   The capacity was chosen from that single figure.
-- Chosen: 96 = 80 + 16 (20 % headroom, 12 ms at 8 kSPS). Overflow behavior is unchanged: newest sample is
+- Chosen: 96 = 80 + 16 (20 % headroom; 12 ms of buffering from empty at 8 kSPS, but only 16 entries, about 2 ms, above the measured high-water 80). Overflow behavior is unchanged: newest sample is
   dropped, `dropped` counts it, the next accepted entry gets `GAP_BEFORE`.
 - `NN2_RAW_BUFFER_MIN_SAMPLES` = 80 with a `_Static_assert`, so the capacity cannot silently go below two slots.
 
@@ -195,8 +197,8 @@ they are not caused by this change. The authoritative result is the GitHub Actio
 ## 6. Risk to ADS / timing
 
 No change to the ISR, the ADS task, scheduling, stacks, timing constants or the codec. The only runtime
-difference is inside `nn2_raw_buffer_push` (producer: optical consumer, ENGINEERING only): replace a mask with two
-compares and an add/subtract. Expected effect on `spi_max`, `service_max`, `lag_max`, `late_max`,
+difference is inside `nn2_raw_buffer_push` (producer: optical consumer, ENGINEERING only): replace a bit mask with
+`advance`/`distance`/`index_of` (a few integer compares and one add/subtract each, no loops). Expected effect on `spi_max`, `service_max`, `lag_max`, `late_max`,
 `sched_deferred_max`: none; confirm with bench A (ACQ, 10 Hz, 600 s; ACQ does not even allocate the buffer) and
 the `timing` output in the ENGINEERING run.
 
@@ -238,7 +240,7 @@ leak) but did **not** remove the `sendto` failures. Loss is not explained by tot
 **Owner decision (option 3):** accept about 1 % RAW packet loss in ENGINEERING mode. RAW and ENGINEERING frames are
 diagnostic data, not science data, and the ENGINEERING mode exceeds the 20 kB/s network design contract. No
 `sdkconfig`, protocol, retry or codec change is made. Revised bench criterion for ENGINEERING RAW: loss must be
-**counted and detectable**, that is `lost_in_breaks / 40 == delta(frame_send_errors)`, `raw_dropped_samples == 0`,
+**counted and detectable**, that is `lost_in_breaks / 40` is consistent with `delta(frame_send_errors)` (a consistency check: it assumes 40-sample packets, the received mean was 40.0003 samples per packet, and `nn2_raw_capture.py` does not count loss before or after the received sample range), `raw_dropped_samples == 0`,
 `heap_free_min >= 4096 B`, no heap leak, and no ACQ regression. Zero `frame_send_errors` is no longer required.
 
 Open items (not done here): the Wi-Fi TX buffer count is the likely limit but is unproven; if RAW without loss is
