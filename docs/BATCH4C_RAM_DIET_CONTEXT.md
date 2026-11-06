@@ -43,7 +43,7 @@ on-target measurement are done only by the Owner on the lab computer.
   Heap at ENGINEERING: `heap_free_min` 6448 B (4a: 3068 B). ACQ: no regression.
 - Open problem 4b left: in ENGINEERING RAW capture, 110 `sendto` failures with errno 12 (ENOMEM) in 60 s,
   about 0.92 % of packets (4a: 22 and 38). `lost_in_breaks / 40 == frame_send_errors` in 3 of 3 captures.
-  `heap_free_min` stayed at 6448 B while failing, so **total free heap is not the cause**. Best-supported
+  `heap_free_min` stayed at 6448 B while failing, so total free heap alone does not explain it (the size and kind of the failed allocation, the largest free block and the allocator state at the moment of failure were not recorded, so fragmentation and allocation pressure stay open). Best-supported
   cause: the Wi-Fi TX buffer count `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=4` (`sdkconfig.defaults` line 60,
   comment "about 20 kB/s to one station"). RAW sends about 200 packets/s, about 120 kB/s (6 times the design
   contract). ESP-IDF Kconfig help: UDP senders can run out of TX buffers; `esp_wifi_internal_tx` documents
@@ -142,7 +142,7 @@ Free values come from one run in normal ACQ; they are not worst-case figures `[a
 |---|---|---:|---|
 | 1 | `raw_ring` (ADS) 256 -> 128 and `raw_stage` (optical) 256 -> 128 | 14,336 B | Measured depth 19-23 vs 256. 128 entries = 16 ms at 8 kSPS. Stall > 16 ms loses samples (counted by existing counters). Must check how the ADS ring overflow is handled and that nothing else assumes 256. Touches the ADS data path: needs Hardware/RTOS review and Bench A. |
 | 2 | Remove unused diagnostics (V5 sweep `phase_*`, `anomaly`, `mismatch`, `ch0_selftest`, `frame_dump`) | about 4,100 B + code | First list which are read by `get_health`/`get_timing`/tools/tests; remove only the unused. Wire keys must not change silently (golden/contract tests). |
-| 3 | `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM` 4 -> 6, then 8 (`sdkconfig.defaults`) | costs about 0.65 KB per buffer in use `[asumsi]` | `sdkconfig` change needs Owner approval. After editing `sdkconfig.defaults`, the lab machine must delete its local `sdkconfig` (or `idf.py fullclean`) so the new value is used. Not proven to remove the loss. |
+| 3 | `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM` 4 -> 6, then 8 (`sdkconfig.defaults`) | costs about 0.65 KB per buffer in use `[asumsi]` | `sdkconfig` change needs Owner approval. After editing `sdkconfig.defaults`, the lab machine must delete its local `sdkconfig` so the new value is used. `idf.py fullclean` is NOT enough: it only cleans the build directory and keeps `sdkconfig` (PR #93 review). After the build, check that `build/config/sdkconfig.h` shows the new value. Not proven to remove the loss. |
 | 4 | Static stacks: scheduler 6,144 -> 3,072, optical 6,144 -> 3,072, dark 4,096 -> 2,048, control 8,192 -> 4,096 (keep about 1 KB free over measured use) | 12,288 B | Stack overflow is fatal and the margins are from one normal run. Do not do this without worst-case stack measurement and specialist review. Frame stack stays. |
 | 5 | History 3 frames -> 2 (`work`, scheduler `slots`) | 19,520 B | Changes finalization logic and timing. Only with a design review. |
 | 6 | `finalized_timing`/`finalized_ring` 32 -> 16 | 9,728 B | Needed depth not measured. |
