@@ -74,14 +74,24 @@ also a control for fragmentation), then `f28a2c1` (TX 6). Save the full terminal
 `sdkconfig` used. After each build, check that `build/config/sdkconfig.h` shows
 `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM 6` (on `f28a2c1`) and `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER 1`, and archive it.
 
-Measurements proposed by the RTOS review (the pass limit of 64 is its opinion, the Owner may change it):
+Owner decisions (chat, 2026-11-06): ACQ runs at 2 Hz and 4 Hz are a **condition for merging 1a**, with
+`raw_depth_max` at most 64 (the limit of 64 is the RTOS reviewer's opinion, accepted by the Owner). Each test run
+lasts 30 s, not 60 s or 600 s. A 30 s run is a depth gate, not a regression run: its timing maxima are not
+comparable with the 600 s reference of 4b. An optional 600 s ACQ run at 10 Hz before merge is the Owner's call.
 
-1. ACQ at 2, 4 and 10 Hz (`nn2ctl.py run --rate <n> --seconds 600 --led`), then `timing` and `health`:
-   `raw_depth_max` (proposed pass: at most 64 at every rate), `adc_ring_overflow == 0`, no ADS fault. Keep the serial
-   lines `OPTICAL_EXEC` (`batch_duration_max_us`, `classify_max_us`, `batch_samples_max`) and
-   `FRAME_PRECOMMIT ... stage_depth_max= stage_overflow=` (also the input for the 1b decision).
-2. ENGINEERING RAW at 10 Hz and at 2 Hz, 60 s, twice each, on `f28a2c1`: `raw_depth_max`, `raw_dropped_samples`,
-   `frame_send_errors`, `frame_last_errno`, `heap_free_min`, `largest_free_block_now` before and after.
+1. ACQ at 2, 4 and 10 Hz (`nn2ctl.py run --rate <n> --seconds 30 --led`), then `health` right after each run
+   (before starting the next one): `raw_depth_max` (pass: at most 64 at every rate), `adc_ring_overflow == 0`, no ADS
+   fault. Then `timing` and `netdiag` while STOPPED.
+2. ENGINEERING RAW at 10 Hz only, 30 s, twice, on `f28a2c1`: `raw_dropped_samples`, `frame_send_errors`,
+   `frame_last_errno`, `heap_free_min`, `largest_free_block_now` before and after.
+   `nn2_raw_capture.py` accepts only `--rate 10` (`choices=(10,)`), so the RTOS request for a RAW capture at 2 Hz
+   cannot be run with the current tool. A change to that tool is not part of this PR.
+
+Not obtainable: the serial lines `OPTICAL_EXEC` (`classify_max_us`, `batch_duration_max_us`) and `FRAME_PRECOMMIT`
+(`stage_depth_max`) that the RTOS review and an earlier version of this section asked for. They are printed by
+`nocti_v4_optical_print_health`, which has no call site in the active firmware (grep at this head: declaration and
+definition only). Reading them would need a firmware change (a new diagnostic), which is not part of this PR.
+`raw_depth_max` from `health` is the gate metric and needs none of this.
 3. Heap baseline on `fed718d`: `NN2_HEAP before_wifi_init` / `after_wifi_start` against 4b (79,496 / 28,228 B);
    about 7 KB more is expected. Run `tools/check_ram_budget.py` on the map for `nocti_v4_ads.s_runtime` = 11,192 B.
 4. If DARK_DIAGNOSTIC mode is used, one run with `raw_depth_max` recorded.
@@ -96,6 +106,6 @@ no fault, `raw_dropped_samples == 0`, `lost_in_breaks / 40 == delta(frame_send_e
 | Codex P2: `idf.py fullclean` keeps `sdkconfig`, TX=6 could silently run as TX=4 | Fixed in the context document and section 5. The `f28a2c1` commit message is not rewritten; section 5 supersedes it. |
 | Codex P3: 6,448 B heap minimum does not rule out fragmentation | Context document wording corrected. Fragmentation stays open. |
 | Codex P3 and RTOS R5: depth 19-23 was measured on the 256-record build, as two runs (23 ACQ, 19 ENGINEERING) | Corrected in section 3, section 2, and the `nocti_v4_ads_config.h` comment. |
-| RTOS R1/R2/R3: low-rate classify burst, core-0 preemption, DARK_DIAGNOSTIC | Open. Needs the measurements in section 5. Gate for merging 1a. |
+| RTOS R1/R2/R3: low-rate classify burst, core-0 preemption, DARK_DIAGNOSTIC | Open. Gate for merging 1a: ACQ at 2, 4 and 10 Hz with `raw_depth_max` at most 64 (section 5). The `OPTICAL_EXEC` lines the review asked for are not printed by the current firmware. |
 | RTOS R4: heap and fragmentation from two more TX buffers | Open, low risk. Measure in section 5. |
 | RTOS note: comment in `nocti_v4_ads_config.h` says "16-deep" while `nocti_v4_backlog.h` asserts 8 | Pre-existing, not from this PR. Not changed. |
