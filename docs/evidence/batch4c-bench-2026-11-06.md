@@ -44,8 +44,10 @@ Build A ACQ, 10 Hz, 30 s (`boot_id` 171): `raw_depth_max` 15, `heap_free_min` 16
 `frame_send_errors` wherever both were available. B raw1 baseline of `frame_send_errors` taken as 0 (earlier ACQ netdiag in the same boot).
 
 Totals: A 28 failed sends in 11,836 packets (0.24 %, 2 runs); B 13 in 29,648 (0.04 %, 5 runs; raw3 counted from `lost_in_breaks`).
-Run-to-run spread is large (A: 5 and 23; B: 6, 2, 1, 2, 2) and the first run of each build is nearly equal (5 and 6). Two A runs are too few to
-attribute the difference to the TX buffer count. The hypothesis that the TX buffer count limits the loss is **not proven**. TX 8 was not tried.
+**Observed: failed sends were lower with TX 6 (0.04 %) than with TX 4 (0.24 %), and 4 of the 5 B runs had 2 or fewer failures.** This is consistent with
+the hypothesis that the TX buffer count limits the loss. It is not proof of cause: run-to-run spread is large (A: 5 and 23; B: 6, 2, 1, 2, 2), the first run
+of each build is nearly equal (5 and 6), and with 2 A runs against 5 B runs even a complete separation could not give a two-sided exact p below about 0.095.
+TX 8 was not tried.
 
 ## Open observations (recorded, not explained; Owner decided not to re-test on Build A)
 1. **FAULT_OPTICAL (267)** once, at the stop of the first 10 Hz ACQ run on Build B (boot 176), after 2 and 4 Hz runs in the same boot and with
