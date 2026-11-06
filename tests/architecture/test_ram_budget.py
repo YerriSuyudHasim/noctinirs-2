@@ -74,7 +74,7 @@ class ConfigMatchesCode(unittest.TestCase):
         header = (ROOT / "components/nn2_core/include/nn2_core_raw_buffer.h").read_text()
         match = re.search(r"#define NN2_RAW_BUFFER_MAX_BYTES\s+(\d+)u", header)
         self.assertIsNotNone(match)
-        self.assertEqual(int(match.group(1)), 6272)
+        self.assertEqual(int(match.group(1)), 5216)
         self.assertEqual(int(match.group(1)), config["heap"]["raw_buffer_heap_bytes"])
         for check in config["compile_time_checks"]:
             text = (ROOT / check["file"]).read_text(encoding="utf-8", errors="replace")

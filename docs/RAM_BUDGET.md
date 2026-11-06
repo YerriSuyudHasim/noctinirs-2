@@ -3,7 +3,8 @@
 Status: **PROPOSAL for Owner review.** Limits live in `config/ram_budget.json`.
 Check with `tools/check_ram_budget.py` after `idf.py build`. Nothing here is a
 production or science claim. ESP-IDF build, flash and on-target measurement for
-Batch 4a: **NOT RUN** in this environment.
+Batch 4a: **NOT RUN** in this environment. Batch 4b bench results (Owner): see
+[BATCH4B_RAW_HEAP_MARGIN.md](BATCH4B_RAW_HEAP_MARGIN.md) section 8.
 
 Source tags: `[bench]` = Owner bench report (KONTEKS, Batch 3). `[map]` = Owner
 linker map recorded in `docs/BATCH3_RAW_RAM_FIX.md`. `[hitung]` = recomputed here.
@@ -33,11 +34,12 @@ Owner's linker map at the first bench build, and `check_ram_budget.py` reports i
 
 | Item | Bytes | Tag |
 |---|---:|---|
-| `nn2_raw_buffer_t` (128 x 32 B entries + 128 B gap bytes + 2 016 B codec scratch + header) | <= 6 272 | `[probe]` `[sumber]` (`_Static_assert` in `nn2_core_raw_buffer.h`) |
+| `nn2_raw_buffer_t` (96 x 32 B entries + 96 B gap bytes + 2 016 B codec scratch + 32 B header) | <= 5 216 | `[probe]` `[sumber]` (`_Static_assert` in `nn2_core_raw_buffer.h`; Batch 4b, was 128 entries / 6 272 B) |
 
 Allocated by `set-mode ENGINEERING` in STOPPED state; freed on set-mode back to ACQ.
-Not present in ACQ mode. Heap cost is therefore the total in section 3 minus 6 272
-while ENGINEERING is active.
+Not present in ACQ mode. Heap cost is therefore the total in section 3 minus 5 216
+while ENGINEERING is active (Batch 4b: 1 056 B less than the 6 272 B of Batch 3/4a;
+see [BATCH4B_RAW_HEAP_MARGIN.md](BATCH4B_RAW_HEAP_MARGIN.md)).
 
 ## 3. Heap at boot and the network task
 
@@ -64,7 +66,7 @@ ESP-IDF v6.1 source), `largest_free_block_now` (expensive, STOPPED only, else `n
    a margin in sections 1 to 3 without Owner approval, recorded in the commit message.
 2. A limit in `config/ram_budget.json` changes only with that Owner approval.
 3. Dynamic allocation on the data path is not allowed (existing project rule).
-4. The RAW buffer stays within 6 272 B (`_Static_assert`). The gate and
+4. The RAW buffer stays within 5 216 B (`_Static_assert`). The gate and
    `tests/architecture/test_ram_budget.py` must pass before any bench run.
 
 ## 5. Proposed margins (USULAN, not decided)
@@ -72,7 +74,11 @@ ESP-IDF v6.1 source), `largest_free_block_now` (expensive, STOPPED only, else `n
 | Margin | Proposal | Current | Reason |
 |---|---:|---:|---|
 | Boot largest free block minus 16 724 B | >= 2 048 B | 2 732 | About 1/8 of the net stack. Covers allocator overhead and fragmentation at boot. |
-| Lowest free heap since boot (`heap_free_min`) in normal and ENGINEERING sessions | >= 4 096 B | not yet measured | Leaves room for the 6 272 B RAW allocation plus Wi-Fi/lwIP runtime allocations. A starting value to revise after bench data. |
+| Lowest free heap since boot (`heap_free_min`) in normal and ENGINEERING sessions | >= 4 096 B | 6 448 B in the Batch 4b ENGINEERING capture (3 068 B in 4a) | Leaves room for the 5 216 B RAW allocation plus Wi-Fi/lwIP runtime allocations. A starting value to revise after bench data. |
 
 Basis: the Batch 3 bench snapshot and the probe sizes only. No repeated cold-boot
 or long-session data exists yet, so these are starting points, not limits from measurement.
+
+Batch 4b bench status of the `heap_free_min` proposal: at 6 272 B the Owner measured 3 068 B
+in ENGINEERING (below 4 096 B). At 5 216 B the estimate was 4 124 B `[hitung]`; the Batch 4b bench measured 6 448 B
+(one 60 s ENGINEERING capture). Both margins stay PROPOSALS until the Owner decides.

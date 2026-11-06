@@ -18,13 +18,13 @@
     {"label": "nocti_v4_async_led.s_runtime", "section": "bss", "name": "s_runtime", "object_contains": "nocti_v4_async_led.c", "limit_bytes": 8104, "declared_in": "firmware/v4-idf61/components/nocti_v4_async_led/nocti_v4_async_led.c", "declaration": "static async_led_runtime_t s_runtime;", "source": "Batch 3 map: s_runtime nocti_v4_async_led 8104 B"},
     {"label": "main.s_nn2_app", "section": "bss", "name": "s_nn2_app", "object_contains": "main", "limit_bytes": 4096, "declared_in": "firmware/v4-idf61/main/v4_nn2_control.inc", "declaration": "static nn2_app_comm_storage_t s_nn2_app;", "source": "KONTEKS: penyimpanan komunikasi 4.096 B"},
     {"label": "nn2_net.s_status", "section": "bss", "name": "s_status", "object_contains": "nn2_net.c", "limit_bytes": 48, "declared_in": "components/nn2_net/nn2_net.c", "declaration": "static nn2_net_status_t s_status;", "source": "nn2_net_status_t 28 B before Batch 4a, 48 B after (+20 B frame counters). +20 B approved by Owner, 2026-10-31."},
-    {"label": "main.s_raw (pointer only)", "section": "bss", "name": "s_raw", "object_contains": "main", "limit_bytes": 4, "declared_in": "firmware/v4-idf61/main/v4_nn2_control.inc", "declaration": "static nn2_raw_buffer_t *s_raw;", "source": "Lazy allocation: the RAW buffer itself is heap, allocated at STOP set-mode, max 6272 B (see heap.raw_buffer_heap_bytes)"}
+    {"label": "main.s_raw (pointer only)", "section": "bss", "name": "s_raw", "object_contains": "main", "limit_bytes": 4, "declared_in": "firmware/v4-idf61/main/v4_nn2_control.inc", "declaration": "static nn2_raw_buffer_t *s_raw;", "source": "Lazy allocation: the RAW buffer itself is heap, allocated at STOP set-mode, max 5216 B (see heap.raw_buffer_heap_bytes)"}
   ],
   "compile_time_checks": [
-    {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "#define NN2_RAW_BUFFER_MAX_BYTES 6272u"},
+    {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "#define NN2_RAW_BUFFER_MAX_BYTES 5216u"},
     {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "_Static_assert(sizeof(nn2_raw_buffer_t) <= NN2_RAW_BUFFER_MAX_BYTES"},
     {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "_Static_assert(sizeof(nn2_raw_entry_t) <= 32u"},
-    {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "_Static_assert(NN2_RAW_BUFFER_CAPACITY >= 128u"},
+    {"file": "components/nn2_core/include/nn2_core_raw_buffer.h", "contains": "_Static_assert(NN2_RAW_BUFFER_CAPACITY >= NN2_RAW_BUFFER_MIN_SAMPLES"},
     {"file": "firmware/v4-idf61/components/nocti_v4_common/include/nocti_v4_rtos.h", "contains": "#define NOCTI_V4_RTOS_STACK_NET_BYTES 16384u"}
   ],
   "heap": {
@@ -35,7 +35,7 @@
     "boot_largest_free_block_after_wifi_bytes": 19456,
     "boot_free_heap_before_wifi_bytes": 79644,
     "boot_free_heap_after_wifi_bytes": 28352,
-    "raw_buffer_heap_bytes": 6272,
+    "raw_buffer_heap_bytes": 5216,
     "proposed_min_largest_block_margin_bytes": 2048,
     "proposed_min_heap_free_min_bytes": 4096
   }
