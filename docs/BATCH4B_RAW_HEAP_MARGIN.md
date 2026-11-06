@@ -73,21 +73,20 @@ One datagram `[sumber]` + `[hitung]`:
 - On top of that the Wi-Fi driver allocates its own TX buffer for the frame (dynamic, up to 4):
   size **tidak terverifikasi**; assume about one more datagram (~1.5 KB at most).
 
-Why `ENOMEM` appears now and then at `heap_free_min = 3068 B` and `largest = 5632 B` `[bench]`:
-`heap_free_min` is the lowest **total** internal free heap since boot. At that low point only ~3 KB was free
-in total, which is less than the worst-case lwIP block (~1.5 KB) plus the Wi-Fi TX buffer (~1.5 KB, unverified)
-plus other transient allocations (Wi-Fi RX, DHCP/ARP, the 16 KB `nn2_net` stack is already taken). The
-largest-block figure (5632 B) is a snapshot at STOP and is not the cause by itself: a single pbuf (<= 1.5 KB)
-fits in 5632 B. So the failure is explained by **low total free heap in short bursts**, not by fragmentation of
-the largest block. This is consistent with the bench:
+Why `ENOMEM` appears now and then, first reading (**superseded by the Batch 4b bench, section 8**):
+the 4a figures (`heap_free_min` 3068 B, largest block 5632 B) suggested that short bursts of low total free heap
+starve the lwIP pbuf and the Wi-Fi TX buffer. The Batch 4b bench disproved that as the main cause: with
+`heap_free_min` 6448 B (never below 6.4 KB) `sendto` still failed 110 times with errno 12. The better-supported
+reading is a **count limit on Wi-Fi TX buffers**, not exhausted heap: `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=4`
+(`sdkconfig.defaults`, sized for "about 20 kB/s to one station"), the ESP-IDF Kconfig help for this option says
+UDP senders can run out of TX buffers when the upper layer delivers faster than the Wi-Fi layer transmits, and
+`esp_wifi_internal_tx` documents `ESP_ERR_NO_MEM` ("out of memory") which `wlanif.c` maps to `ERR_MEM` -> errno 12
+`[sumber]`. RAW sends about 200 packets/s (about 120 kB/s), roughly 6 times the 20 kB/s design contract. That this
+is the exact failing resource is **not proven on target** (no trace of the Wi-Fi driver's allocation).
 
-- loss only in ENGINEERING (RAW buffer takes 6272 B; ACQ keeps `heap_free_min` 9728 B and had no failures);
-- loss ~0.2-0.3 % of packets, not every packet (only when a burst coincides with the low point);
-- `lost_in_breaks / 40` equals the `frame_send_errors` delta in 2 of 2 captures (22 and 38 packets), i.e.
-  every lost packet is one failed `sendto`, none are lost elsewhere.
-
-The 4 bench observations above are `[bench]`; the burst explanation is an inference from code and numbers, not
-a measured trace (no per-allocation trace exists).
+What the bench data supports `[bench]`: loss only in ENGINEERING; `lost_in_breaks / 40` equals the
+`frame_send_errors` delta in 3 of 3 captures (22, 38, 110 packets), so every lost packet is one failed `sendto`
+and none are lost elsewhere.
 
 ### 2.3 Options
 
@@ -134,7 +133,7 @@ The lazy allocation (`nn2_app_raw_mode_set`, only on set-mode ENGINEERING while 
 | `sizeof(nn2_raw_buffer_t)` | 6272 B | **5216 B** (`[probe]`: `_Static_assert` passes with the Xtensa ESP32-S3 compiler) |
 | Largest RAW datagram from a full buffer | 1448 B (N=100) | 1392 B (N=96) |
 
-### 3.4 Heap estimate in ENGINEERING `[hitung]` (NOT measured)
+### 3.4 Heap estimate in ENGINEERING `[hitung]` (estimate; measured result in section 8)
 
 | Figure | 4a bench | Estimate with 96 samples | Proposed margin |
 |---|---:|---:|---|
@@ -208,3 +207,30 @@ the `timing` output in the ENGINEERING run.
 - `heap_free_now` after `set-mode ACQ` should return to about 18.5 KB (no leak).
 
 Heap margins in `config/ram_budget.json` remain `PROPOSED`.
+
+## 8. Bench result and Owner decision (2026-11-06)
+
+Bench, board flashed from `c6c9e7b`, 10 Hz, SoftAP, one ENGINEERING capture of 60 s (second round not run) `[bench]`:
+
+| Item | 4a (128 samples) | 4b (96 samples) |
+|---|---:|---:|
+| `heap_free_min` in ENGINEERING | 3068 B | **6448 B** (>= 4096 B proposal) |
+| `heap_free_now` in ENGINEERING / after `set-mode ACQ` | ~11.9 KB / ~18.5 KB | 13196 B / 18584 B (no leak) |
+| `frame_send_errors` (all errno 12, `frame_send_other`) | 22 and 38 | 110 |
+| `lost_in_breaks` | 880 and 1520 | 4400 (= 110 x 40) |
+| Lost fraction | about 0.2-0.3 % | about 0.92 % (110 of 11931 packets) |
+| `raw_dropped_samples` / `raw_buffer_highwater` | 0 / n.a. | 0 / 80 (capacity 96) |
+
+ACQ regression (600 s): all error counters 0, `spi_max` 59, `service_max` 73, `lag_max` 31, `late_max` 2,
+`sched_deferred_max` 254, `heap_free_min` 10076: no regression. Option A achieved its heap goal (margin and no
+leak) but did **not** remove the `sendto` failures. Loss is not explained by total free heap.
+
+**Owner decision (option 3):** accept about 1 % RAW packet loss in ENGINEERING mode. RAW and ENGINEERING frames are
+diagnostic data, not science data, and the ENGINEERING mode exceeds the 20 kB/s network design contract. No
+`sdkconfig`, protocol, retry or codec change is made. Revised bench criterion for ENGINEERING RAW: loss must be
+**counted and detectable**, that is `lost_in_breaks / 40 == delta(frame_send_errors)`, `raw_dropped_samples == 0`,
+`heap_free_min >= 4096 B`, no heap leak, and no ACQ regression. Zero `frame_send_errors` is no longer required.
+
+Open items (not done here): the Wi-Fi TX buffer count is the likely limit but is unproven; if RAW without loss is
+ever needed, the candidates remain `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM` (about 0.65 KB per extra buffer in use)
+or merging two slots per packet (ADR needed). Heap margins in `config/ram_budget.json` remain PROPOSED.
