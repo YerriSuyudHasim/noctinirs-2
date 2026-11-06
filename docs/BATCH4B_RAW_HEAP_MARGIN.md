@@ -5,8 +5,10 @@ Scope: explain the sporadic `sendto` failure `errno 12 (ENOMEM)` seen in ENGINEE
 and shrink the lazily allocated RAW buffer (option A). Nothing else changes.
 
 Evidence classes used here: **static** (source reading, compile-only probe), **host/unit**
-(native tests). **On-target bench: NOT RUN.** ESP-IDF firmware build, flash and bench are NOT RUN
-in this work; every heap figure for the new build is an estimate `[hitung]`.
+(native tests), and **on-target bench** (Owner, section 8, one ENGINEERING capture round). Sections 1-7 were
+written before the bench; where they give a heap figure for the new build it is an estimate `[hitung]`, and
+section 8 holds the measured values. Not done: second ENGINEERING round, long-duration RAW, hardware timing
+beyond the figures in section 8. Bench raw outputs: `docs/evidence/batch4b-bench-2026-11-06.md`.
 
 Source tags: `[bench]` Owner Batch 4a bench, `[sumber]` read from source, `[probe]` compile-only
 size probe (Xtensa GCC 15.2, `xtensa-esp32s3-elf-gcc -fsyntax-only`), `[hitung]` computed here.
@@ -76,17 +78,21 @@ One datagram `[sumber]` + `[hitung]`:
 Why `ENOMEM` appears now and then, first reading (**superseded by the Batch 4b bench, section 8**):
 the 4a figures (`heap_free_min` 3068 B, largest block 5632 B) suggested that short bursts of low total free heap
 starve the lwIP pbuf and the Wi-Fi TX buffer. The Batch 4b bench disproved that as the main cause: with
-`heap_free_min` 6448 B (never below 6.4 KB) `sendto` still failed 110 times with errno 12. The better-supported
-reading is a **count limit on Wi-Fi TX buffers**, not exhausted heap: `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=4`
+`heap_free_min` 6448 B (never below 6.4 KB) `sendto` still failed 110 times with errno 12. Total free heap alone
+therefore does not explain the failures, but fragmentation of the largest free block during the capture is **not
+excluded** (the largest block was only read while STOPPED: 7680 B). A reading that is better supported by the
+documentation, though unproven, is a **count limit on Wi-Fi TX buffers**: `CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=4`
 (`sdkconfig.defaults`, sized for "about 20 kB/s to one station"), the ESP-IDF Kconfig help for this option says
 UDP senders can run out of TX buffers when the upper layer delivers faster than the Wi-Fi layer transmits, and
 `esp_wifi_internal_tx` documents `ESP_ERR_NO_MEM` ("out of memory") which `wlanif.c` maps to `ERR_MEM` -> errno 12
 `[sumber]`. RAW sends about 200 packets/s (about 120 kB/s), roughly 6 times the 20 kB/s design contract. That this
 is the exact failing resource is **not proven on target** (no trace of the Wi-Fi driver's allocation).
 
-What the bench data supports `[bench]`: loss only in ENGINEERING; `lost_in_breaks / 40` equals the
-`frame_send_errors` delta in 3 of 3 captures (22, 38, 110 packets), so every lost packet is one failed `sendto`
-and none are lost elsewhere.
+What the bench data supports `[bench]`: loss only in ENGINEERING; `lost_in_breaks` (samples missing at sequence
+breaks, counted by `nn2_raw_capture.py`) divided by 40 equals the `frame_send_errors` delta in 3 of 3 captures
+(22, 38, 110). The division assumes 40-sample packets: the encoder can send 1-96 samples per packet, but the
+received packets averaged 472844 / 11821 = 40.0 samples. The match is consistent with every lost packet being one
+failed `sendto`; it is not a proof that no packet is lost elsewhere.
 
 ### 2.3 Options
 
@@ -210,7 +216,11 @@ Heap margins in `config/ram_budget.json` remain `PROPOSED`.
 
 ## 8. Bench result and Owner decision (2026-11-06)
 
-Bench, board flashed from `c6c9e7b`, 10 Hz, SoftAP, one ENGINEERING capture of 60 s (second round not run) `[bench]`:
+Bench by the Owner on 2026-11-06 (Asia/Seoul): ESP32-S3 target on COM11, firmware built from commit
+`c6c9e7bfe16599f545bc920abf2abd78fc599d60` (ELF build date `Nov  6 2026 18:02:50`, `boot_id` 168), SoftAP, 10 Hz, one ENGINEERING
+capture of 60 s (second round not run). Board hardware revision and the exact `sdkconfig` used were not recorded by the Owner
+(`sdkconfig.defaults` of that commit applies). Raw key outputs: `docs/evidence/batch4b-bench-2026-11-06.md`. Owner decision
+(option 3) was given in the Owner chat session on 2026-11-06 `[bench]`:
 
 | Item | 4a (128 samples) | 4b (96 samples) |
 |---|---:|---:|

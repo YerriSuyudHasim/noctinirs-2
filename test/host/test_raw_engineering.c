@@ -234,6 +234,35 @@ static void wrap_keeps_order_and_depth(void)
     TEST_ASSERT_EQUAL(0,buffer.dropped);
     TEST_ASSERT_EQUAL(NN2_RAW_BUFFER_MIN_SAMPLES-20u,buffer.highwater);
 }
+static void epoch_and_gap_boundaries_across_wrap(void)
+{
+    /* Older entries remain queued while the ring wraps; a packet must stop at an epoch change,
+     * and a sequence hole must set GAP_BEFORE on the next packet. */
+    nn2_raw_buffer_reset(&buffer);
+    int32_t ain[4]={9,9,9,9};
+    nn2_oc_raw_t raw; nn2_oc_stats_t stats={0}; uint64_t timestamp=0;
+    for (uint32_t i=0;i<60u;++i) nn2_raw_buffer_push(&buffer,ain,i,(uint64_t)i*125u,1,4,0);
+    size_t n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+    TEST_ASSERT_EQUAL(60,raw.sample_count);
+    for (uint32_t i=60;i<110u;++i) nn2_raw_buffer_push(&buffer,ain,i,(uint64_t)i*125u,1,4,0); /* crosses the wrap */
+    nn2_raw_buffer_push(&buffer,ain,110,110u*125u,2,4,0); /* epoch change */
+    nn2_raw_buffer_push(&buffer,ain,112,112u*125u,2,4,0); /* hole at 111 */
+    n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+    TEST_ASSERT_EQUAL(50,raw.sample_count); TEST_ASSERT_EQUAL(60,raw.first_sample_sequence);
+    TEST_ASSERT_EQUAL(1,raw.slot_plan_epoch); TEST_ASSERT_EQUAL(1,raw.raw_flags);
+    n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+    TEST_ASSERT_EQUAL(1,raw.sample_count); TEST_ASSERT_EQUAL(110,raw.first_sample_sequence);
+    TEST_ASSERT_EQUAL(2,raw.slot_plan_epoch); TEST_ASSERT_EQUAL(1,raw.raw_flags);
+    n=nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp);
+    TEST_ASSERT_EQUAL(NN2_OC_OK,nn2_oc_decode(wire,n,NULL,&raw,&stats));
+    TEST_ASSERT_EQUAL(1,raw.sample_count); TEST_ASSERT_EQUAL(112,raw.first_sample_sequence);
+    TEST_ASSERT_EQUAL(3,raw.raw_flags);
+    TEST_ASSERT_EQUAL(0,nn2_raw_buffer_encode(&buffer,wire,sizeof(wire),&timestamp));
+    TEST_ASSERT_EQUAL(0,buffer.dropped);
+}
 static void two_slots_of_40_fit_without_drop(void)
 {
     /* 80 samples = two 40-sample slots queued at once (Batch 3 high-water). */
@@ -329,6 +358,7 @@ void test_raw_engineering_suite(void)
     RUN_TEST(full_buffer_gap_and_codec_limits);
     RUN_TEST(wrap_keeps_order_and_depth);
     RUN_TEST(two_slots_of_40_fit_without_drop);
+    RUN_TEST(epoch_and_gap_boundaries_across_wrap);
     RUN_TEST(metadata_survives_ring_reuse);
     RUN_TEST(mode_allocation_lifecycle);
     RUN_TEST(failed_initial_bind_releases_candidate);
