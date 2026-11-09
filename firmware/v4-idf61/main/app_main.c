@@ -6,6 +6,8 @@
 #error "This migration candidate targets ESP-IDF 6.1 only"
 #endif
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "nn2_board_power.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nocti_v4_async_led.h"
@@ -171,6 +173,13 @@ static void report_result(const char *command, esp_err_t err)
 
 static esp_err_t scan_start(void);
 static esp_err_t scan_stop(nocti_v4_stop_report_t *report);
+/* Written only during boot, before the UDP control task is created. */
+static struct {
+    nn2_board_power_sample_t sample;
+    int64_t sampled_us;
+    esp_err_t error;
+} s_battery = {.error = ESP_ERR_INVALID_STATE};
+
 #include "v4_nn2_control.inc"
 
 static esp_err_t scan_start(void)
@@ -255,6 +264,31 @@ static esp_err_t scan_stop(nocti_v4_stop_report_t *report)
     return async_result;
 }
 
+static esp_err_t boot_power(void)
+{
+    esp_err_t err = nn2_board_power_init_after_safe_gpio(true);
+    int64_t sampled_us = 0;
+    if (err == ESP_OK) {
+        err = nn2_board_power_read(&s_battery.sample);
+        if (err == ESP_OK) sampled_us = esp_timer_get_time();
+        report_result("BOOT_POWER_SAMPLE", err);
+    } else {
+        report_result("BOOT_POWER_INIT", err);
+    }
+
+    /* Init can fail with live handles after a cleanup failure. A successful
+     * release is required even if the sample failed or init already cleaned up. */
+    const esp_err_t release = nn2_board_power_release_i2c();
+    if (release != ESP_OK) {
+        report_result("BOOT_POWER_I2C_RELEASE", release);
+        report_result("BOOT_POWER_CHARGE_DISABLE", nn2_board_power_set_charge_enabled(false));
+        err = release;
+    }
+    s_battery.sampled_us = sampled_us;
+    s_battery.error = err;
+    return release;
+}
+
 void app_main(void)
 {
     s_app_main_core = (int32_t)xPortGetCoreID();
@@ -264,8 +298,8 @@ void app_main(void)
     printf("BOOT phase=SAFE_GPIO: asserting PCA RESET# before I2C/PCA initialization; LED physical state=UNVERIFIED until external observation.\n");
 
     /* Stage order follows feat35 app_main (31fb2a9 main/app_main.c). Owners
-     * stay the V4 I2C and ADS131 SPI drivers. Charger, battery, and USB
-     * provision from that boot are not started. */
+     * stay the V4 I2C and ADS131 SPI drivers after the boot power phase.
+     * USB provisioning from that boot is not started. */
     nocti_v4_boot_flags_t boot = {
         .gpio = -1, .core = -1, .i2c = -1, .pca = -1,
         .ads = -1, .runtime = -1, .network = -1,
@@ -295,7 +329,9 @@ void app_main(void)
     }
 
     if (boot.core == 1) {
-        const esp_err_t i2c_err = nocti_v4_i2c_init_sync(&s_i2c, &s_health);
+        const esp_err_t power_release = boot_power();
+        const esp_err_t i2c_err = power_release == ESP_OK ?
+            nocti_v4_i2c_init_sync(&s_i2c, &s_health) : power_release;
         boot.i2c = i2c_err == ESP_OK ? 1 : 0;
         if (boot.i2c != 1) {
             printf("BOOT_FAIL stage=I2C_SYNC_QDEPTH_0 result=%s; RESET# remains asserted=%u\n",
@@ -377,5 +413,5 @@ void app_main(void)
            nocti_v4_boot_stage_name(nocti_v4_boot_fault_stage(boot)),
            boot.gpio, boot.core, boot.i2c, boot.pca, boot.ads,
            boot.runtime, boot.network);
-    printf("CONTROL udp=3333 commands=info,get-config,start,stop,status,health,timing; USB command console removed\n");
+    printf("CONTROL udp=3333 commands=info,get-config,start,stop,status,health,timing,get-battery; USB command console removed\n");
 }

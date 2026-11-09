@@ -2,7 +2,7 @@ idf_component_register(
     SRCS "app_main.c"
     INCLUDE_DIRS "."
     REQUIRES
-        nn2_net nn2_wifi nn2_config nn2_app nn2_ports esp_timer esp_hw_support
+        nn2_board nn2_net nn2_wifi nn2_config nn2_app nn2_ports esp_timer esp_hw_support
         esp_driver_usb_serial_jtag
         freertos
         log

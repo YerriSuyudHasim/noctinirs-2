@@ -206,12 +206,12 @@ esp_err_t nn2_board_power_read(nn2_board_power_sample_t *sample)
     return ESP_OK;
 }
 
-esp_err_t nn2_board_power_init(bool enable_on_boot)
+static esp_err_t power_init(bool enable_on_boot, bool safe_gpio_initialized)
 {
     /* Startup is serialized by app_main; no other task may race the first call. */
     if (s_owner != NULL) return ESP_ERR_INVALID_STATE;
     s_owner = xTaskGetCurrentTaskHandle();
-    esp_err_t err = nn2_board_init_safe();
+    esp_err_t err = safe_gpio_initialized ? ESP_OK : nn2_board_init_safe();
     if (err != ESP_OK) return err;
     err = gpio_set_level(POWER_CE, 1);
     if (err != ESP_OK) return err;
@@ -239,6 +239,16 @@ esp_err_t nn2_board_power_init(bool enable_on_boot)
         if (cleanup != ESP_OK) return cleanup;
     }
     return err;
+}
+
+esp_err_t nn2_board_power_init(bool enable_on_boot)
+{
+    return power_init(enable_on_boot, false);
+}
+
+esp_err_t nn2_board_power_init_after_safe_gpio(bool enable_on_boot)
+{
+    return power_init(enable_on_boot, true);
 }
 
 static nn2_status_t sample_and_release(void *ctx, nn2_port_battery_sample_t *out)

@@ -289,6 +289,7 @@ static uint16_t execute(comm_t *c, uint64_t peer, uint64_t now, uint16_t op,
   case NN2_CMD_GET_HEALTH:
   case NN2_CMD_GET_TIMING:
   case NN2_CMD_GET_NETDIAG:
+  case NN2_CMD_GET_BATTERY:
     return NN2_REPLY_OK;
   default:
     return NN2_REPLY_OK;
@@ -312,8 +313,10 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
            argc = (uint16_t)(req.length - 6u);
   const uint8_t *arg = req.payload + 6;
   const nn2_core_command_t *command = nn2_core_command(op);
-  uint16_t error =
-      tick(&c, now, true) == NN2_OK ? NN2_REPLY_OK : NN2_REPLY_SAFETY;
+  const bool battery_query = op == NN2_CMD_GET_BATTERY;
+  /* The network poll still handles lease expiry independently of this query. */
+  uint16_t error = battery_query || tick(&c, now, true) == NN2_OK
+                       ? NN2_REPLY_OK : NN2_REPLY_SAFETY;
   if (req.flags & UINT16_C(0xfffe)) {
     ++c.reserved;
     error = NN2_REPLY_RESERVED_FLAGS;
@@ -358,7 +361,7 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
    * reply). Only fresh effects pass through current-session/owner validation.
    * Replaying an old session's ACK never refreshes a new session's liveness. */
   if (!error && op != NN2_CMD_SAFE_OFF && op != NN2_CMD_GET_HEALTH &&
-      op != NN2_CMD_GET_TIMING && op != NN2_CMD_GET_NETDIAG &&
+      op != NN2_CMD_GET_TIMING && op != NN2_CMD_GET_NETDIAG && !battery_query &&
       req.session_id && req.session_id != c.session)
     error = NN2_REPLY_STATE;
   if (!error && c.owner && c.owner != peer && op != NN2_CMD_INFO &&
@@ -371,7 +374,7 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
     cacheable = false;
   if (!error)
     error = execute(&c, peer, now, op, arg);
-  if (!error && c.owner == peer) {
+  if (!error && c.owner == peer && !battery_query) {
     c.anchor = now;
     c.grace = false;
   }
@@ -431,6 +434,18 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
       body[64] = c.grace ? 1u : 0u;
       reply.length += 21;
     }
+  } else if (!error && battery_query) {
+    uint8_t *text = body + 20;
+    const size_t cap = sizeof(reply.payload) - 28u;
+    size_t n = c.optical.read_diag ? c.optical.read_diag(c.optical.ctx, 4u, text, cap) : 0u;
+    if (n == 0 || n >= cap) {
+      /* 262 is ESP_ERR_NOT_SUPPORTED in the V4 wire status. */
+      static const char unavailable[] =
+          "battery_valid=0 battery_uv=0 battery_mperm=0 battery_age_ms=-1 battery_error=262";
+      n = sizeof(unavailable) - 1u;
+      memcpy(text, unavailable, n);
+    }
+    reply.length += (uint16_t)n;
   } else if (!error && (op == NN2_CMD_GET_HEALTH || op == NN2_CMD_GET_TIMING ||
                         op == NN2_CMD_GET_NETDIAG)) {
     /* Existing 28-byte reply prefix; reserve one local NUL outside wire text. */

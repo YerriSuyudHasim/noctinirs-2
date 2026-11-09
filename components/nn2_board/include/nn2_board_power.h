@@ -17,6 +17,10 @@ typedef nn2_port_battery_sample_t nn2_board_power_sample_t;
  * Hardware and battery compatibility must be reviewed before running firmware. */
 esp_err_t nn2_board_power_init(bool enable_on_boot);
 
+/* Same initialization after the caller has asserted emitter reset and
+ * configured safe GPIO. Leaves that GPIO configuration in the caller's care. */
+esp_err_t nn2_board_power_init_after_safe_gpio(bool enable_on_boot);
+
 /* Outputs are replaced only after every read succeeds. No implicit polling,
  * retry, explicit bus reset, fuel-gauge quick-start or alert/fault-latch clearing.
  * ESP-IDF may perform its own controller recovery after transfer errors. */

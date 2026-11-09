@@ -10,6 +10,7 @@
 #define CHECK(expr) do { if (!(expr)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expr); exit(1); } } while (0)
 static int task_identity, foreign_identity, bus_identity, gauge_identity, bq_identity;
 static TaskHandle_t task = &task_identity;
+static int safe_gpio_calls;
 static bool bus_live, external_bus, gauge_live, bq_live, safe_gpio;
 static bool missing_gauge, wrong_part, bad_readback, remove_error;
 static int ce = 1, writes, transfers, calls, fail_at;
@@ -18,7 +19,7 @@ static uint8_t bad_register;
 
 static esp_err_t step(void) { return ++calls == fail_at ? ESP_ERR_TIMEOUT : ESP_OK; }
 TaskHandle_t xTaskGetCurrentTaskHandle(void) { return task; }
-esp_err_t nn2_board_init_safe(void) { safe_gpio = true; return step(); }
+esp_err_t nn2_board_init_safe(void) { safe_gpio = true; ++safe_gpio_calls; return step(); }
 esp_err_t gpio_set_level(int gpio, uint32_t level)
 {
     CHECK(gpio == 8 && level <= 1 && safe_gpio);
@@ -147,7 +148,11 @@ int main(int argc, char **argv)
     if (strcmp(mode, "occupied") == 0) external_bus = true;
     if (strcmp(mode, "fault") == 0) { CHECK(argc == 3); fail_at = atoi(argv[2]); }
     bool disabled_boot = strcmp(mode, "disabled-boot") == 0;
-    esp_err_t result = nn2_board_power_init(!disabled_boot);
+    bool after_safe_gpio = strcmp(mode, "after-safe-gpio") == 0;
+    if (after_safe_gpio) safe_gpio = true; /* V4 already configured its safe GPIO. */
+    esp_err_t result = after_safe_gpio ? nn2_board_power_init_after_safe_gpio(true) :
+                                       nn2_board_power_init(!disabled_boot);
+    CHECK(safe_gpio_calls == (after_safe_gpio ? 0 : 1));
     if (missing_gauge || wrong_part || bad_readback || bad_register || external_bus || fail_at ||
         strcmp(mode, "safety-timer") == 0) {
         CHECK(result != ESP_OK && ce == 1 && !bus_live);

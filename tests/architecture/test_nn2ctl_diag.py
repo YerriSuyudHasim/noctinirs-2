@@ -48,6 +48,35 @@ def reply(opcode, text, session=0):
 
 
 class DiagParse(unittest.TestCase):
+    def test_battery_query_correlates_reply_while_raw_arrives(self):
+        for valid, uv, mperm, age_ms, error in ((1, 4000000, 50500, 60000, 0),
+                                              (0, 0, 0, -1, 263)):
+            with self.subTest(valid=valid), mock.patch.object(nn2ctl.socket, "socket"):
+                client = nn2ctl.Client("127.0.0.1")
+                client.next_id = 7
+                client.session_id = 42
+                client.packet_sink = mock.Mock()
+                prefix = bytes([3, 0, 0, 0]) + struct.pack("<QQ", 9, 11)
+                text = (f"battery_valid={valid} battery_uv={uv} battery_mperm={mperm}"
+                        f" battery_age_ms={age_ms} battery_error={error}").encode("ascii")
+                raw = nn2ctl.encode_envelope(b"raw", msg_type=nn2ctl.FRAME, session_id=42)
+                responses = [nn2ctl.encode_envelope(
+                    struct.pack("<IHH", rid, 0x33, 0) + prefix + text,
+                    msg_type=nn2ctl.REPLY, session_id=42) for rid in (6, 7)]
+                client.sock.recv.side_effect = [raw, *responses]
+                result = client.request("get-battery")
+                client.packet_sink.assert_called_once_with(raw)
+                client.sock.connect.assert_called_once_with(("127.0.0.1", 3333))
+                sent = nn2ctl.decode(client.sock.send.call_args.args[0])
+                self.assertEqual(sent.msg_type, nn2ctl.REQUEST)
+                self.assertEqual(sent.payload, struct.pack("<IH", 7, 0x33))
+                self.assertEqual(result["request_id"], 7)
+                self.assertIs(result["battery_valid"], bool(valid))
+                self.assertEqual(result["battery_uv"], uv)
+                self.assertEqual(result["battery_mperm"], mperm)
+                self.assertEqual(result["battery_age_ms"], age_ms)
+                self.assertEqual(result["battery_error"], error)
+
     def test_fault_names_use_nn2_namespace_in_status_and_timing(self):
         for opcode, extra in ((3, struct.pack("<QQQIIIIIB", 1, 2, 3, 4, 5, 6, 7, 8, 0)),
                               (0x31, TIMING.encode("ascii"))):

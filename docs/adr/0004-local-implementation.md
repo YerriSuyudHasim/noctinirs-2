@@ -91,6 +91,7 @@ effect, including safe_off. Host bit0 is ignored as specified by the proposal.
 | 0030 | health | none | bypass |
 | 0031 | timing | none | bypass |
 | 0032 | netdiag | none | bypass |
+| 0033 | get-battery | none | bypass |
 
 Numbers above are hexadecimal. set-led-current stores simulation configuration
 only and cannot energize an emitter. No CLAIM, RELEASE or injected-FAULT opcode

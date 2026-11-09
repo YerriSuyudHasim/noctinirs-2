@@ -12,7 +12,6 @@
 #include "nn2_wifi.h"
 #include "nn2_config.h"
 #include "esp_random.h"
-#include "esp_timer.h"
 #include "esp_heap_caps.h"
 static nn2_app_comm_storage_t s_nn2_app;
 static nn2_raw_buffer_t *s_raw; /* Allocated only by a STOP-only set_mode. */
@@ -209,6 +208,19 @@ static void control_network(void *ctx)
         vTaskDelay(pdMS_TO_TICKS(1u));
     }
 }
+static size_t control_read_battery(uint8_t *out, size_t cap)
+{
+    if (out == NULL) return 0u;
+    const bool valid = s_battery.error == ESP_OK;
+    const int64_t age_ms = valid ? (esp_timer_get_time() - s_battery.sampled_us) / 1000 : -1;
+    const int n = snprintf((char *)out, cap,
+        "battery_valid=%u battery_uv=%" PRIu32 " battery_mperm=%" PRIu32
+        " battery_age_ms=%" PRId64 " battery_error=%d",
+        valid ? 1u : 0u, valid ? s_battery.sample.voltage_uv : 0u,
+        valid ? s_battery.sample.soc_millipercent : 0u, age_ms, s_battery.error);
+    return n > 0 && (size_t)n < cap ? (size_t)n : 0u;
+}
+
 #define HLOAD(field) __atomic_load_n(&s_health.field, __ATOMIC_RELAXED)
 static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t cap)
 {
@@ -389,6 +401,12 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
     return used+(size_t)extra;
 }
 #undef HLOAD
+static size_t control_read_udp_diag(void *ctx, uint8_t kind, uint8_t *out, size_t cap)
+{
+    if (kind == 4u) return control_read_battery(out, cap);
+    return control_read_diag(ctx, kind, out, cap);
+}
+
 static size_t control_raw_info(void *ctx, uint8_t *out, size_t cap)
 { return control_read_diag(ctx,2u,out,cap); }
 static nn2_status_t control_read_raw(void *ctx, uint8_t *out, size_t cap,
@@ -445,7 +463,7 @@ static esp_err_t control_init(void)
     if (nn2_app_comm_init(&s_nn2_app,boot,&safety,esp_random())!=NN2_OK) return ESP_FAIL;
     nn2_port_optical_t optical={.start=control_start,.state=control_state,.clear_fault=control_clear,
         .current_limit_ma=NN2_OPTICAL_MAX_MA,.real_samples=true,
-        .set_mode=control_set_mode,.read_diag=control_read_diag,.read_frame_ex=control_read_raw,.frame_tx_result=control_raw_tx,.read_raw_info=control_raw_info,
+        .set_mode=control_set_mode,.read_diag=control_read_udp_diag,.read_frame_ex=control_read_raw,.frame_tx_result=control_raw_tx,.read_raw_info=control_raw_info,
         .policy_info="NoctiNIRS2/0.1.0;wire=ADR0004/1;baseline=V4_IDF61_NN2_CTRL;led=REAL_BRINGUP;short_policy=STRICT;adc=ADS131M04;frames=RAW_ENGINEERING;fs_min=2;fs_max=10;fs_allowed=2,4,5,8,10;current_default_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_DEFAULT_MA) ";current_max_ma=" NN2_CURRENT_TEXT(NN2_OPTICAL_MAX_MA) ";diag=health,timing;console=removed"};
     if (nn2_app_comm_bind_optical(&s_nn2_app,&optical)!=NN2_OK) return ESP_FAIL;
     if (xTaskCreatePinnedToCore(control_worker,"v4_control",NOCTI_V4_RTOS_STACK_CONTROL_BYTES,NULL,NOCTI_V4_RTOS_PRIO_CONTROL,&s_control_worker,NOCTI_V4_RTOS_CORE_ACQ)!=pdPASS)

@@ -3,6 +3,7 @@ set(PROJECT_VER "4.0.0-idf61-migration")
 set(IDF_TARGET esp32s3 CACHE STRING "Migration target")
 # Reuse the actual NN2 communication implementation, not a second wire parser.
 set(EXTRA_COMPONENT_DIRS
+    "${CMAKE_CURRENT_LIST_DIR}/../../components/nn2_board"
     "${CMAKE_CURRENT_LIST_DIR}/../../components/nn2_core"
     "${CMAKE_CURRENT_LIST_DIR}/../../components/nn2_ports"
     "${CMAKE_CURRENT_LIST_DIR}/../../components/nn2_app"

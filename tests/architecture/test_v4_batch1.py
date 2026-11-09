@@ -163,6 +163,79 @@ int main(void) {
 """
         self.compile(code)
 
+    def test_boot_battery_cache_and_i2c_handoff(self):
+        app = (ROOT / "firmware/v4-idf61/main/app_main.c").read_text()
+        control = (ROOT / "firmware/v4-idf61/main/v4_nn2_control.inc").read_text()
+        cache = app[app.index("static struct {\n    nn2_board_power_sample_t sample;"):
+                    app.index('#include "v4_nn2_control.inc"')]
+        boot = function(app, "boot_power")
+        formatter = function(control, "control_read_battery")
+        main = app[app.index("void app_main(void)"):]
+        self.assertLess(main.index("nocti_v4_board_early_safe_init("), main.index("boot_power()"))
+        self.assertIn("power_release == ESP_OK ?\n            nocti_v4_i2c_init_sync", main)
+        self.compile(r"""
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
+typedef int esp_err_t;
+#define ESP_OK 0
+#define ESP_ERR_INVALID_STATE 259
+#define ESP_ERR_TIMEOUT 263
+typedef struct { uint32_t voltage_uv, soc_millipercent; } nn2_board_power_sample_t;
+static int64_t time_us = 1000000;
+static int64_t esp_timer_get_time(void) { return time_us; }
+static esp_err_t init_error, read_error, release_error;
+static unsigned inits, reads, releases, disables;
+static esp_err_t nn2_board_power_init_after_safe_gpio(bool enabled)
+{ assert(enabled); ++inits; return init_error; }
+static esp_err_t nn2_board_power_read(nn2_board_power_sample_t *sample)
+{
+    ++reads;
+    if (!read_error) *sample = (nn2_board_power_sample_t){4000000, 50500};
+    return read_error;
+}
+static esp_err_t nn2_board_power_release_i2c(void) { ++releases; return release_error; }
+static esp_err_t nn2_board_power_set_charge_enabled(bool enabled)
+{ assert(!enabled); ++disables; return ESP_OK; }
+static void report_result(const char *stage, esp_err_t err) { (void)stage; (void)err; }
+""" + cache + boot + formatter + r"""
+static void expect_reply(const char *expected)
+{
+    uint8_t text[128];
+    assert(control_read_battery(text, sizeof(text)) == strlen(expected));
+    assert(strcmp((char *)text, expected) == 0);
+}
+int main(void)
+{
+    expect_reply("battery_valid=0 battery_uv=0 battery_mperm=0 battery_age_ms=-1 battery_error=259");
+    assert(inits == 0 && reads == 0 && releases == 0);
+    assert(boot_power() == ESP_OK);
+    time_us += 60000123;
+    expect_reply("battery_valid=1 battery_uv=4000000 battery_mperm=50500 battery_age_ms=60000 battery_error=0");
+    expect_reply("battery_valid=1 battery_uv=4000000 battery_mperm=50500 battery_age_ms=60000 battery_error=0");
+    assert(inits == 1 && reads == 1 && releases == 1 && disables == 0);
+
+    read_error = ESP_ERR_TIMEOUT;
+    assert(boot_power() == ESP_OK);
+    expect_reply("battery_valid=0 battery_uv=0 battery_mperm=0 battery_age_ms=-1 battery_error=263");
+    assert(inits == 2 && reads == 2 && releases == 2 && disables == 0);
+
+    init_error = ESP_ERR_TIMEOUT;
+    assert(boot_power() == ESP_OK);
+    assert(inits == 3 && reads == 2 && releases == 3 && disables == 0);
+
+    init_error = read_error = ESP_OK;
+    release_error = ESP_ERR_INVALID_STATE;
+    assert(boot_power() == ESP_ERR_INVALID_STATE);
+    expect_reply("battery_valid=0 battery_uv=0 battery_mperm=0 battery_age_ms=-1 battery_error=259");
+    assert(inits == 4 && reads == 3 && releases == 4 && disables == 1);
+    return 0;
+}
+""")
+
     def test_actual_report_formatter_fits_ten_minute_bench_and_preserves_keys(self):
         source = (ROOT / "firmware/v4-idf61/main/v4_nn2_control.inc").read_text()
         formatter = function(source, "control_read_diag")

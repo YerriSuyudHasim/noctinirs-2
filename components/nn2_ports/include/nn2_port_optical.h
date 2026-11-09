@@ -33,7 +33,8 @@ typedef struct {
     nn2_status_t (*set_mode)(void *, bool engineering);
     bool real_samples;
     const char *policy_info; /* Static capability text, or NULL for strict. */
-    /* Optional read-only diagnostic. kind 0 is health, kind 1 is timing.
+    /* Optional read-only diagnostic. Kinds 0, 1, 3, and 4 are health,
+     * timing, network diagnostics, and the boot battery cache.
      * Called from the UDP owner task, never from an ISR or the ADC hot path.
      * Writes ASCII without a trailing NUL requirement and returns the length.
      * NULL or 0 leaves an unavailable report. Not an ACQ1 frame. */

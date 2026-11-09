@@ -18,7 +18,7 @@ import zlib
 
 COMMANDS = {"heartbeat": 1, "info": 2, "status": 3, "get-config": 4, "get-time": 5,
             "start": 0x10, "stop": 0x11, "safe-off": 0x20, "clear-fault": 0x21,
-            "health": 0x30, "timing": 0x31, "netdiag": 0x32,
+            "health": 0x30, "timing": 0x31, "netdiag": 0x32, "get-battery": 0x33,
             "set-fs": 0x100, "set-led-current": 0x101, "set-mode": 0x102}
 ERRORS = ("OK", "INVALID_STATE", "INVALID_ARG", "UNKNOWN_COMMAND", "HW_FAULT", "BUSY",
           "BAD_FRAME", "PRECONDITION_FAILED", "RESERVED_FLAGS")
@@ -104,6 +104,18 @@ def describe_reply(packet, request_id=None, opcode=None):
             result["async_i2c"] = parse_async_i2c(result["diag"])
         if op == COMMANDS["timing"] and "on_d" in result["diag"]:
             result["sync"] = parse_sync(result["diag"])
+    elif op == COMMANDS["get-battery"]:
+        match = re.fullmatch(
+            rb"battery_valid=([01]) battery_uv=(\d+) battery_mperm=(\d+)"
+            rb" battery_age_ms=(-?\d+) battery_error=(-?\d+)", extra)
+        if not match:
+            raise ValueError("battery reply fields")
+        valid, uv, mperm, age_ms, read_error = map(int, match.groups())
+        if (valid and (read_error != 0 or age_ms < 0) or
+                not valid and (uv != 0 or mperm != 0 or age_ms != -1 or read_error == 0)):
+            raise ValueError("battery reply status")
+        result.update(battery_valid=bool(valid), battery_uv=uv, battery_mperm=mperm,
+                      battery_age_ms=age_ms, battery_error=read_error)
     elif op == COMMANDS["get-config"]:
         if len(extra) != 42 or extra[1] != 20: raise ValueError("config length")
         result.update(rate_hz=extra[0], slots=extra[1], current_ma=list(struct.unpack_from("<20H", extra, 2)))

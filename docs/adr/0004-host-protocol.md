@@ -273,6 +273,7 @@ Single const table in `nn2_core`. Every decode resolves to exactly one row or `U
 | 0x0030 | `get_health` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | ADC diagnostic counters. Not an ACQ1 frame. |
 | 0x0031 | `get_timing` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | ADC service-time counters. Not an ACQ1 frame. |
 | 0x0032 | `get_netdiag` | — | ✓ | ✗ | UDP only | owner only while locked | bypass | Heap, FRAME-send and net-counter observation (`heap_free_now`, `heap_free_min`, `largest_free_block_now`, `frame_send_*`, `frame_last_errno`, `net_received`, `net_replied`, `net_invalid`, `net_send_errors`, `net_last_errno`), then the eight Batch 5A stop and fault keys (`ctrl_origin`, `ctrl_error`, `failed_stop_stage`, `stop_stage_error`, `stop_fail_mask`, `stop_attempts`, `stop_last_ok`, `stop_other_codes`; see the Batch 5A paragraph below). Not an ACQ1 frame. |
+| 0x0033 | `get_battery` | 0 | ✓ | ✗ | UDP only | owner only while locked | bypass | V4 boot battery cache with validity, voltage, state of charge, age, and ESP-IDF result. |
 
 **Owner direction, 2026-10-29 (PR #76, image `firmware/v4-idf61`).** All command control on that image is Wi-Fi UDP through `nn2ctl`. Serial command control is removed, including a USB diagnostic console that accepts commands. `get_health` (0x0030) and `get_timing` (0x0031) are the UDP read-only diagnostics added for that image. This amends L1, L2, O8, and §3.2 item 5 for that image: USB is not a command transport there. Sentences above that still name a USB console are the earlier target record. They are not a command path on this image. USB provisioning is not implemented on it. The C registry is `NN2_CMD_GET_HEALTH` and `NN2_CMD_GET_TIMING` in `components/nn2_core/include/nn2_core_protocol.h`, with argument size 0 and cache bypass in `components/nn2_core/src/nn2_core_protocol.c`.
 
@@ -1284,3 +1285,46 @@ python tools/nn2ctl.py set-mode --mode ACQ
 Bench and ESP-IDF build/flash are NOT RUN by this change. The meanings of RAW
 versus OPT2 metadata and the final session-metadata encoding remain separate
 contract decisions; this amendment does not introduce additional RAW fields.
+
+## 14. V4 Batch 5A local boot battery query
+
+The V4 communication image accepts the zero-argument `get_battery` request
+(opcode `0x0033`) on UDP 3333. It follows the existing diagnostic owner
+restriction while a session is locked and accepts a zero or stale request
+session ID from an otherwise eligible endpoint. It bypasses the mutation reply
+cache and does not refresh the session lease. During a locked acquisition, the
+owner sends the query on its existing socket and continues its heartbeats.
+
+Correlate the `REPLY` packet type, echoed request ID, and opcode before reading
+the extension. RAW traffic on the same socket uses packet type `FRAME`.
+Successful replies append these space-separated ASCII fields in this order
+after the existing 28-byte reply payload prefix:
+
+| Field | Meaning |
+|---|---|
+| `battery_valid` | `1` after a complete boot sample and successful bus release, otherwise `0`. |
+| `battery_uv` | Rounded voltage in microvolts. Ignore the zero placeholder when invalid. |
+| `battery_mperm` | Rounded thousandths of a percentage point (50500 is 50.5%). Ignore the zero placeholder when invalid. The existing gauge conversion leaves values above 100% unclamped. |
+| `battery_age_ms` | Whole milliseconds since the successful boot sample on the device's monotonic clock. `-1` means no valid sample. |
+| `battery_error` | Signed decimal ESP-IDF result. `0` means success, `259` (ESP_ERR_INVALID_STATE) is the initial state before a boot sample, and `262` (ESP_ERR_NOT_SUPPORTED) is the fallback when the binding supplies no report. An initialization, sample, or release failure supplies its ESP-IDF error code. |
+
+Before the first successful sample, the initial text is
+`battery_valid=0 battery_uv=0 battery_mperm=0 battery_age_ms=-1 battery_error=259`.
+A failed boot attempt keeps the invalid placeholders and updates the error.
+Request acceptance uses the normal command status, independently of sample
+validity. For an idle device, use `python tools/nn2ctl.py get-battery`.
+
+After V4 safe GPIO setup and the core check, boot uses the root board-power
+driver to verify the chips, enable charging with existing settings, and attempt
+one sample. It removes both devices and deletes I2C0 before V4 creates the LED
+bus. An initialization or sample error is logged and invalidates telemetry.
+If the bus is released, V4 may proceed with normal initialization. If release
+fails, V4 skips LED bus creation, logs the release fault, and requests charge
+disable. A sample-only failure after a verified charge enable leaves charging
+enabled when cleanup succeeds.
+
+The cache is published before the network task starts. Queries use only that
+cache and a monotonic timestamp. Hosts may request it every 30 seconds while
+idle or every 60 seconds during acquisition. Those intervals only change how
+often the host sees the same sample and its increasing age. V4 does not poll
+either chip after boot. STOPPED does not establish I2C bus release.

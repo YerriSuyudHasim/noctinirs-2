@@ -35,7 +35,8 @@ enum {
   NN2_CMD_GET_HEALTH = 0x0030,
   NN2_CMD_GET_TIMING = 0x0031,
   /* Read-only FRAME-send and heap observation (Batch 4a amendment, ADR-0004). */
-  NN2_CMD_GET_NETDIAG = 0x0032
+  NN2_CMD_GET_NETDIAG = 0x0032,
+  NN2_CMD_GET_BATTERY = 0x0033
 };
 enum {
   NN2_REPLY_OK,

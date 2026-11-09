@@ -336,7 +336,7 @@
     {
       "path": "main/app_main.c",
       "historical_sha256": "e1b7168cd9769af113fcd14cc11076f3acb5be0061aa9e3cd5022366933c22b9",
-      "active_sha256": "9df0164feb45647cc62993a4a02e2dd62290bc3be5f4253577c258deb0648200",
+      "active_sha256": "c9c305dc16269b107fee80be0d451fb4a127f0f582409ea175a265c9b79ecff3",
       "changes": [
         "Guard SDK 6.1 and identify unqualified migration at boot/STATUS",
         "Expose SCAN_SET_FS command, 30 mA command limit and scaled OFF help",
@@ -350,7 +350,7 @@
     {
       "path": "main/CMakeLists.txt",
       "historical_sha256": "3464b704d76c53ee2795bf6010210ead7bc0ebc3be8216850885e8a1dab746a9",
-      "active_sha256": "df3868f57105b0e5d278eb863c08b8712b7f1bb4d5ce9cab5f24498d5e3cab8d",
+      "active_sha256": "d42fbfa6a4a2a838c34a5fcd4f16d6f01e3bbefc035cf2bcc1cdd915f2ee6a2b",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies"
@@ -362,12 +362,13 @@
   "selected_extensions": [
     "STOPPED-only Fs 2/4/5/8/10",
     "active board pin/controller/limits overlay",
-    "no embedded credentials or automatic NVS erase"
+    "no embedded credentials or automatic NVS erase",
+    "Root board-power boot phase releases I2C0 before LED initialization and exposes a cached battery reply"
   ],
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "e5b2dff6a792a4b83dc56836fc143336decefa403449e68509f586dd36e8d7f2"
+      "sha256": "20f5f7e8d7fdd7b8709e4a5aca61975aaa2260ddf64314952e83a269d8fbdd30"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -409,7 +410,7 @@
     },
     {
       "path": "components/nn2_core/include/nn2_core_protocol.h",
-      "sha256": "57e6000b2492613a216c0c498540ddc5ab491822c454751de374c0e3279091a6"
+      "sha256": "fd957c4a16860ec5fedfca3d7008130f54ad0e1fc70b499a13035c2e71a1bb29"
     },
     {
       "path": "components/nn2_core/include/nn2_core_ring.h",
@@ -425,7 +426,7 @@
     },
     {
       "path": "components/nn2_core/src/nn2_core_protocol.c",
-      "sha256": "08a7537347b5152ce806d450a5b3313707c6bdf28984247ca473b88b39e8521c"
+      "sha256": "de5c75b33166ab7d283dd33dbbb0f11499e501ef21bba1d0b47030f1ebd34433"
     },
     {
       "path": "components/nn2_core/src/nn2_core_ring.c",
@@ -473,7 +474,7 @@
     },
     {
       "path": "components/nn2_ports/include/nn2_port_optical.h",
-      "sha256": "3954129f7e76b64a7edba0744ba91a53cecd48efab83d02422787ac3cc6c9b24"
+      "sha256": "36ea94b1d96da7d8a97ed2ef4622ea9627e46d8aa5da4bc3ac799f922fd4f201"
     },
     {
       "path": "components/nn2_ports/include/nn2_port_safety.h",
@@ -513,7 +514,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "5662ddcd50d8fc06bf9cc3e8205d299e6d7a84f42a065eb7f439178435a4ea32"
+      "sha256": "042e58ece4a59e86f9c62fa0f8de8d854b672cf05c869b88122a875e40866a96"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",

@@ -12,7 +12,8 @@ static uint8_t state;
 static bool mode;
 static uint64_t now;
 static nn2_raw_buffer_t *mode_buffer, *bound_buffer;
-static unsigned allocations, releases, bindings;
+static unsigned allocations, releases, bindings, state_reads;
+static const char *battery_text;
 static bool allocation_fails, detach_fails, bind_fails;
 static void *allocate_raw(void *ctx, size_t bytes)
 {
@@ -40,7 +41,7 @@ static nn2_status_t set_mode(void *ctx, bool engineering)
     return nn2_app_raw_mode_set(&mode_buffer,&port,engineering);
 }
 static nn2_status_t off(void *ctx) { (void)ctx; return NN2_OK; }
-static uint8_t get_state(void *ctx) { (void)ctx; return state; }
+static uint8_t get_state(void *ctx) { (void)ctx; ++state_reads; return state; }
 static nn2_status_t clear(void *ctx) { (void)ctx; return NN2_OK; }
 static nn2_status_t start(void *ctx, const nn2_port_optical_config_t *cfg)
 { (void)ctx; mode=cfg->engineering; state=NN2_OPTICAL_RUNNING; return NN2_OK; }
@@ -56,16 +57,27 @@ static size_t raw_info(void *ctx, uint8_t *out, size_t cap)
     const char *text=";raw_packets_sent=0;raw_dropped_samples=0;raw_buffer_highwater=0";
     memcpy(out,text,strlen(text)); return strlen(text);
 }
+static size_t read_battery(void *ctx, uint8_t kind, uint8_t *out, size_t cap)
+{
+    (void)ctx;
+    TEST_ASSERT_EQUAL(4, kind);
+    if (!battery_text) return 0;
+    size_t size = strlen(battery_text);
+    TEST_ASSERT_TRUE(size < cap);
+    memcpy(out, battery_text, size);
+    return size;
+}
 static void setup(bool raw)
 {
     state=NN2_OPTICAL_IDLE; mode=false; now=100;
-    mode_buffer=bound_buffer=NULL; allocations=releases=bindings=0;
+    mode_buffer=bound_buffer=NULL; allocations=releases=bindings=state_reads=0;
+    battery_text=NULL;
     allocation_fails=detach_fails=bind_fails=false;
     nn2_raw_buffer_reset(&buffer);
     nn2_port_safety_t safety={.hold_off=off};
     TEST_ASSERT_EQUAL(NN2_OK,nn2_app_comm_init(&app,42,&safety,123));
     nn2_port_optical_t optical={.start=start,.state=get_state,.clear_fault=clear,
-        .current_limit_ma=NN2_OPTICAL_MAX_MA,.real_samples=true,.frame_tx_result=tx};
+        .current_limit_ma=NN2_OPTICAL_MAX_MA,.real_samples=true,.frame_tx_result=tx,.read_diag=read_battery};
     if (raw) { optical.read_frame_ex=raw_frame; optical.read_raw_info=raw_info; optical.set_mode=set_mode; }
     else optical.read_frame=old_frame;
     TEST_ASSERT_EQUAL(NN2_OK,nn2_app_comm_bind_optical(&app,&optical));
@@ -381,9 +393,56 @@ static void failed_initial_bind_releases_candidate(void)
     TEST_ASSERT_NULL(mode_buffer); TEST_ASSERT_NULL(bound_buffer);
     TEST_ASSERT_EQUAL(1,allocations); TEST_ASSERT_EQUAL(1,releases);
 }
+static void battery_query_reads_cache_alongside_raw(void)
+{
+    setup(true);
+    unsigned previous_reads = state_reads;
+    nn2_core_packet_t p = request(0x1234, NN2_CMD_GET_BATTERY, NULL, 0);
+    const char *unavailable =
+        "battery_valid=0 battery_uv=0 battery_mperm=0 battery_age_ms=-1 battery_error=262";
+    TEST_ASSERT_EQUAL(NN2_MSG_REPLY, p.type);
+    TEST_ASSERT_EQUAL(0x1234, nn2_core_get_u32(p.payload));
+    TEST_ASSERT_EQUAL(NN2_CMD_GET_BATTERY, nn2_core_get_u16(p.payload + 4));
+    TEST_ASSERT_EQUAL(NN2_REPLY_OK, nn2_core_get_u16(p.payload + 6));
+    TEST_ASSERT_EQUAL(28 + strlen(unavailable), p.length);
+    TEST_ASSERT_EQUAL_MEMORY(unavailable, p.payload + 28, strlen(unavailable));
+    TEST_ASSERT_EQUAL(previous_reads, state_reads);
+
+    uint8_t engineering = 1;
+    p = request(1, NN2_CMD_SET_MODE, &engineering, 1);
+    TEST_ASSERT_EQUAL(NN2_REPLY_OK, nn2_core_get_u16(p.payload + 6));
+    p = request(2, NN2_CMD_START, NULL, 0);
+    TEST_ASSERT_EQUAL(NN2_REPLY_OK, nn2_core_get_u16(p.payload + 6));
+    TEST_ASSERT_EQUAL(NN2_OK, nn2_app_comm_tick(&app, now++, true));
+
+    battery_text = "battery_valid=1 battery_uv=4000000 battery_mperm=50500 battery_age_ms=20 battery_error=0";
+    previous_reads = state_reads;
+    p = request(3, NN2_CMD_GET_BATTERY, NULL, 0);
+    TEST_ASSERT_EQUAL(NN2_MSG_REPLY, p.type);
+    TEST_ASSERT_EQUAL(3, nn2_core_get_u32(p.payload));
+    TEST_ASSERT_EQUAL(NN2_REPLY_OK, nn2_core_get_u16(p.payload + 6));
+    TEST_ASSERT_EQUAL(28 + strlen(battery_text), p.length);
+    TEST_ASSERT_EQUAL_MEMORY(battery_text, p.payload + 28, strlen(battery_text));
+    TEST_ASSERT_EQUAL(previous_reads, state_reads);
+
+    const int32_t ain[4] = {-2, -1, 0, 1};
+    nn2_raw_buffer_push(&buffer, ain, 7, 12345, 2, 0, 255);
+    uint64_t peer;
+    size_t count = nn2_app_comm_frame(&app, &peer, wire, sizeof(wire));
+    TEST_ASSERT_TRUE(nn2_core_packet_decode(wire, count, &p));
+    TEST_ASSERT_EQUAL(NN2_MSG_FRAME, p.type);
+    TEST_ASSERT_EQUAL(99, peer);
+    TEST_ASSERT_EQUAL(7, nn2_core_get_u32(p.payload + 4));
+
+    p = request(4, NN2_CMD_GET_BATTERY, &engineering, 1);
+    TEST_ASSERT_EQUAL(NN2_REPLY_ARGUMENT, nn2_core_get_u16(p.payload + 6));
+    TEST_ASSERT_EQUAL(28, p.length);
+}
+
 void test_raw_engineering_suite(void)
 {
     RUN_TEST(acq1_bytes_unchanged);
+    RUN_TEST(battery_query_reads_cache_alongside_raw);
     RUN_TEST(mode_and_raw_sequence);
     RUN_TEST(full_buffer_gap_and_codec_limits);
     RUN_TEST(wrap_keeps_order_and_depth);
