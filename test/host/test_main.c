@@ -16,6 +16,7 @@ int main(void)
     test_v4_sample_clock_suite();
     test_v4_sample_edge_suite();
     test_raw_engineering_suite();
+    test_v4_stop_diag_suite();
     int result = UNITY_END();
     return (Unity.NumberOfTests > 0u && Unity.TestIgnores == 0u && result == 0) ? 0 : 1;
 }

@@ -13,6 +13,7 @@
 #include "nocti_v4_boot.h"
 #include "nocti_v4_ads.h"
 #include "nocti_v4_common.h"
+#include "nocti_v4_stop_diag.h"
 #include "nocti_v4_health.h"
 #include "nocti_v4_i2c.h"
 #include "nocti_v4_led.h"
@@ -169,7 +170,7 @@ static void report_result(const char *command, esp_err_t err)
 }
 
 static esp_err_t scan_start(void);
-static esp_err_t scan_stop(void);
+static esp_err_t scan_stop(nocti_v4_stop_report_t *report);
 #include "v4_nn2_control.inc"
 
 static esp_err_t scan_start(void)
@@ -223,7 +224,10 @@ static esp_err_t scan_start(void)
     return result;
 }
 
-static esp_err_t scan_stop(void)
+/* `report` (nullable) receives the per-stage outcome for the Batch 5A diagnostics. It is
+ * derived from results this function already holds; shutdown order, the returned code and
+ * cleanup are unchanged. */
+static esp_err_t scan_stop(nocti_v4_stop_report_t *report)
 {
     const esp_err_t scheduler_result = nocti_v4_scheduler_stop(&s_scheduler);
     nocti_v4_optical_begin_stop(&s_optical);
@@ -239,6 +243,10 @@ static esp_err_t scan_stop(void)
         nocti_v4_async_led_exit(&s_async_led) : ESP_OK;
     freeze_scan_session_report(frame_drain_result, network_drain_result);
     esp_log_level_set("*", ESP_LOG_INFO);
+    if (report != NULL) {
+        nocti_v4_stop_report_make(report, scheduler_result, ads_result, optical_result,
+                                  async_result, frame_drain_result, network_drain_result);
+    }
     if (scheduler_result != ESP_OK) return scheduler_result;
     if (ads_result != ESP_OK) return ads_result;
     if (optical_result != ESP_OK) return optical_result;

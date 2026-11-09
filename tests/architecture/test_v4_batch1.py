@@ -174,6 +174,7 @@ int main(void) {
 #include <assert.h>
 #include <inttypes.h>
 #include "nocti_v4_health.h"
+#include "nocti_v4_stop_diag.h"
 #define __ATOMIC_RELAXED 0
 #define __atomic_load_n(p, order) (*(p))
 #define __atomic_store_n(p, n, order) (*(p) = (n))
@@ -200,6 +201,7 @@ typedef struct { uint8_t socket_open; uint32_t received, replied, invalid, socke
   int last_errno, frame_last_errno; } nn2_net_status_t;
 static nn2_net_status_t nn2_net_get_status(void) { nn2_net_status_t s = {0}; return s; }
 static unsigned char control_state(void *ctx) { (void)ctx; return NN2_OPTICAL_IDLE; }
+static void control_diag_snapshot(nocti_v4_stop_diag_t *out) { nocti_v4_stop_diag_reset(out); }
 static size_t heap_caps_get_free_size(uint32_t caps) { (void)caps; return 0u; }
 static size_t heap_caps_get_minimum_free_size(uint32_t caps) { (void)caps; return 0u; }
 static size_t heap_caps_get_largest_free_block(uint32_t caps) { (void)caps; return 0u; }

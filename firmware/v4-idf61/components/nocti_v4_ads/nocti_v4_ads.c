@@ -204,10 +204,10 @@ typedef struct {
     volatile bool session_integrity_fault;
     volatile bool event_overflow_pending;
     volatile bool drain_requested;
-    volatile nocti_v4_ads_lifecycle_t lifecycle;
+    nocti_v4_ads_lifecycle_t lifecycle;
     volatile esp_err_t init_result;
     volatile esp_err_t command_result;
-    volatile esp_err_t last_error;
+    esp_err_t last_fault_error;
     volatile uint32_t session_epoch;
     volatile uint32_t drdy_sequence;
     volatile uint32_t event_head;
@@ -222,9 +222,10 @@ typedef struct {
     volatile uint32_t last_drdy_timestamp_high;
     volatile uint32_t last_drdy_sequence;
     volatile nocti_v4_ads_fault_code_t isr_capture_fault_code;
-    volatile nocti_v4_ads_fault_code_t last_fault_code;
-    volatile nocti_v4_ads_fault_origin_t last_fault_origin;
-    volatile esp_err_t last_fault_error;
+    /* Compact classifiers leave room for a dedicated lock in the old record. */
+    uint8_t last_fault_code;
+    uint8_t last_fault_origin;
+    portMUX_TYPE fault_lock;
     /* Exactly one task owns raw-ring pops. The ADS task only produces. */
     TaskHandle_t volatile raw_consumer_task;
     volatile nocti_v4_ads_raw_consumer_mode_t raw_consumer_mode;
@@ -1345,20 +1346,37 @@ static void reset_acquisition_counters(ads_runtime_t *runtime)
     reset_raw_stats(runtime);
 }
 
+_Static_assert(NOCTI_V4_ADS_FAULT_STOP_DRAIN_TIMEOUT <= UINT8_MAX,
+               "ADS fault codes must fit in the private record");
+_Static_assert(NOCTI_V4_ADS_FAULT_ORIGIN_STOP_DARK <= UINT8_MAX,
+               "ADS fault origins must fit in the private record");
+
+/* After setup the ADS task alone writes lifecycle and fault history. Lifecycle
+ * is always atomic. The lock couples record writes with FAULTED publication or
+ * STARTING_DARK reset, and protects readers of history across those transitions.
+ * The DRDY ISR only signals pending capture faults. */
+static void publish_fault(ads_runtime_t *runtime, nocti_v4_ads_fault_code_t code,
+                          nocti_v4_ads_fault_origin_t origin, esp_err_t error)
+{
+    portENTER_CRITICAL(&runtime->fault_lock);
+    runtime->last_fault_code = code;
+    runtime->last_fault_origin = origin;
+    runtime->last_fault_error = error;
+    __atomic_store_n(&runtime->lifecycle, NOCTI_V4_ADS_FAULTED, __ATOMIC_RELEASE);
+    portEXIT_CRITICAL(&runtime->fault_lock);
+}
+
 static void set_fault(ads_runtime_t *runtime, nocti_v4_ads_fault_code_t code,
                       nocti_v4_ads_fault_origin_t origin, esp_err_t error)
 {
-    const nocti_v4_ads_lifecycle_t previous = runtime->lifecycle;
-    if (previous != NOCTI_V4_ADS_FAULTED) {
-        runtime->last_error = error;
-        runtime->last_fault_code = code;
-        runtime->last_fault_origin = origin;
-        runtime->last_fault_error = error;
-    }
+    const nocti_v4_ads_lifecycle_t previous =
+        __atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED);
     __atomic_store_n(&runtime->session_integrity_fault, true, __ATOMIC_RELEASE);
     __atomic_store_n(&runtime->capture_enabled, false, __ATOMIC_RELEASE);
     (void)gpio_intr_disable(NOCTI_V4_ADS131_DRDY_GPIO);
-    runtime->lifecycle = NOCTI_V4_ADS_FAULTED;
+    if (previous != NOCTI_V4_ADS_FAULTED) {
+        publish_fault(runtime, code, origin, error);
+    }
     if (previous != NOCTI_V4_ADS_FAULTED && previous != NOCTI_V4_ADS_STOPPED) {
         counter_add(&runtime->health->dark_session_faults, 1u);
     }
@@ -1370,10 +1388,16 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event);
 static esp_err_t start_dark_internal(ads_runtime_t *runtime)
 {
     if (!runtime->ready || !runtime->rate_valid ||
-        runtime->lifecycle != NOCTI_V4_ADS_STOPPED || raw_depth(runtime) != 0u) {
+        __atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) != NOCTI_V4_ADS_STOPPED ||
+        raw_depth(runtime) != 0u) {
         return ESP_ERR_INVALID_STATE;
     }
-    runtime->lifecycle = NOCTI_V4_ADS_STARTING_DARK;
+    portENTER_CRITICAL(&runtime->fault_lock);
+    runtime->last_fault_code = NOCTI_V4_ADS_FAULT_NONE;
+    runtime->last_fault_origin = NOCTI_V4_ADS_FAULT_ORIGIN_NONE;
+    runtime->last_fault_error = ESP_OK;
+    __atomic_store_n(&runtime->lifecycle, NOCTI_V4_ADS_STARTING_DARK, __ATOMIC_RELEASE);
+    portEXIT_CRITICAL(&runtime->fault_lock);
     reset_acquisition_counters(runtime);
     __atomic_store_n(&runtime->session_integrity_fault, false, __ATOMIC_RELEASE);
     __atomic_store_n(&runtime->event_overflow_pending, false, __ATOMIC_RELEASE);
@@ -1387,10 +1411,6 @@ static esp_err_t start_dark_internal(ads_runtime_t *runtime)
     (void)__atomic_add_fetch(&runtime->session_epoch, 1u, __ATOMIC_ACQ_REL);
     runtime->last_sequence = 0u;
     runtime->last_timestamp_us = 0u;
-    runtime->last_error = ESP_OK;
-    runtime->last_fault_code = NOCTI_V4_ADS_FAULT_NONE;
-    runtime->last_fault_origin = NOCTI_V4_ADS_FAULT_ORIGIN_NONE;
-    runtime->last_fault_error = ESP_OK;
     runtime->sync_discard_remaining = NOCTI_V4_ADS_SYNC_DISCARD_FRAMES;
     runtime->expected_resync_remaining = NOCTI_V4_ADS_EXPECTED_RESYNC_BUDGET;
     __atomic_store_n(&runtime->capture_enabled, false, __ATOMIC_RELEASE);
@@ -1433,11 +1453,12 @@ static esp_err_t start_dark_internal(ads_runtime_t *runtime)
             return wait_err;
         }
         process_event(runtime, &event);
-        if (runtime->lifecycle == NOCTI_V4_ADS_FAULTED) {
-            return runtime->last_error;
+        if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) == NOCTI_V4_ADS_FAULTED) {
+            /* ADS task owns the record and cannot race a writer here. */
+            return runtime->last_fault_error;
         }
     }
-    if (runtime->lifecycle != NOCTI_V4_ADS_RUNNING_DARK) {
+    if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) != NOCTI_V4_ADS_RUNNING_DARK) {
         set_fault(runtime, NOCTI_V4_ADS_FAULT_POST_SYNC_STATE,
                   NOCTI_V4_ADS_FAULT_ORIGIN_START_DARK, ESP_ERR_INVALID_STATE);
         return ESP_ERR_INVALID_STATE;
@@ -1447,12 +1468,14 @@ static esp_err_t start_dark_internal(ads_runtime_t *runtime)
 
 static esp_err_t stop_dark_internal(ads_runtime_t *runtime)
 {
-    if (runtime->lifecycle == NOCTI_V4_ADS_STOPPED) {
+    const nocti_v4_ads_lifecycle_t state =
+        __atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED);
+    if (state == NOCTI_V4_ADS_STOPPED) {
         return ESP_OK;
     }
-    const bool fault_history = runtime->lifecycle == NOCTI_V4_ADS_FAULTED;
+    const bool fault_history = state == NOCTI_V4_ADS_FAULTED;
     if (!fault_history) {
-        runtime->lifecycle = NOCTI_V4_ADS_STOPPING_DARK;
+        __atomic_store_n(&runtime->lifecycle, NOCTI_V4_ADS_STOPPING_DARK, __ATOMIC_RELEASE);
     }
     __atomic_store_n(&runtime->capture_enabled, false, __ATOMIC_RELEASE);
     (void)gpio_intr_disable(NOCTI_V4_ADS131_DRDY_GPIO);
@@ -1488,7 +1511,7 @@ static esp_err_t stop_dark_internal(ads_runtime_t *runtime)
     }
     clear_raw_ring(runtime);
     transport_release(&runtime->transport);
-    runtime->lifecycle = NOCTI_V4_ADS_STOPPED;
+    __atomic_store_n(&runtime->lifecycle, NOCTI_V4_ADS_STOPPED, __ATOMIC_RELEASE);
     counter_add(&runtime->health->dark_sessions_stopped, 1u);
     return ESP_OK;
 }
@@ -1520,7 +1543,7 @@ static esp_err_t capture_frame_dump_internal(ads_runtime_t *runtime,
                                              uint8_t frame_count)
 {
     if (!runtime->ready || !runtime->rate_valid ||
-        runtime->lifecycle != NOCTI_V4_ADS_STOPPED ||
+        __atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) != NOCTI_V4_ADS_STOPPED ||
         __atomic_load_n(&runtime->capture_enabled, __ATOMIC_ACQUIRE) ||
         raw_depth(runtime) != 0u || frame_count == 0u ||
         frame_count > NOCTI_V4_ADS_FRAME_DUMP_MAX_FRAMES) {
@@ -1605,7 +1628,8 @@ done:
 
 static esp_err_t capture_channel_registers_internal(ads_runtime_t *runtime)
 {
-    if (!runtime->ready || runtime->lifecycle != NOCTI_V4_ADS_STOPPED ||
+    if (!runtime->ready ||
+        __atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) != NOCTI_V4_ADS_STOPPED ||
         __atomic_load_n(&runtime->capture_enabled, __ATOMIC_ACQUIRE) ||
         raw_depth(runtime) != 0u) {
         return ESP_ERR_INVALID_STATE;
@@ -1621,7 +1645,7 @@ static esp_err_t capture_channel_registers_internal(ads_runtime_t *runtime)
 static esp_err_t capture_ch0_selftest_internal(ads_runtime_t *runtime)
 {
     if (!runtime->ready || !runtime->rate_valid ||
-        runtime->lifecycle != NOCTI_V4_ADS_STOPPED ||
+        __atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) != NOCTI_V4_ADS_STOPPED ||
         __atomic_load_n(&runtime->capture_enabled, __ATOMIC_ACQUIRE) ||
         raw_depth(runtime) != 0u) {
         return ESP_ERR_INVALID_STATE;
@@ -1775,7 +1799,8 @@ restore:
 static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
 {
     const uint32_t backlog = event_depth(runtime);
-    const bool running = runtime->lifecycle == NOCTI_V4_ADS_RUNNING_DARK;
+    const bool running = __atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) ==
+        NOCTI_V4_ADS_RUNNING_DARK;
     /* Qualification still refuses a two-deep remainder. A running scan uses
      * nocti_v4_backlog_service(): overwritten conversions are counted and the
      * newest coherent event is read. Fault depth is
@@ -1851,7 +1876,7 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
     }
     counter_add(&runtime->health->ads_frames_read_total, 1u);
     counter_add(&runtime->health->ads_frames_read_runtime, 1u);
-    if (runtime->lifecycle == NOCTI_V4_ADS_STARTING_DARK) {
+    if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) == NOCTI_V4_ADS_STARTING_DARK) {
         counter_add(&runtime->health->post_sync_frames_read, 1u);
     }
     if (!frame.crc_valid) {
@@ -1867,7 +1892,8 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
         return;
     }
     if (frame.resync_occurred) {
-        if (runtime->lifecycle == NOCTI_V4_ADS_STARTING_DARK &&
+        if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) ==
+            NOCTI_V4_ADS_STARTING_DARK &&
             runtime->expected_resync_remaining > 0u) {
             --runtime->expected_resync_remaining;
         } else {
@@ -1879,7 +1905,7 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
             return;
         }
     }
-    if (runtime->lifecycle == NOCTI_V4_ADS_STARTING_DARK) {
+    if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) == NOCTI_V4_ADS_STARTING_DARK) {
         if (runtime->sync_discard_remaining == 0u) {
             set_fault(runtime, NOCTI_V4_ADS_FAULT_POST_SYNC_STATE,
                       NOCTI_V4_ADS_FAULT_ORIGIN_PROCESS_EVENT, ESP_ERR_INVALID_STATE);
@@ -1889,12 +1915,13 @@ static void process_event(ads_runtime_t *runtime, const drdy_event_t *event)
         counter_add(&runtime->health->post_sync_frames_discarded, 1u);
         if (runtime->sync_discard_remaining == 0u) {
             runtime->expected_resync_remaining = 0u;
-            runtime->lifecycle = NOCTI_V4_ADS_RUNNING_DARK;
+            __atomic_store_n(&runtime->lifecycle, NOCTI_V4_ADS_RUNNING_DARK,
+                             __ATOMIC_RELEASE);
             counter_add(&runtime->health->dark_sessions_started, 1u);
         }
         return;
     }
-    if (runtime->lifecycle != NOCTI_V4_ADS_RUNNING_DARK) {
+    if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) != NOCTI_V4_ADS_RUNNING_DARK) {
         return;
     }
     const nocti_v4_raw_sample_t sample = {
@@ -1942,7 +1969,7 @@ static void process_runtime_events(ads_runtime_t *runtime)
     while (__atomic_load_n(&runtime->capture_enabled, __ATOMIC_ACQUIRE) &&
            event_pop(runtime, &event)) {
         process_event(runtime, &event);
-        if (runtime->lifecycle == NOCTI_V4_ADS_FAULTED) {
+        if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_RELAXED) == NOCTI_V4_ADS_FAULTED) {
             return;
         }
     }
@@ -2013,7 +2040,7 @@ static void ads_task(void *argument)
     /* Before rate qualification, so that 1024-sample startup is already watched. */
     nocti_v4_task_wdt_subscribe();
     nocti_v4_task_wdt_kick();
-    runtime->lifecycle = NOCTI_V4_ADS_STOPPED;
+    __atomic_store_n(&runtime->lifecycle, NOCTI_V4_ADS_STOPPED, __ATOMIC_RELEASE);
     __atomic_store_n(&runtime->gpio_isr_callback_core, -1, __ATOMIC_RELEASE);
 
     esp_err_t err = nocti_v4_time_init(runtime->timebase);
@@ -2026,7 +2053,6 @@ static void ads_task(void *argument)
     transport_release(&runtime->transport);
 
     runtime->init_result = err;
-    runtime->last_error = err;
     runtime->initialized = true;
     runtime->ready = err == ESP_OK && runtime->rate_valid;
     runtime->public_ads->interface_initialized = true;
@@ -2034,7 +2060,9 @@ static void ads_task(void *argument)
     runtime->public_ads->ready = runtime->ready;
     int dark_gone = 0;
     if (err != ESP_OK) {
-        runtime->lifecycle = NOCTI_V4_ADS_FAULTED;
+        /* Init failures have an ESP error and no runtime fault classifier. */
+        publish_fault(runtime, NOCTI_V4_ADS_FAULT_NONE,
+                      NOCTI_V4_ADS_FAULT_ORIGIN_NONE, err);
         ESP_LOGE(TAG, "ADS init/rate validation failed: %s", esp_err_to_name(err));
         if (nocti_v4_ads_failed_init_needs_teardown(1, 0)) {
             quiesce_failed_init(runtime);
@@ -2153,6 +2181,7 @@ esp_err_t nocti_v4_ads_init(nocti_v4_ads_t *ads, nocti_v4_board_t *board,
     runtime->timebase = timebase;
     runtime->health = health;
     runtime->raw_stats_lock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
+    runtime->fault_lock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
     runtime->ads_task_core = -1;
     runtime->dark_task_core = -1;
     __atomic_store_n(&runtime->raw_consumer_mode,
@@ -2463,7 +2492,7 @@ esp_err_t nocti_v4_ads_reset_counters(nocti_v4_ads_t *ads)
         return ESP_ERR_INVALID_STATE;
     }
     ads_runtime_t *runtime = (ads_runtime_t *)ads->runtime;
-    if (runtime->lifecycle != NOCTI_V4_ADS_STOPPED) {
+    if (__atomic_load_n(&runtime->lifecycle, __ATOMIC_ACQUIRE) != NOCTI_V4_ADS_STOPPED) {
         return ESP_ERR_INVALID_STATE;
     }
     reset_acquisition_counters(runtime);
@@ -2499,7 +2528,7 @@ void nocti_v4_ads_get_status(const nocti_v4_ads_t *ads,
     if (ads == NULL || ads->runtime == NULL) {
         return;
     }
-    const ads_runtime_t *runtime = (const ads_runtime_t *)ads->runtime;
+    ads_runtime_t *runtime = (ads_runtime_t *)ads->runtime;
     out_status->interface_initialized = ads->interface_initialized;
     out_status->hardware_initialized = ads->hardware_initialized;
     out_status->ready = __atomic_load_n(&runtime->ready, __ATOMIC_ACQUIRE);
@@ -2507,6 +2536,19 @@ void nocti_v4_ads_get_status(const nocti_v4_ads_t *ads,
     out_status->session_integrity_fault = __atomic_load_n(
         &runtime->session_integrity_fault, __ATOMIC_ACQUIRE);
     out_status->lifecycle = __atomic_load_n(&runtime->lifecycle, __ATOMIC_ACQUIRE);
+    /* STARTING/RUNNING/STOPPING have no history. Keep their zeroed fields and
+     * leave the healthy acquisition reader off the lock. */
+    if (out_status->lifecycle == NOCTI_V4_ADS_FAULTED ||
+        out_status->lifecycle == NOCTI_V4_ADS_STOPPED) {
+        portENTER_CRITICAL(&runtime->fault_lock);
+        /* The first load may be from an earlier session. */
+        out_status->lifecycle = __atomic_load_n(&runtime->lifecycle, __ATOMIC_ACQUIRE);
+        out_status->last_error = runtime->last_fault_error;
+        out_status->last_fault_error = runtime->last_fault_error;
+        out_status->last_fault_code = runtime->last_fault_code;
+        out_status->last_fault_origin = runtime->last_fault_origin;
+        portEXIT_CRITICAL(&runtime->fault_lock);
+    }
     out_status->session_epoch = __atomic_load_n(&runtime->session_epoch, __ATOMIC_ACQUIRE);
     out_status->configured_sps = NOCTI_V4_ADS_SAMPLE_RATE_HZ;
     out_status->measured_sps = runtime->measured_sps;
@@ -2529,7 +2571,6 @@ void nocti_v4_ads_get_status(const nocti_v4_ads_t *ads,
     out_status->gpio_isr_install_core = (int32_t)runtime->gpio_isr_install_core;
     out_status->gpio_isr_callback_core = __atomic_load_n(&runtime->gpio_isr_callback_core,
                                                           __ATOMIC_ACQUIRE);
-    out_status->last_error = runtime->last_error;
     out_status->drdy_isr_count = __atomic_load_n(&runtime->health->drdy_isr_count,
                                                   __ATOMIC_ACQUIRE);
     out_status->drdy_events_pushed = __atomic_load_n(&runtime->health->drdy_events_pushed,
@@ -2561,12 +2602,6 @@ void nocti_v4_ads_get_status(const nocti_v4_ads_t *ads,
     out_status->last_drdy_sequence = __atomic_load_n(&runtime->last_drdy_sequence,
                                                       __ATOMIC_ACQUIRE);
     out_status->last_drdy_timestamp_us = load_last_drdy_timestamp(runtime);
-    out_status->last_fault_code = __atomic_load_n(&runtime->last_fault_code,
-                                                  __ATOMIC_ACQUIRE);
-    out_status->last_fault_origin = __atomic_load_n(&runtime->last_fault_origin,
-                                                    __ATOMIC_ACQUIRE);
-    out_status->last_fault_error = __atomic_load_n(&runtime->last_fault_error,
-                                                   __ATOMIC_ACQUIRE);
     out_status->runtime_period_count = runtime->runtime_period_count;
     memcpy(out_status->runtime_period_us, runtime->runtime_period_us,
            sizeof(out_status->runtime_period_us));

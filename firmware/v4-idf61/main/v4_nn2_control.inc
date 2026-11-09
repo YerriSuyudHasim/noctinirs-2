@@ -25,6 +25,9 @@ static uint8_t s_control_state=NN2_OPTICAL_IDLE;
 static bool s_control_wanted, s_control_working, s_control_stop, s_control_fault;
 static bool s_control_clean=true;
 static esp_err_t s_control_error=ESP_OK;
+/* Batch 5A diagnostics (16 B). Written only inside s_control_lock critical sections that
+ * already exist; read through control_diag_snapshot(). Observation only. */
+static nocti_v4_stop_diag_t s_control_diag;
 static const char *s_boot_stage="not_started";
 static void control_set_boot_stage(const char *name)
 {
@@ -42,6 +45,7 @@ static void control_note_boot_fault(void)
     portENTER_CRITICAL(&s_control_lock);
     s_control_fault=true;
     s_control_error=ESP_FAIL;
+    nocti_v4_stop_diag_note_ctrl(&s_control_diag,NOCTI_V4_CTRL_ORIGIN_BOOT,ESP_FAIL);
     if (s_control_state!=NN2_OPTICAL_RUNNING) s_control_state=NN2_OPTICAL_FAULT;
     portEXIT_CRITICAL(&s_control_lock);
 }
@@ -88,6 +92,7 @@ static nn2_status_t control_start(void *ctx,const nn2_port_optical_config_t *cfg
     if (ok) {
         s_control_config=*cfg; s_control_wanted=true; ++s_control_generation;
         s_control_state=NN2_OPTICAL_STARTING; s_control_clean=false;
+        nocti_v4_stop_diag_reset(&s_control_diag);
     }
     portEXIT_CRITICAL(&s_control_lock);
     if (ok) xTaskNotifyGive(s_control_worker);
@@ -98,6 +103,10 @@ static uint8_t control_state(void *ctx)
     (void)ctx;
     portENTER_CRITICAL(&s_control_lock); uint8_t v=s_control_state; portEXIT_CRITICAL(&s_control_lock);
     return v;
+}
+static void control_diag_snapshot(nocti_v4_stop_diag_t *out)
+{
+    portENTER_CRITICAL(&s_control_lock); *out=s_control_diag; portEXIT_CRITICAL(&s_control_lock);
 }
 static nn2_status_t control_clear(void *ctx)
 {
@@ -143,7 +152,10 @@ static void control_worker(void *ctx)
             bool cancelled=!s_control_wanted || s_control_start_epoch!=s_control_generation;
             if (!cancelled && result==ESP_OK) s_control_state=NN2_OPTICAL_RUNNING;
             else {
-                if (!cancelled) { s_control_fault=true; s_control_error=result; }
+                if (!cancelled) {
+                    s_control_fault=true; s_control_error=result;
+                    nocti_v4_stop_diag_note_ctrl(&s_control_diag,NOCTI_V4_CTRL_ORIGIN_START,result);
+                }
                 s_control_wanted=false; s_control_stop=true;
                 s_control_state=s_control_fault ? NN2_OPTICAL_FAULT : NN2_OPTICAL_STOPPING;
                 (void)nocti_v4_board_set_emitter_gate(&s_board,false);
@@ -157,7 +169,14 @@ static void control_worker(void *ctx)
             nocti_v4_scheduler_get_status(&s_scheduler,&sched);
             nocti_v4_ads_get_status(&s_ads,&adc);
             if (sched.lifecycle==NOCTI_V4_SCAN_FAULTED || adc.lifecycle==NOCTI_V4_ADS_FAULTED) {
-                portENTER_CRITICAL(&s_control_lock); s_control_fault=true; portEXIT_CRITICAL(&s_control_lock);
+                portENTER_CRITICAL(&s_control_lock);
+                s_control_fault=true;
+                /* Scheduler is recorded first when both components have faulted. */
+                if (sched.lifecycle==NOCTI_V4_SCAN_FAULTED)
+                    nocti_v4_stop_diag_note_ctrl(&s_control_diag,NOCTI_V4_CTRL_ORIGIN_RUNTIME_SCHED,sched.last_error);
+                else
+                    nocti_v4_stop_diag_note_ctrl(&s_control_diag,NOCTI_V4_CTRL_ORIGIN_RUNTIME_ADS,adc.last_error);
+                portEXIT_CRITICAL(&s_control_lock);
                 (void)control_off(NULL);
                 portENTER_CRITICAL(&s_control_lock); s_control_state=NN2_OPTICAL_FAULT; portEXIT_CRITICAL(&s_control_lock);
             }
@@ -167,9 +186,12 @@ static void control_worker(void *ctx)
         if (stop) { s_control_stop=false; s_control_working=true; }
         portEXIT_CRITICAL(&s_control_lock);
         if (stop) {
-            esp_err_t result=scan_stop();
+            nocti_v4_stop_report_t stop_report={0};
+            esp_err_t result=scan_stop(&stop_report);
             portENTER_CRITICAL(&s_control_lock);
             (void)nocti_v4_board_set_emitter_gate(&s_board,false);
+            /* One commit per scan_stop() call, including cleanup retries. First failures stay latched. */
+            nocti_v4_stop_diag_commit(&s_control_diag,&stop_report);
             if (result!=ESP_OK) { s_control_fault=true; s_control_error=result; }
             s_control_working=false; s_control_clean=result==ESP_OK;
             s_control_state=s_control_fault ? NN2_OPTICAL_FAULT : NN2_OPTICAL_IDLE;
@@ -225,6 +247,11 @@ static size_t control_read_diag(void *ctx, uint8_t kind, uint8_t *out, size_t ca
             net.frame_send_errors, net.frame_send_eagain, net.frame_send_enobufs,
             net.frame_send_other, net.frame_last_errno,
             net.received, net.replied, net.invalid, net.send_errors, net.last_errno);
+        if (netdiag > 0 && (size_t)netdiag < cap) {
+            nocti_v4_stop_diag_t diag;
+            control_diag_snapshot(&diag);
+            netdiag += (int)nocti_v4_stop_diag_format(&diag, (char *)out + netdiag, cap - (size_t)netdiag);
+        }
         return netdiag > 0 && (size_t)netdiag < cap ? (size_t)netdiag : 0u;
     }
     nocti_v4_task_wdt_log_pending();

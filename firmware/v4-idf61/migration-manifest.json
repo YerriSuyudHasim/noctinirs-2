@@ -23,7 +23,7 @@
     {
       "path": "components/nocti_v4_ads/nocti_v4_ads.c",
       "historical_sha256": "a5bbf88f0e39517b0b03f958dd55ebcb114c61d28f57ddacf9e3e5a0973d1bd3",
-      "active_sha256": "1920e6a43401427bc0569b660eb249583e2b9f4b15fa562eff2d02d95199bad2",
+      "active_sha256": "e4f8175fc6baf712af21a5d007395724edeb1e19ec77fc92101a07a533f8f066",
       "changes": [
         "Line ending normalization only; runtime source retained",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
@@ -336,14 +336,15 @@
     {
       "path": "main/app_main.c",
       "historical_sha256": "e1b7168cd9769af113fcd14cc11076f3acb5be0061aa9e3cd5022366933c22b9",
-      "active_sha256": "5f6a5daeca4adced663bbf32ffc9f0608f820d3bcd983b2a980eb7d06eadb7e7",
+      "active_sha256": "9df0164feb45647cc62993a4a02e2dd62290bc3be5f4253577c258deb0648200",
       "changes": [
         "Guard SDK 6.1 and identify unqualified migration at boot/STATUS",
         "Expose SCAN_SET_FS command, 30 mA command limit and scaled OFF help",
         "Use PRIu32 for runtime uint32_t Fs/period values on Xtensa IDF6.1",
         "NN2 control bridge: explicit ownership, cancellation/reset gate, communication-only composition/dependencies",
         "RTOS handoff: ADS above LED, counted backlog catch-up, UDP diagnostics, USB command console removed",
-        "Staged boot: runtime only after GPIO, I2C, PCA, and ADS; UDP still starts after a later hardware fault"
+        "Staged boot: runtime only after GPIO, I2C, PCA, and ADS; UDP still starts after a later hardware fault",
+        "Batch 5A: scan_stop() reports per-stage outcome through an optional out-parameter; shutdown order and return precedence unchanged"
       ]
     },
     {
@@ -366,7 +367,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "d1df4491b16d655fd870e7be729347ef5a14583fc85fca9d4b7bd69e0d55422b"
+      "sha256": "e5b2dff6a792a4b83dc56836fc143336decefa403449e68509f586dd36e8d7f2"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -379,6 +380,10 @@
     {
       "path": "components/nocti_v4_common/include/nocti_v4_boot.h",
       "sha256": "7e12e44fd8b1d8b563108244edf9f85a68b147a0047bce7e94ec39cd5b9fe3d4"
+    },
+    {
+      "path": "components/nocti_v4_common/include/nocti_v4_stop_diag.h",
+      "sha256": "1d7c5a460019563e6603570fed2d3fa3c25a99fd3373d8c6fcaaaa8526fe8333"
     },
     {
       "path": "components/nocti_v4_async_led/critical_paths.lf",

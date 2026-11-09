@@ -122,6 +122,7 @@ class WorstCase(unittest.TestCase):
 #include <inttypes.h>
 #include "nocti_v4_health.h"
 #include "nocti_v4_scheduler_config.h"
+#include "nocti_v4_stop_diag.h"
 #define NOCTI_V4_SAMPLE_ADC_HZ 8000u
 #define READ_CAP {limits["read_cap"]}u
 #define __ATOMIC_RELAXED 0
@@ -146,6 +147,14 @@ static size_t heap_caps_get_minimum_free_size(uint32_t c) {{ (void)c; return 0xF
 static size_t heap_caps_get_largest_free_block(uint32_t c) {{ (void)c; return 0xFFFFFFFFu; }}
 static nn2_net_status_t s_net;
 static nn2_net_status_t nn2_net_get_status(void) {{ return s_net; }}
+/* Batch 5A: worst-case record (11-char signed codes, longest names, full mask, 255 attempts). */
+static void control_diag_snapshot(nocti_v4_stop_diag_t *out) {{
+  memset(out, 0, sizeof *out);
+  out->ctrl_error = INT32_MIN; out->stop_stage_error = INT32_MIN;
+  out->ctrl_origin = NOCTI_V4_CTRL_ORIGIN_RUNTIME_SCHED;
+  out->failed_stop_stage = NOCTI_V4_STOP_STAGE_ASYNC_LED;
+  out->stop_fail_mask = NOCTI_V4_STOP_MASK_ALL; out->stop_attempts = 255; out->stop_last_ok = 0;
+}}
 #define nocti_v4_task_wdt_log_pending() ((void)0)
 #define nocti_v4_task_wdt_subscribe_errors() 0u
 #define nocti_v4_task_wdt_kick_errors() 0u
@@ -252,6 +261,13 @@ int main(void) {{
         self.assertIn("frame_last_errno=-2147483648", out["NETDIAG_IDLE"]["text"])
         self.assertIn("net_received=4294967295", out["NETDIAG_IDLE"]["text"])
         self.assertIn("net_last_errno=-2147483648", out["NETDIAG_IDLE"]["text"])
+        # Batch 5A keys are appended last, at their 188-character worst case.
+        tail = (" ctrl_origin=RUNTIME_SCHED ctrl_error=-2147483648 failed_stop_stage=ASYNC_LED"
+                " stop_stage_error=-2147483648 stop_fail_mask=0x3F stop_attempts=255 stop_last_ok=0"
+                " stop_other_codes=unavailable")
+        self.assertEqual(len(tail), 188)
+        for tag in ("NETDIAG_IDLE", "NETDIAG_RUNNING"):
+            self.assertTrue(out[tag]["text"].endswith(tail), tag + " must end with the Batch 5A keys")
 
     @unittest.expectedFailure
     def test_health_worst_case_fits_known_over_limit(self):

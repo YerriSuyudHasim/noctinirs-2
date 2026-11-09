@@ -14,4 +14,5 @@ void test_v4_rtos_suite(void);
 void test_v4_sample_clock_suite(void);
 void test_v4_sample_edge_suite(void);
 void test_raw_engineering_suite(void);
+void test_v4_stop_diag_suite(void);
 #endif
