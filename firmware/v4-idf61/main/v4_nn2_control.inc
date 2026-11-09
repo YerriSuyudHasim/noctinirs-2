@@ -117,6 +117,57 @@ static nn2_status_t control_clear(void *ctx)
     portEXIT_CRITICAL(&s_control_lock);
     return ok ? NN2_OK : NN2_ERR_INVALID_STATE;
 }
+/* Only the control worker attaches or removes this device. Retain it on
+ * removal failure so START can retry cleanup before it touches the LED bus. */
+static i2c_master_dev_handle_t s_battery_gauge;
+
+static esp_err_t control_release_gauge(void)
+{
+    if (s_battery_gauge == NULL) return ESP_OK;
+    const esp_err_t result = i2c_master_bus_rm_device(s_battery_gauge);
+    if (result == ESP_OK) s_battery_gauge = NULL;
+    return result;
+}
+
+static bool control_battery_idle(void)
+{
+    portENTER_CRITICAL(&s_control_lock);
+    const bool idle = s_control_state == NN2_OPTICAL_IDLE && s_control_clean &&
+        !s_control_working && !s_control_wanted && !s_control_stop && !s_control_fault;
+    portEXIT_CRITICAL(&s_control_lock);
+    return idle;
+}
+
+static void control_poll_battery(void)
+{
+    if (esp_timer_get_time() < s_battery_due_us || !control_battery_idle() ||
+        !s_i2c.initialized || s_i2c.bus == NULL || s_i2c.pca == NULL ||
+        s_i2c.clock_hz != NOCTI_V4_I2C_SYNC_DIAGNOSTIC_HZ ||
+        s_i2c.queue_depth != NOCTI_V4_I2C_TRANS_QUEUE_DEPTH ||
+        nocti_v4_async_led_mode(&s_async_led) != PCA_IO_MODE_SYNC) {
+        return;
+    }
+
+    /* SYNC is published only after async exit has drained, detached the
+     * callback and restored the PCA. No other task can begin LED I2C here. */
+    esp_err_t result = control_release_gauge();
+    if (result == ESP_OK) result = nn2_board_power_add_gauge(s_i2c.bus, &s_battery_gauge);
+
+    /* Recheck after device setup. This lock orders START against the read
+     * claim. After the claim the same worker finishes before it handles START. */
+    if (!control_battery_idle()) {
+        (void)control_release_gauge();
+        return;
+    }
+    s_battery_due_us = esp_timer_get_time() + BATTERY_IDLE_INTERVAL_US;
+    nn2_board_power_sample_t sample;
+    if (result == ESP_OK) result = nn2_board_power_read_gauge(s_battery_gauge, &sample);
+    const bool sampled = result == ESP_OK;
+    const int64_t sampled_us = sampled ? esp_timer_get_time() : 0;
+    const esp_err_t release = control_release_gauge();
+    battery_publish(sampled ? &sample : NULL, sampled_us, release == ESP_OK ? result : release);
+}
+
 static void control_worker(void *ctx)
 {
     (void)ctx;
@@ -128,9 +179,11 @@ static void control_worker(void *ctx)
         if (start) { s_control_working=true; s_control_start_epoch=s_control_generation; }
         portEXIT_CRITICAL(&s_control_lock);
         if (start) {
+            esp_err_t result=control_release_gauge();
             portENTER_CRITICAL(&s_control_lock);
-            esp_err_t result=s_control_wanted && s_control_start_epoch==s_control_generation ?
-                nocti_v4_board_set_emitter_gate(&s_board,true) : ESP_ERR_INVALID_STATE;
+            if (result==ESP_OK)
+                result=s_control_wanted && s_control_start_epoch==s_control_generation ?
+                    nocti_v4_board_set_emitter_gate(&s_board,true) : ESP_ERR_INVALID_STATE;
             portEXIT_CRITICAL(&s_control_lock);
             if (result==ESP_OK) result=nocti_v4_led_reinit(&s_led);
             for (uint8_t i=0u;i<20u && result==ESP_OK;++i)
@@ -187,6 +240,7 @@ static void control_worker(void *ctx)
         if (stop) {
             nocti_v4_stop_report_t stop_report={0};
             esp_err_t result=scan_stop(&stop_report);
+            if (result==ESP_OK) s_battery_due_us=esp_timer_get_time() + BATTERY_AFTER_STOP_US;
             portENTER_CRITICAL(&s_control_lock);
             (void)nocti_v4_board_set_emitter_gate(&s_board,false);
             /* One commit per scan_stop() call, including cleanup retries. First failures stay latched. */
@@ -196,6 +250,7 @@ static void control_worker(void *ctx)
             s_control_state=s_control_fault ? NN2_OPTICAL_FAULT : NN2_OPTICAL_IDLE;
             portEXIT_CRITICAL(&s_control_lock);
         }
+        control_poll_battery();
     }
 }
 static uint64_t control_now(void *ctx) { (void)ctx; return (uint64_t)esp_timer_get_time(); }
@@ -211,13 +266,15 @@ static void control_network(void *ctx)
 static size_t control_read_battery(uint8_t *out, size_t cap)
 {
     if (out == NULL) return 0u;
-    const bool valid = s_battery.error == ESP_OK;
-    const int64_t age_ms = valid ? (esp_timer_get_time() - s_battery.sampled_us) / 1000 : -1;
+    portENTER_CRITICAL(&s_battery_lock);
+    const v4_battery_cache_t cache = s_battery;
+    portEXIT_CRITICAL(&s_battery_lock);
+    const int64_t age_ms = cache.valid ? (esp_timer_get_time() - cache.sampled_us) / 1000 : -1;
     const int n = snprintf((char *)out, cap,
         "battery_valid=%u battery_uv=%" PRIu32 " battery_mperm=%" PRIu32
         " battery_age_ms=%" PRId64 " battery_error=%d",
-        valid ? 1u : 0u, valid ? s_battery.sample.voltage_uv : 0u,
-        valid ? s_battery.sample.soc_millipercent : 0u, age_ms, s_battery.error);
+        cache.valid ? 1u : 0u, cache.sample.voltage_uv,
+        cache.sample.soc_millipercent, age_ms, cache.error);
     return n > 0 && (size_t)n < cap ? (size_t)n : 0u;
 }
 

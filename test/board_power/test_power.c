@@ -132,10 +132,35 @@ static void schedule_test(void)
     CHECK(nn2_app_battery_poll(&storage, UINT64_C(9000000000), true, true) == NN2_OK && monitor_reads == 6);
 }
 
+static void borrowed_gauge_test(void)
+{
+    const i2c_master_bus_config_t config = {
+        .i2c_port = 0, .sda_io_num = 15, .scl_io_num = 16,
+    };
+    i2c_master_bus_handle_t bus = NULL;
+    i2c_master_dev_handle_t gauge = NULL;
+    CHECK(i2c_new_master_bus(&config, &bus) == ESP_OK);
+    CHECK(nn2_board_power_add_gauge(bus, &gauge) == ESP_OK);
+    nn2_board_power_sample_t sample = {0};
+    CHECK(nn2_board_power_read_gauge(gauge, &sample) == ESP_OK);
+    CHECK(sample.voltage_uv == 4000000 && sample.soc_millipercent == 50500);
+    CHECK(sample.bq_status_raw == 0 && transfers == 3 && !bq_live && writes == 0);
+    /* Fail the second sample's SOC read and leave the entire output intact. */
+    const nn2_board_power_sample_t previous = sample;
+    fail_at = calls + 3;
+    CHECK(nn2_board_power_read_gauge(gauge, &sample) == ESP_ERR_TIMEOUT);
+    CHECK(sample.voltage_uv == previous.voltage_uv && sample.soc_millipercent == previous.soc_millipercent);
+    CHECK(sample.vcell_raw == previous.vcell_raw && sample.soc_raw == previous.soc_raw);
+    CHECK(i2c_master_bus_rm_device(gauge) == ESP_OK);
+    CHECK(bus_live && !gauge_live && !safe_gpio && ce == 1);
+    CHECK(i2c_del_master_bus(bus) == ESP_OK);
+}
+
 int main(int argc, char **argv)
 {
     CHECK(argc >= 2);
     const char *mode = argv[1];
+    if (strcmp(mode, "borrowed-gauge") == 0) { borrowed_gauge_test(); return 0; }
     if (strcmp(mode, "schedule") == 0) { schedule_test(); puts("PASS schedule"); return 0; }
     if (strcmp(mode, "missing-gauge") == 0) missing_gauge = true;
     if (strcmp(mode, "wrong-part") == 0) wrong_part = true;

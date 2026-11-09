@@ -50,6 +50,7 @@ def reply(opcode, text, session=0):
 class DiagParse(unittest.TestCase):
     def test_battery_query_correlates_reply_while_raw_arrives(self):
         for valid, uv, mperm, age_ms, error in ((1, 4000000, 50500, 60000, 0),
+                                              (1, 4000000, 50500, 90000, 263),
                                               (0, 0, 0, -1, 263)):
             with self.subTest(valid=valid), mock.patch.object(nn2ctl.socket, "socket"):
                 client = nn2ctl.Client("127.0.0.1")

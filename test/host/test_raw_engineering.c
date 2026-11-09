@@ -82,15 +82,19 @@ static void setup(bool raw)
     else optical.read_frame=old_frame;
     TEST_ASSERT_EQUAL(NN2_OK,nn2_app_comm_bind_optical(&app,&optical));
 }
-static nn2_core_packet_t request(uint32_t id, uint16_t op, const uint8_t *arg, uint16_t n)
+static nn2_core_packet_t request_from(uint64_t peer, uint32_t id, uint16_t op, const uint8_t *arg, uint16_t n)
 {
     nn2_core_packet_t p={.type=NN2_MSG_REQUEST,.protocol_version=1,.length=(uint16_t)(6+n)};
     nn2_core_put_u32(p.payload,id); nn2_core_put_u16(p.payload+4,op);
     if (n) memcpy(p.payload+6,arg,n);
     size_t count=nn2_core_packet_encode(&p,wire,sizeof(wire));
-    count=nn2_app_comm_process(&app,99,now++,wire,count,reply,sizeof(reply));
+    count=nn2_app_comm_process(&app,peer,now++,wire,count,reply,sizeof(reply));
     TEST_ASSERT_TRUE(nn2_core_packet_decode(reply,count,&p));
     return p;
+}
+static nn2_core_packet_t request(uint32_t id, uint16_t op, const uint8_t *arg, uint16_t n)
+{
+    return request_from(99, id, op, arg, n);
 }
 static void acq1_bytes_unchanged(void)
 {
@@ -417,13 +421,17 @@ static void battery_query_reads_cache_alongside_raw(void)
 
     battery_text = "battery_valid=1 battery_uv=4000000 battery_mperm=50500 battery_age_ms=20 battery_error=0";
     previous_reads = state_reads;
-    p = request(3, NN2_CMD_GET_BATTERY, NULL, 0);
+    uint32_t session = p.session_id;
+    p = request_from(100, 3, NN2_CMD_GET_BATTERY, NULL, 0);
     TEST_ASSERT_EQUAL(NN2_MSG_REPLY, p.type);
+    TEST_ASSERT_EQUAL(session, p.session_id);
     TEST_ASSERT_EQUAL(3, nn2_core_get_u32(p.payload));
     TEST_ASSERT_EQUAL(NN2_REPLY_OK, nn2_core_get_u16(p.payload + 6));
     TEST_ASSERT_EQUAL(28 + strlen(battery_text), p.length);
     TEST_ASSERT_EQUAL_MEMORY(battery_text, p.payload + 28, strlen(battery_text));
     TEST_ASSERT_EQUAL(previous_reads, state_reads);
+    p = request_from(100, 4, NN2_CMD_STOP, NULL, 0);
+    TEST_ASSERT_EQUAL(NN2_REPLY_STATE, nn2_core_get_u16(p.payload + 6));
 
     const int32_t ain[4] = {-2, -1, 0, 1};
     nn2_raw_buffer_push(&buffer, ain, 7, 12345, 2, 0, 255);

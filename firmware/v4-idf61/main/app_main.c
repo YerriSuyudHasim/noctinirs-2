@@ -173,12 +173,33 @@ static void report_result(const char *command, esp_err_t err)
 
 static esp_err_t scan_start(void);
 static esp_err_t scan_stop(nocti_v4_stop_report_t *report);
-/* Written only during boot, before the UDP control task is created. */
-static struct {
+#define BATTERY_IDLE_INTERVAL_US INT64_C(30000000)
+#define BATTERY_AFTER_STOP_US INT64_C(5000000)
+
+typedef struct {
     nn2_board_power_sample_t sample;
     int64_t sampled_us;
     esp_err_t error;
-} s_battery = {.error = ESP_ERR_INVALID_STATE};
+    bool valid;
+} v4_battery_cache_t;
+
+static v4_battery_cache_t s_battery = {.error = ESP_ERR_INVALID_STATE};
+static portMUX_TYPE s_battery_lock = portMUX_INITIALIZER_UNLOCKED;
+/* Initialized at boot, then owned by the control worker. */
+static int64_t s_battery_due_us;
+
+static void battery_publish(const nn2_board_power_sample_t *sample, int64_t sampled_us,
+                            esp_err_t error)
+{
+    portENTER_CRITICAL(&s_battery_lock);
+    if (sample != NULL) {
+        s_battery.sample = *sample;
+        s_battery.sampled_us = sampled_us;
+        s_battery.valid = true;
+    }
+    s_battery.error = error;
+    portEXIT_CRITICAL(&s_battery_lock);
+}
 
 #include "v4_nn2_control.inc"
 
@@ -266,11 +287,15 @@ static esp_err_t scan_stop(nocti_v4_stop_report_t *report)
 
 static esp_err_t boot_power(void)
 {
+    s_battery_due_us = esp_timer_get_time() + BATTERY_IDLE_INTERVAL_US;
+    nn2_board_power_sample_t sample;
     esp_err_t err = nn2_board_power_init_after_safe_gpio(true);
     int64_t sampled_us = 0;
+    bool sampled = false;
     if (err == ESP_OK) {
-        err = nn2_board_power_read(&s_battery.sample);
-        if (err == ESP_OK) sampled_us = esp_timer_get_time();
+        err = nn2_board_power_read(&sample);
+        sampled = err == ESP_OK;
+        if (sampled) sampled_us = esp_timer_get_time();
         report_result("BOOT_POWER_SAMPLE", err);
     } else {
         report_result("BOOT_POWER_INIT", err);
@@ -284,8 +309,7 @@ static esp_err_t boot_power(void)
         report_result("BOOT_POWER_CHARGE_DISABLE", nn2_board_power_set_charge_enabled(false));
         err = release;
     }
-    s_battery.sampled_us = sampled_us;
-    s_battery.error = err;
+    battery_publish(sampled ? &sample : NULL, sampled_us, err);
     return release;
 }
 

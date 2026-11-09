@@ -20,7 +20,7 @@ endif()
 enable_testing()
 foreach(case IN ITEMS normal schedule missing-gauge wrong-part readback safety-timer
         read-failure occupied cleanup-failure wrong-owner disabled-boot
-        current-readback voltage-readback preserve-bits after-safe-gpio)
+        current-readback voltage-readback preserve-bits after-safe-gpio borrowed-gauge)
     add_test(NAME power_${case} COMMAND nn2_power_tests ${case})
 endforeach()
 foreach(step RANGE 1 23)

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "esp_err.h"
+#include "driver/i2c_master.h"
 #include "nn2_port_battery.h"
 
 typedef nn2_port_battery_sample_t nn2_board_power_sample_t;
@@ -25,6 +26,13 @@ esp_err_t nn2_board_power_init_after_safe_gpio(bool enable_on_boot);
  * retry, explicit bus reset, fuel-gauge quick-start or alert/fault-latch clearing.
  * ESP-IDF may perform its own controller recovery after transfer errors. */
 esp_err_t nn2_board_power_read(nn2_board_power_sample_t *sample);
+
+/* Gauge-only access on a caller-owned, quiescent synchronous I2C bus.
+ * The caller serializes access and removes the temporary 100 kHz device.
+ * Read verifies gauge identity, then VCELL/SOC, with a 20 ms timeout per transfer.
+ * The sample is replaced only on success. BQ status is left at zero. */
+esp_err_t nn2_board_power_add_gauge(i2c_master_bus_handle_t bus, i2c_master_dev_handle_t *gauge);
+esp_err_t nn2_board_power_read_gauge(i2c_master_dev_handle_t gauge, nn2_board_power_sample_t *sample);
 
 /* Enable: disable CE, configure BQ watchdog/charge mode with readback, then CE low.
  * Disable: GPIO only, available even while the I2C bus is released.

@@ -166,10 +166,19 @@ int main(void) {
     def test_boot_battery_cache_and_i2c_handoff(self):
         app = (ROOT / "firmware/v4-idf61/main/app_main.c").read_text()
         control = (ROOT / "firmware/v4-idf61/main/v4_nn2_control.inc").read_text()
-        cache = app[app.index("static struct {\n    nn2_board_power_sample_t sample;"):
+        cache = app[app.index("#define BATTERY_IDLE_INTERVAL_US"):
                     app.index('#include "v4_nn2_control.inc"')]
         boot = function(app, "boot_power")
         formatter = function(control, "control_read_battery")
+        start = function(control, "control_start")
+        polling = control[control.index("static i2c_master_dev_handle_t s_battery_gauge;"):
+                          control.index("static void control_worker(")]
+        worker = function(control, "control_worker")
+        stop_schedule = re.search(r"if \(result==ESP_OK\) s_battery_due_us[^;]+;", worker)[0]
+        self.assertLess(worker.index("scan_stop(&stop_report)"), worker.index(stop_schedule))
+        self.assertLess(worker.index(stop_schedule), worker.index("control_poll_battery();"))
+        self.assertLess(worker.index("result=control_release_gauge()"),
+                        worker.index("nocti_v4_led_reinit("))
         main = app[app.index("void app_main(void)"):]
         self.assertLess(main.index("nocti_v4_board_early_safe_init("), main.index("boot_power()"))
         self.assertIn("power_release == ESP_OK ?\n            nocti_v4_i2c_init_sync", main)
@@ -185,8 +194,15 @@ typedef int esp_err_t;
 #define ESP_ERR_INVALID_STATE 259
 #define ESP_ERR_TIMEOUT 263
 typedef struct { uint32_t voltage_uv, soc_millipercent; } nn2_board_power_sample_t;
+typedef int portMUX_TYPE;
+#define portMUX_INITIALIZER_UNLOCKED 0
+static unsigned lock_depth;
+static void portENTER_CRITICAL(portMUX_TYPE *lock)
+{ assert(*lock == 0); ++*lock; ++lock_depth; }
+static void portEXIT_CRITICAL(portMUX_TYPE *lock)
+{ assert(*lock == 1); --*lock; --lock_depth; }
 static int64_t time_us = 1000000;
-static int64_t esp_timer_get_time(void) { return time_us; }
+static int64_t esp_timer_get_time(void) { assert(!lock_depth); return time_us; }
 static esp_err_t init_error, read_error, release_error;
 static unsigned inits, reads, releases, disables;
 static esp_err_t nn2_board_power_init_after_safe_gpio(bool enabled)
@@ -201,7 +217,84 @@ static esp_err_t nn2_board_power_release_i2c(void) { ++releases; return release_
 static esp_err_t nn2_board_power_set_charge_enabled(bool enabled)
 { assert(!enabled); ++disables; return ESP_OK; }
 static void report_result(const char *stage, esp_err_t err) { (void)stage; (void)err; }
-""" + cache + boot + formatter + r"""
+/* START and idle-window fakes drive the actual admission and poll code. */
+enum {NN2_OPTICAL_IDLE, NN2_OPTICAL_STARTING, NN2_OPTICAL_RUNNING};
+enum {NN2_OK, NN2_ERR_INVALID_ARG, NN2_ERR_INVALID_STATE};
+typedef int nn2_status_t;
+typedef struct { unsigned fs, current_ma[20]; } nn2_port_optical_config_t;
+#define NN2_OPTICAL_MAX_MA 30
+static portMUX_TYPE s_control_lock;
+static unsigned s_control_generation;
+static bool s_control_clean=true, s_control_working, s_control_wanted, s_control_stop, s_control_fault;
+static uint8_t s_control_state;
+static nn2_port_optical_config_t s_control_config;
+static int s_control_diag, worker_task, *s_control_worker=&worker_task;
+static void nocti_v4_stop_diag_reset(int *diag) { *diag = 0; }
+static void xTaskNotifyGive(int *task) { assert(task == &worker_task); }
+
+#define NOCTI_V4_I2C_SYNC_DIAGNOSTIC_HZ 100000
+#define NOCTI_V4_I2C_TRANS_QUEUE_DEPTH 0
+#define PCA_IO_MODE_SYNC 0
+static int s_async_led;
+static int nocti_v4_async_led_mode(const int *led) { return *led; }
+typedef int *i2c_master_dev_handle_t;
+static int bus, pca, gauge;
+static struct {
+    bool initialized;
+    int *bus, *pca;
+    unsigned clock_hz, queue_depth;
+} s_i2c = {true, &bus, &pca, 100000, 0};
+
+""" + cache + boot + formatter + start + r"""
+enum {NO_START, START_ON_ATTACH, START_DURING_READ};
+static int inject_start;
+static unsigned attaches, gauge_reads, removals;
+static esp_err_t gauge_result, remove_result;
+static bool attached, transferring;
+static void request_start(void)
+{
+    const nn2_port_optical_config_t config = {.fs = 5};
+    assert(control_start(NULL, &config) == NN2_OK);
+    assert(s_control_state == NN2_OPTICAL_STARTING && s_control_wanted);
+}
+static esp_err_t nn2_board_power_add_gauge(int *handle, i2c_master_dev_handle_t *out)
+{
+    assert(handle == &bus && !lock_depth && !attached);
+    ++attaches;
+    attached = true;
+    *out = &gauge;
+    if (inject_start == START_ON_ATTACH) request_start();
+    return ESP_OK;
+}
+static esp_err_t nn2_board_power_read_gauge(i2c_master_dev_handle_t handle,
+                                           nn2_board_power_sample_t *sample)
+{
+    assert(handle == &gauge && attached && !lock_depth && !s_control_wanted);
+    ++gauge_reads;
+    transferring = true;
+    if (inject_start == START_DURING_READ) request_start();
+    time_us += 18000;
+    if (gauge_result == ESP_OK) *sample = (nn2_board_power_sample_t){3900000, 47000};
+    transferring = false;
+    return gauge_result;
+}
+static esp_err_t i2c_master_bus_rm_device(i2c_master_dev_handle_t handle)
+{
+    assert(handle == &gauge && attached && !transferring && !lock_depth);
+    ++removals;
+    if (remove_result == ESP_OK) attached = false;
+    return remove_result;
+}
+""" + polling + "\nstatic void schedule_after_stop(esp_err_t result) {" + stop_schedule + "}" + r"""
+static void stopped(void)
+{
+    s_control_state = NN2_OPTICAL_IDLE;
+    s_control_wanted = false;
+    s_control_clean = true;
+    inject_start = NO_START;
+    schedule_after_stop(ESP_OK);
+}
+
 static void expect_reply(const char *expected)
 {
     uint8_t text[128];
@@ -218,6 +311,7 @@ int main(void)
     expect_reply("battery_valid=1 battery_uv=4000000 battery_mperm=50500 battery_age_ms=60000 battery_error=0");
     assert(inits == 1 && reads == 1 && releases == 1 && disables == 0);
 
+    s_battery = (v4_battery_cache_t){.error = ESP_ERR_INVALID_STATE};
     read_error = ESP_ERR_TIMEOUT;
     assert(boot_power() == ESP_OK);
     expect_reply("battery_valid=0 battery_uv=0 battery_mperm=0 battery_age_ms=-1 battery_error=263");
@@ -230,8 +324,84 @@ int main(void)
     init_error = read_error = ESP_OK;
     release_error = ESP_ERR_INVALID_STATE;
     assert(boot_power() == ESP_ERR_INVALID_STATE);
-    expect_reply("battery_valid=0 battery_uv=0 battery_mperm=0 battery_age_ms=-1 battery_error=259");
+    expect_reply("battery_valid=1 battery_uv=4000000 battery_mperm=50500 battery_age_ms=0 battery_error=259");
     assert(inits == 4 && reads == 3 && releases == 4 && disables == 1);
+
+    time_us = s_battery_due_us - 1;
+    control_poll_battery();
+    assert(attaches == 0);
+    ++time_us;
+    control_poll_battery();
+    assert(attaches == 1 && gauge_reads == 1 && removals == 1);
+    expect_reply("battery_valid=1 battery_uv=3900000 battery_mperm=47000 battery_age_ms=0 battery_error=0");
+    assert(attaches == 1 && gauge_reads == 1 && removals == 1);
+
+    /* A due attempt is deferred during acquisition and an unproven SYNC window. */
+    time_us = s_battery_due_us;
+    s_control_state = NN2_OPTICAL_RUNNING;
+    control_poll_battery();
+    assert(attaches == 1);
+    schedule_after_stop(ESP_ERR_TIMEOUT);
+    assert(s_battery_due_us == time_us);
+    stopped();
+    assert(s_battery_due_us == time_us + 5000000);
+    time_us += 4999999;
+    control_poll_battery();
+    assert(attaches == 1);
+    ++time_us;
+    s_i2c.clock_hz = 800000;
+    control_poll_battery();
+    s_i2c.clock_hz = 100000;
+    s_i2c.queue_depth = 4;
+    control_poll_battery();
+    s_i2c.queue_depth = 0;
+    s_async_led = 1;
+    control_poll_battery();
+    assert(attaches == 1 && s_battery_due_us == time_us);
+    s_async_led = PCA_IO_MODE_SYNC;
+    time_us += 10000000;
+    control_poll_battery();
+    control_poll_battery();
+    assert(attaches == 2 && gauge_reads == 2 && removals == 2);
+
+    /* A failed refresh preserves the last successful sample and its age. */
+    time_us = s_battery_due_us;
+    gauge_result = ESP_ERR_TIMEOUT;
+    control_poll_battery();
+    expect_reply("battery_valid=1 battery_uv=3900000 battery_mperm=47000 battery_age_ms=30000 battery_error=263");
+    assert(attaches == 3 && gauge_reads == 3 && removals == 3);
+
+    stopped();
+    request_start();
+    time_us = s_battery_due_us;
+    control_poll_battery();
+    assert(attaches == 3);
+    stopped();
+    time_us = s_battery_due_us;
+    inject_start = START_ON_ATTACH;
+    control_poll_battery();
+    assert(attaches == 4 && gauge_reads == 3 && removals == 4 && !attached);
+    assert(s_battery_due_us == time_us);
+
+    stopped();
+    time_us = s_battery_due_us;
+    gauge_result = ESP_OK;
+    inject_start = START_DURING_READ;
+    control_poll_battery();
+    assert(attaches == 5 && gauge_reads == 4 && removals == 5 && !attached);
+    assert(s_control_state == NN2_OPTICAL_STARTING);
+    expect_reply("battery_valid=1 battery_uv=3900000 battery_mperm=47000 battery_age_ms=0 battery_error=0");
+
+    stopped();
+    time_us = s_battery_due_us;
+    remove_result = ESP_ERR_INVALID_STATE;
+    control_poll_battery();
+    assert(attached && s_battery_gauge == &gauge);
+    expect_reply("battery_valid=1 battery_uv=3900000 battery_mperm=47000 battery_age_ms=0 battery_error=259");
+    request_start();
+    assert(control_release_gauge() == ESP_ERR_INVALID_STATE && attached);
+    remove_result = ESP_OK;
+    assert(control_release_gauge() == ESP_OK && !attached && s_battery_gauge == NULL);
     return 0;
 }
 """)

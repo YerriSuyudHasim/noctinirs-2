@@ -77,6 +77,17 @@ esp_err_t nn2_board_power_release_i2c(void)
     return ESP_OK;
 }
 
+esp_err_t nn2_board_power_add_gauge(i2c_master_bus_handle_t bus, i2c_master_dev_handle_t *gauge)
+{
+    const i2c_device_config_t config = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = GAUGE_ADDRESS,
+        .scl_speed_hz = POWER_CLOCK_HZ,
+        .scl_wait_us = 1000,
+    };
+    return i2c_master_bus_add_device(bus, &config, gauge);
+}
+
 static esp_err_t open_bus(void)
 {
     if (s_bus != NULL) return ESP_ERR_INVALID_STATE;
@@ -93,15 +104,14 @@ static esp_err_t open_bus(void)
     };
     esp_err_t err = i2c_new_master_bus(&bus_config, &s_bus);
     if (err != ESP_OK) return err;
-    i2c_device_config_t device_config = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = GAUGE_ADDRESS,
-        .scl_speed_hz = POWER_CLOCK_HZ,
-        .scl_wait_us = 1000,
-    };
-    err = i2c_master_bus_add_device(s_bus, &device_config, &s_gauge);
+    err = nn2_board_power_add_gauge(s_bus, &s_gauge);
     if (err == ESP_OK) {
-        device_config.device_address = BQ_ADDRESS;
+        const i2c_device_config_t device_config = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = BQ_ADDRESS,
+            .scl_speed_hz = POWER_CLOCK_HZ,
+            .scl_wait_us = 1000,
+        };
         err = i2c_master_bus_add_device(s_bus, &device_config, &s_bq);
     }
     if (err == ESP_OK) err = check_devices();
@@ -179,18 +189,12 @@ esp_err_t nn2_board_power_set_charge_enabled(bool enabled)
     return gpio_set_level(POWER_CE, 0);
 }
 
-esp_err_t nn2_board_power_read(nn2_board_power_sample_t *sample)
+static esp_err_t read_gauge(i2c_master_dev_handle_t gauge, nn2_board_power_sample_t *sample)
 {
-    if (sample == NULL) return ESP_ERR_INVALID_ARG;
-    if (!is_owner() || !s_ready || s_gauge == NULL || s_bq == NULL) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    uint8_t vcell[2], soc[2], status;
-    esp_err_t err = read_register(s_gauge, 0x02, vcell, sizeof(vcell));
+    uint8_t vcell[2], soc[2];
+    esp_err_t err = read_register(gauge, 0x02, vcell, sizeof(vcell));
     if (err != ESP_OK) return err;
-    err = read_register(s_gauge, 0x04, soc, sizeof(soc));
-    if (err != ESP_OK) return err;
-    err = read_register(s_bq, 0x08, &status, 1);
+    err = read_register(gauge, 0x04, soc, sizeof(soc));
     if (err != ESP_OK) return err;
     const uint16_t raw_vcell = (uint16_t)((uint16_t)vcell[0] << 8 | vcell[1]);
     const uint16_t raw_soc = (uint16_t)((uint16_t)soc[0] << 8 | soc[1]);
@@ -201,9 +205,32 @@ esp_err_t nn2_board_power_read(nn2_board_power_sample_t *sample)
          * Keep raw SOC even above 100%; do not invent a plausibility clamp. */
         .voltage_uv = ((uint32_t)raw_vcell * 625u + 4u) / 8u,
         .soc_millipercent = ((uint32_t)raw_soc * 1000u + 128u) / 256u,
-        .bq_status_raw = status,
     };
     return ESP_OK;
+}
+
+esp_err_t nn2_board_power_read_gauge(i2c_master_dev_handle_t gauge, nn2_board_power_sample_t *sample)
+{
+    if (gauge == NULL || sample == NULL) return ESP_ERR_INVALID_ARG;
+    uint8_t version[2];
+    esp_err_t err = read_register(gauge, 0x08, version, sizeof(version));
+    if (err != ESP_OK) return err;
+    if (version[0] != 0 || (version[1] & 0xF0u) != 0x10u) return ESP_ERR_INVALID_RESPONSE;
+    return read_gauge(gauge, sample);
+}
+
+esp_err_t nn2_board_power_read(nn2_board_power_sample_t *sample)
+{
+    if (sample == NULL) return ESP_ERR_INVALID_ARG;
+    if (!is_owner() || !s_ready || s_gauge == NULL || s_bq == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    nn2_board_power_sample_t next;
+    esp_err_t err = read_gauge(s_gauge, &next);
+    if (err != ESP_OK) return err;
+    err = read_register(s_bq, 0x08, &next.bq_status_raw, 1);
+    if (err == ESP_OK) *sample = next;
+    return err;
 }
 
 static esp_err_t power_init(bool enable_on_boot, bool safe_gpio_initialized)

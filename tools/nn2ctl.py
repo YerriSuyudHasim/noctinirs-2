@@ -111,7 +111,7 @@ def describe_reply(packet, request_id=None, opcode=None):
         if not match:
             raise ValueError("battery reply fields")
         valid, uv, mperm, age_ms, read_error = map(int, match.groups())
-        if (valid and (read_error != 0 or age_ms < 0) or
+        if (valid and age_ms < 0 or
                 not valid and (uv != 0 or mperm != 0 or age_ms != -1 or read_error == 0)):
             raise ValueError("battery reply status")
         result.update(battery_valid=bool(valid), battery_uv=uv, battery_mperm=mperm,

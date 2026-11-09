@@ -11,6 +11,11 @@
 > acquisition policy remains a due interval, not a guaranteed refresh during an
 > uninterrupted LED scan. See ADR-0005. Default communication-only polling is unchanged.
 
+> V4 Batch 5A uses the boot configuration below and a separate idle-refresh
+> binding in ADR-0004 section 14. Its control worker borrows the restored
+> synchronous 100 kHz V4 bus only in a proven STOPPED window. The root image's
+> bus ownership and monitor intervals below continue to apply to that image.
+
 ## Scope and ownership
 
 Owner request (2026-10-27): implement a dedicated ESP-IDF 6.1 board power library,

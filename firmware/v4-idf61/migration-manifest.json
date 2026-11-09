@@ -336,7 +336,7 @@
     {
       "path": "main/app_main.c",
       "historical_sha256": "e1b7168cd9769af113fcd14cc11076f3acb5be0061aa9e3cd5022366933c22b9",
-      "active_sha256": "c9c305dc16269b107fee80be0d451fb4a127f0f582409ea175a265c9b79ecff3",
+      "active_sha256": "45136d7a5aad0251027263f1c2fd6e383e4bfa292ac2ceb735d48c38d75099cb",
       "changes": [
         "Guard SDK 6.1 and identify unqualified migration at boot/STATUS",
         "Expose SCAN_SET_FS command, 30 mA command limit and scaled OFF help",
@@ -368,7 +368,7 @@
   "generated_files": [
     {
       "path": "main/v4_nn2_control.inc",
-      "sha256": "20f5f7e8d7fdd7b8709e4a5aca61975aaa2260ddf64314952e83a269d8fbdd30"
+      "sha256": "1967aa401480afe1678e3439ef26c6148fe48198b75f3b5d893a927c6f4482db"
     },
     {
       "path": "components/nocti_v4_common/include/nocti_v4_rtos.h",
@@ -514,7 +514,7 @@
     },
     {
       "path": "components/nn2_app/src/nn2_app_comm.c",
-      "sha256": "042e58ece4a59e86f9c62fa0f8de8d854b672cf05c869b88122a875e40866a96"
+      "sha256": "e2c57df1211d5524d4896729112901fc7403dc09c8837b02ad3ec8362d6e924c"
     },
     {
       "path": "components/nn2_app/src/nn2_app_provision.c",

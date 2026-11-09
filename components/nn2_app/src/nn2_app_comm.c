@@ -364,7 +364,7 @@ size_t nn2_app_comm_process(nn2_app_comm_storage_t *s, uint64_t peer,
       op != NN2_CMD_GET_TIMING && op != NN2_CMD_GET_NETDIAG && !battery_query &&
       req.session_id && req.session_id != c.session)
     error = NN2_REPLY_STATE;
-  if (!error && c.owner && c.owner != peer && op != NN2_CMD_INFO &&
+  if (!error && c.owner && c.owner != peer && !battery_query && op != NN2_CMD_INFO &&
       op != NN2_CMD_GET_CONFIG && op != NN2_CMD_GET_TIME &&
       op != NN2_CMD_SAFE_OFF)
     error = NN2_REPLY_STATE;
